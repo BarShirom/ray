@@ -1,0 +1,19 @@
+/* Main layout container */
+.layout-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: #fafafa;
+    font-family: "Segoe UI", sans-serif;
+  }
+  
+  /* Main content outlet */
+  .layout-container main {
+    flex: 1;
+    padding: 0.5rem 1rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  

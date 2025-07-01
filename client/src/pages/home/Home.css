@@ -1,0 +1,83 @@
+.home-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  padding: 3rem 1.5rem;
+  max-width: 700px;
+  margin: auto;
+  font-family: "Segoe UI", sans-serif;
+}
+
+
+.register-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  text-align: center;
+}
+
+.register-container h3 {
+  font-size: 1.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.register-paragraph {
+  font-size: 1.05rem;
+  color: #444;
+  margin-bottom: 1rem;
+}
+
+.register-btn {
+  padding: 0.75rem 1.5rem;
+  background-color: #4a3aff;
+  color: white;
+  font-weight: bold;
+  font-size: 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.register-btn:hover {
+  background-color: #372dbf;
+}
+
+.login-container {
+  text-align: center;
+  margin-top: 1rem;
+}
+
+.login-btn {
+  padding: 0.75rem 1.5rem;
+  background-color: #4a3aff;
+  color: white;
+  font-weight: bold;
+  font-size: 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.login-btn:hover {
+  background-color: #372dbf;
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.login-paragraph {
+  font-size: 1rem;
+  color: #444;
+  margin: 0;
+}
