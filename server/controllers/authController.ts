@@ -3,19 +3,21 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User";
 
-const JWT_SECRET = process.env.JWT_SECRET!;
-if (!JWT_SECRET) throw new Error("❌ JWT_SECRET is not defined in env");
+export const register = async (req: Request, res: Response): Promise<void> => {
+  const JWT_SECRET = process.env.JWT_SECRET;
+  if (!JWT_SECRET) {
+    console.error("❌ JWT_SECRET is missing in environment variables");
+    res.status(500).json({ msg: "Internal server error" });
+    return;
+  }
 
-export const register = async (
-  req: Request,
-  res: Response
-): Promise<Response> => {
   const { firstName, lastName, email, password, company } = req.body;
 
   try {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ msg: "User already exists" });
+      res.status(400).json({ msg: "User already exists" });
+      return;
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -31,7 +33,7 @@ export const register = async (
       expiresIn: "7d",
     });
 
-    return res.status(201).json({
+    res.status(201).json({
       user: {
         id: newUser._id,
         firstName: newUser.firstName,
@@ -43,25 +45,36 @@ export const register = async (
     });
   } catch (error) {
     console.error("Register error:", error);
-    return res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ msg: "Server error" });
   }
 };
 
-export const login = async (req: Request, res: Response): Promise<Response> => {
+export const login = async (req: Request, res: Response): Promise<void> => {
+  const JWT_SECRET = process.env.JWT_SECRET;
+  if (!JWT_SECRET) {
+    console.error("❌ JWT_SECRET is missing in environment variables");
+    res.status(500).json({ msg: "Internal server error" });
+    return;
+  }
+
   const { email, password } = req.body;
 
   try {
     const user = await User.findOne({ email });
-    if (!user)
-      return res.status(400).json({ msg: "Invalid email or password" });
+    if (!user) {
+      res.status(400).json({ msg: "Invalid email or password" });
+      return;
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
-      return res.status(400).json({ msg: "Invalid email or password" });
+    if (!isMatch) {
+      res.status(400).json({ msg: "Invalid email or password" });
+      return;
+    }
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
 
-    return res.json({
+    res.json({
       user: {
         id: user._id,
         firstName: user.firstName,
@@ -73,6 +86,6 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
     });
   } catch (error) {
     console.error("Login error:", error);
-    return res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ msg: "Server error" });
   }
 };
