@@ -1,32 +1,19 @@
 import { Link, useNavigate } from "react-router-dom";
 import "./Navbar.css";
-import { useEffect, useState } from "react";
-
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import { logoutUser } from "../../features/auth/authThunks";
+import { selectToken } from "../../features/auth/authSelectors";
 const Navbar = () => {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const dispatch = useAppDispatch();
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem("persist:root");
-    if (!storedUser) return;
-
-    try {
-      const parsed = JSON.parse(storedUser);
-      const auth = parsed.auth ? JSON.parse(parsed.auth) : null;
-      if (auth?.user?.token) {
-        setIsLoggedIn(true);
-      }
-    } catch (error) {
-      console.log("Error parsing user from localStorage", error);
-    }
-  }, []);
+  const token = useAppSelector(selectToken);
+  const isLoggedIn = Boolean(token);
 
   const handleLogout = () => {
-    localStorage.clear();
-    setIsLoggedIn(false);
+    dispatch(logoutUser());
     navigate("/");
   };
-
   return (
     <nav className="navbar-container">
       <div className="navbar-brand">

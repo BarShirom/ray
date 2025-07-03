@@ -1,4 +1,4 @@
-.register-container {
+.login-container {
     max-width: 400px;
     margin: 4rem auto;
     padding: 2rem;
@@ -9,31 +9,31 @@
     font-family: "Segoe UI", sans-serif;
   }
   
-  .register-container h2 {
+  .login-container h2 {
     text-align: center;
     margin-bottom: 1rem;
     color: #4a3aff;
   }
   
-  .register-form {
+  .login-form {
     display: flex;
     flex-direction: column;
     gap: 1rem;
   }
   
-  .register-form label {
+  .login-form label {
     font-weight: 500;
     margin-bottom: 0.3rem;
   }
   
-  .register-form input {
+  .login-form input {
     padding: 0.7rem;
     border: 1px solid #ccc;
     border-radius: 8px;
     font-size: 1rem;
   }
   
-  .register-form button {
+  .login-form button {
     padding: 0.8rem;
     background-color: #4a3aff;
     color: white;
@@ -45,7 +45,7 @@
     transition: background-color 0.3s ease;
   }
   
-  .register-form button:hover {
+  .login-form button:hover {
     background-color: #372fc9;
   }
   

@@ -27,6 +27,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       email,
       password: hashedPassword,
       company,
+      
     });
 
     const token = jwt.sign({ id: newUser._id }, JWT_SECRET, {
@@ -40,8 +41,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         lastName: newUser.lastName,
         email: newUser.email,
         company: newUser.company,
+        token
       },
-      token,
+      
     });
   } catch (error) {
     console.error("Register error:", error);
@@ -81,8 +83,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         lastName: user.lastName,
         email: user.email,
         company: user.company,
+        token
       },
-      token,
+     
     });
   } catch (error) {
     console.error("Login error:", error);
