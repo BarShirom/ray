@@ -1,6 +1,11 @@
-import { Outlet } from "react-router-dom"
-const PublicRoutes = () => {
-  return <Outlet/>
-}
+import { Navigate, Outlet } from "react-router-dom";
+import { useAppSelector } from "../app/hooks";
+import { selectIsLoggedIn } from "../features/auth/authSelectors";
 
-export default PublicRoutes
+const PublicRoutes = () => {
+  const isLoggedIn = useAppSelector(selectIsLoggedIn);
+
+  return isLoggedIn ? <Navigate to="/dashboard" replace /> : <Outlet />;
+};
+
+export default PublicRoutes;

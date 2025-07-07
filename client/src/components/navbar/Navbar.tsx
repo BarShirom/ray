@@ -22,7 +22,7 @@ const Navbar = () => {
       </div>
 
       <div className="navbar-links">
-        <Link to="/">Home</Link>
+        {!isLoggedIn && <Link to="/">Home</Link>}
         <Link to="/map">Map</Link>
         <Link to="/about">About</Link>
 
