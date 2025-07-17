@@ -1,12 +1,30 @@
-import "./ReportForm.css"
+import type { ReportType } from "../../features/reports/reportsSlice";
+import MapPreview from "../mapPreview/MapPreview";
+import "./ReportForm.css";
 
 interface ReportFormProps {
   description: string;
   setDescription: (value: string) => void;
   handleSubmit: (e: React.FormEvent) => void;
+  useLocation: () => void;
+  locationReady: boolean;
+  location: { lat: number; lng: number } | null;
+  setLocation: (value: { lat: number; lng: number }) => void;
+  type: ReportType;
+  setType: (value: ReportType) => void;
 }
 
-const ReportForm = ({ description, setDescription, handleSubmit }: ReportFormProps) => {
+const ReportForm = ({
+  description,
+  setDescription,
+  handleSubmit,
+  useLocation,
+  locationReady,
+  location,
+  setLocation,
+  type,
+  setType,
+}: ReportFormProps) => {
   return (
     <div className="report-container">
       <h2>Make Street Cats Visible</h2>
@@ -14,6 +32,18 @@ const ReportForm = ({ description, setDescription, handleSubmit }: ReportFormPro
         Report. Help. Make an impact in real-time.
       </p>
       <form onSubmit={handleSubmit} className="report-form">
+        <label htmlFor="type">Subject</label>
+        <select
+          id="type"
+          value={type}
+          onChange={(e) => setType(e.target.value as ReportType)}
+          className="type-select"
+        >
+          <option value="emergency">🚨 Emergency</option>
+          <option value="food">🍲 I gave food</option>
+          <option value="general">📍 General</option>
+        </select>
+
         <label htmlFor="description">Description</label>
         <textarea
           id="description"
@@ -26,13 +56,13 @@ const ReportForm = ({ description, setDescription, handleSubmit }: ReportFormPro
 
         <div className="form-row">
           <label htmlFor="location">Location</label>
-          <button
-            type="button"
-            className="form-button"
-            onClick={() => alert("Coming soon: Auto GPS or map picker")}
-          >
-            📍 Use Current Location
+          <button type="button" className="form-button" onClick={useLocation}>
+            📍 {locationReady ? "Location Added ✅" : "Use Current Location"}
           </button>
+          <p className="hint-text">
+            (or click on the map to choose a different spot)
+          </p>
+          <MapPreview selectedLocation={location} onSelect={setLocation} />
         </div>
 
         <div className="form-row">
@@ -54,7 +84,7 @@ const ReportForm = ({ description, setDescription, handleSubmit }: ReportFormPro
         <button
           type="submit"
           className="submit-btn"
-          disabled={!description.trim()}
+          disabled={!description.trim() || !locationReady}
         >
           Submit Report
         </button>
@@ -63,4 +93,4 @@ const ReportForm = ({ description, setDescription, handleSubmit }: ReportFormPro
   );
 };
 
-export default ReportForm
+export default ReportForm;

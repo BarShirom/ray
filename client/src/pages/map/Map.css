@@ -1,11 +1,138 @@
 .map-container {
-    height: 60vh;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+  height: 60vh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+}
+
+/* Map itself */
+.map-wrapper {
+  flex: 1;
+  height: 100%;
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  border-radius: 12px;
+}
+
+/* 🧭 Legend Panel */
+.map-legend {
+  width: 180px;
+  background-color: #f9f9f9;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  padding: 1rem;
+  font-family: Arial, sans-serif;
+  font-size: 0.9rem;
+  color: #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.map-legend h4 {
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+  text-align: center;
+  color: #222;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.legend-item img {
+  width: 20px;
+  height: 33px;
+  object-fit: contain;
+}
+
+/* 🧠 Popup Styling */
+.popup-content {
+  font-family: Arial, sans-serif;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  max-width: 220px;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+
+.popup-emoji {
+  font-size: 1.2rem;
+}
+
+.popup-description {
+  margin: 4px 0 8px;
+  font-style: italic;
+  color: #444;
+}
+
+.popup-links {
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.popup-link {
+  color: #0077cc;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.popup-link:hover {
+  text-decoration: underline;
+  color: #005999;
+}
+
+.popup-meta {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: #333;
+}
+
+@media (max-width: 768px) {
+  .map-container {
+    flex-direction: column;
   }
-  
-  .leaflet-container {
-    height: 100%;
+
+  .map-legend {
     width: 100%;
+    margin-top: 1rem;
+    padding: 0.75rem;
   }
+}
+
+@media (max-width: 480px) {
+  .popup-content {
+    font-size: 0.8rem;
+  }
+
+  .popup-link {
+    font-size: 0.8rem;
+  }
+
+  .popup-header {
+    font-size: 0.9rem;
+  }
+
+  .map-legend h4 {
+    font-size: 0.95rem;
+  }
+
+  .legend-item {
+    font-size: 0.85rem;
+  }
+}
