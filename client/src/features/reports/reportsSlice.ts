@@ -11,6 +11,7 @@ export interface Report {
   status: ReportStatus;
   createdAt: string;
   createdBy: string | null;
+  media: string[];
 }
 
 const initialState: Report[] = [];

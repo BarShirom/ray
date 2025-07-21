@@ -75,6 +75,26 @@ const Map = () => {
                       <strong>Reporter:</strong> {report.createdBy ?? "Guest"}
                     </div>
                   </div>
+
+                  {Array.isArray(report.media) && report.media.length > 0 && (
+                    <div className="popup-media">
+                      {report.media.map((item, idx) =>
+                        item.startsWith("data:image") ? (
+                          <img
+                            key={idx}
+                            src={item}
+                            alt={`Media ${idx}`}
+                            className="popup-image"
+                          />
+                        ) : (
+                          <video key={idx} controls className="popup-video">
+                            <source src={item} />
+                            Your browser does not support the video tag.
+                          </video>
+                        )
+                      )}
+                    </div>
+                  )}
                 </div>
               </Popup>
             </Marker>
@@ -101,7 +121,7 @@ const Map = () => {
           In progress
         </div>
         <div className="legend-item">
-          <img src="/icons/marker-icon-gray.png" alt="Gray marker" />
+          <img src="/icons/marker-icon-grey.png" alt="Gray marker" />
           Resolved
         </div>
       </div>
@@ -132,9 +152,19 @@ function getIcon(type: Report["type"], status: Report["status"]): L.Icon {
   if (status === "resolved") iconFile = "marker-icon-gray.png";
   else if (status === "in-progress") iconFile = "marker-icon-blue.png";
   else {
-    if (type === "emergency") iconFile = "marker-icon-red.png";
-    else if (type === "food") iconFile = "marker-icon-green.png";
-    else if (type === "general") iconFile = "marker-icon-yellow.png";
+    switch (type) {
+      case "emergency":
+        iconFile = "marker-icon-red.png";
+        break;
+      case "food":
+        iconFile = "marker-icon-green.png";
+        break;
+      case "general":
+        iconFile = "marker-icon-yellow.png";
+        break;
+      default:
+        iconFile = "marker-icon.png";
+    }
   }
 
   return new L.Icon({

@@ -8,7 +8,6 @@
   gap: 1rem;
 }
 
-/* Map itself */
 .map-wrapper {
   flex: 1;
   height: 100%;
@@ -53,7 +52,6 @@
   object-fit: contain;
 }
 
-/* 🧠 Popup Styling */
 .popup-content {
   font-family: Arial, sans-serif;
   font-size: 0.9rem;
@@ -135,4 +133,24 @@
   .legend-item {
     font-size: 0.85rem;
   }
+}
+
+.popup-media {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.popup-image {
+  width: 100%;
+  max-height: 150px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.popup-video {
+  width: 100%;
+  max-height: 180px;
+  border-radius: 6px;
 }
