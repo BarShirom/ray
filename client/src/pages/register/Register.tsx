@@ -33,8 +33,8 @@ const Register = () => {
         return;
       }
 
-      // Optional: success message or toast
-      navigate("/dashboard");
+      
+      navigate("/map");
     } catch (err) {
       console.error("❌ Register error:", err);
       setError("Something went wrong");

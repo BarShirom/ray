@@ -22,13 +22,13 @@ const Navbar = () => {
       </div>
 
       <div className="navbar-links">
-        {!isLoggedIn && <Link to="/">Home</Link>}
+        <Link to="/">Report</Link>
         <Link to="/map">Map</Link>
         <Link to="/about">About</Link>
 
         {isLoggedIn && (
           <>
-            <Link to="/dashboard">Dashboard</Link>
+            <Link to="/manage-reports">Manage Reports</Link>
             <button onClick={handleLogout}>Logout</button>
           </>
         )}

@@ -1,11 +1,11 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/layout/Layout";
-import Home from "./pages/home/Home";
+import Report from "./pages/report/Report";
 import "./App.css";
 import Register from "./pages/register/Register";
 import Login from "./pages/login/Login";
 import UsersRoutes from "./routes/UsersRoutes";
-import Dashboard from "./pages/dashboard/Dashboard";
+import ManageReports from "./pages/manageReports/ManageReports";
 import PublicRoutes from "./routes/PublicRoutes";
 import Map from "./pages/map/Map";
 import About from "./pages/about/About";
@@ -17,14 +17,15 @@ const App = () => {
         <Route element={<Layout />}>
           <Route path="map" element={<Map />} />
           <Route path="about" element={<About />} />
+          <Route path="/" element={<Report />} />
+
           <Route element={<PublicRoutes />}>
-            <Route path="/" element={<Home />} />
             <Route path="register" element={<Register />} />
             <Route path="login" element={<Login />} />
           </Route>
 
           <Route element={<UsersRoutes />}>
-            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="manage-reports" element={<ManageReports />} />
           </Route>
         </Route>
       </Routes>

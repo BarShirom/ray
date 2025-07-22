@@ -24,7 +24,7 @@ const Login = () => {
         return;
       }
 
-      navigate("/dashboard");
+      navigate("/map");
     } catch (err) {
       console.log("❌ Login error:", err);
       setErrorMsg("Something went wrong");
