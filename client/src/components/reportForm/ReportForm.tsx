@@ -1,3 +1,4 @@
+import React from "react";
 import type { ReportType } from "../../features/reports/reportsSlice";
 import MapPreview from "../mapPreview/MapPreview";
 import "./ReportForm.css";
@@ -16,6 +17,9 @@ interface ReportFormProps {
   setMediaFiles: (files: File[]) => void;
 }
 
+const MAX_FILES = 6; // sensible cap
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB per file
+
 const ReportForm = ({
   description,
   setDescription,
@@ -26,14 +30,28 @@ const ReportForm = ({
   setLocation,
   type,
   setType,
+  mediaFiles,
   setMediaFiles,
 }: ReportFormProps) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) {
-      setMediaFiles(Array.from(files));
-    }
+    const picked = Array.from(e.target.files ?? []);
+
+    // allow images & videos only, with a simple size guard
+    const accepted = picked.filter(
+      (f) =>
+        (f.type.startsWith("image/") || f.type.startsWith("video/")) &&
+        f.size <= MAX_FILE_SIZE
+    );
+
+    // merge with existing, keep first MAX_FILES
+    const merged = [...mediaFiles, ...accepted].slice(0, MAX_FILES);
+    setMediaFiles(merged);
+
+    // allow re-selecting the same files later
+    e.currentTarget.value = "";
   };
+
+  const clearAllFiles = () => setMediaFiles([]);
 
   return (
     <div className="report-container">
@@ -41,6 +59,7 @@ const ReportForm = ({
       <p className="report-paragraph">
         Report. Help. Make an impact in real-time.
       </p>
+
       <form onSubmit={handleSubmit} className="report-form">
         <label htmlFor="type">Subject</label>
         <select
@@ -84,7 +103,28 @@ const ReportForm = ({
             multiple
             className="file-input"
             onChange={handleFileChange}
+            aria-label="Add images or videos"
           />
+          <p className="hint-text">
+            Up to {MAX_FILES} files. Images & videos only. Max{" "}
+            {Math.round(MAX_FILE_SIZE / (1024 * 1024))}MB each.
+          </p>
+
+          {mediaFiles.length > 0 && (
+            <div className="media-summary">
+              <span>
+                {mediaFiles.length} file{mediaFiles.length > 1 ? "s" : ""}{" "}
+                selected
+              </span>
+              <button
+                type="button"
+                className="clear-all-button"
+                onClick={clearAllFiles}
+              >
+                Clear all
+              </button>
+            </div>
+          )}
         </div>
 
         <button
@@ -100,4 +140,3 @@ const ReportForm = ({
 };
 
 export default ReportForm;
-

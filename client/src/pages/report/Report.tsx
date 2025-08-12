@@ -56,11 +56,7 @@ const Report = () => {
     if (!description.trim()) return alert("Please describe the situation.");
     if (!location) return alert("Please add location before submitting.");
 
-    // Optional: Log file names
-    console.log(
-      "Submitting with files:",
-      mediaFiles.map((f) => f.name)
-    );
+
 
     dispatch(
       createReport({

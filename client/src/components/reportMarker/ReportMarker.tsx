@@ -34,7 +34,7 @@ function capitalize(str: string) {
 function getIcon(type: Report["type"], status: Report["status"]): L.Icon {
   let iconFile = "marker-icon.png";
 
-  if (status === "resolved") iconFile = "marker-icon-gray.png";
+  if (status === "resolved") iconFile = "marker-icon-grey.png";
   else if (status === "in-progress") iconFile = "marker-icon-blue.png";
   else {
     switch (type) {
@@ -60,12 +60,23 @@ function getIcon(type: Report["type"], status: Report["status"]): L.Icon {
   });
 }
 
+type Assigned =
+  | string
+  | { _id: string; firstName?: string; lastName?: string }
+  | null
+  | undefined;
+
+const getAssignedToId = (assigned: Assigned) =>
+  typeof assigned === "string" ? assigned : assigned?._id ?? null;
+
 const ReportMarker = ({ report }: ReportMarkerProps) => {
   const dispatch = useAppDispatch();
   const token = useSelector(selectToken);
   const userId = useSelector(selectUserId);
 
-  
+  const assignedToId = getAssignedToId(report.assignedTo);
+  const canResolve =
+    !!token && report.status === "in-progress" && assignedToId === userId;
   const handleClaim = () => {
     if (token) dispatch(claimReport({ reportId: report._id, token }));
   };
@@ -73,7 +84,26 @@ const ReportMarker = ({ report }: ReportMarkerProps) => {
   const handleResolve = () => {
     if (token) dispatch(resolveReport({ reportId: report._id, token }));
   };
- console.log({ reportAssignedTo: report.assignedTo, userId });
+  
+type MediaLike = string | { url: string; type?: "image" | "video" };
+
+const isImageUrl = (u: string) => {
+  if (u.startsWith("data:image")) return true;
+  if (u.startsWith("data:video")) return false;
+  const clean = u.split("?")[0].toLowerCase();
+  return /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/.test(clean);
+};
+
+const toMedia = (item: MediaLike) => {
+  const url = typeof item === "string" ? item : item.url;
+  const kind =
+    typeof item === "object" && item.type
+      ? item.type
+      : isImageUrl(url)
+      ? "image"
+      : "video";
+  return { url, kind: kind as "image" | "video" };
+};
 
   return (
     <Marker
@@ -130,43 +160,38 @@ const ReportMarker = ({ report }: ReportMarkerProps) => {
 
           {Array.isArray(report.media) && report.media.length > 0 && (
             <div className="popup-media">
-              {report.media.map((item, idx) =>
-                item.startsWith("data:image") ? (
+              {report.media.map((item, idx) => {
+                const { url, kind } = toMedia(item);
+                return kind === "image" ? (
                   <img
                     key={idx}
-                    src={item}
+                    src={url}
                     alt={`Media ${idx}`}
                     className="popup-image"
                   />
                 ) : (
-                  <video key={idx} controls className="popup-video">
-                    <source src={item} />
+                  <video key={idx} controls playsInline className="popup-video">
+                    <source src={url} />
                     Your browser does not support the video tag.
                   </video>
-                )
-              )}
+                );
+              })}
             </div>
           )}
 
-          {/* Claim / Resolve Buttons */}
-          {token && (
-            <div className="popup-actions">
-              {report.status === "new" && (
-                <button className="popup-button claim" onClick={handleClaim}>
-                  ✅ Claim Report
-                </button>
-              )}
-              {report.status === "in-progress" &&
-                report.assignedTo === userId && (
-                  <button
-                    className="popup-button resolve"
-                    onClick={handleResolve}
-                  >
-                    ✔️ Mark as Resolved
-                  </button>
-                )}
-            </div>
-          )}
+          <div className="popup-actions">
+            {token && report.status === "new" && (
+              <button className="popup-button claim" onClick={handleClaim}>
+                🧰 Claim
+              </button>
+            )}
+
+            {canResolve && (
+              <button className="popup-button resolve" onClick={handleResolve}>
+                ✔️ Mark as Resolved
+              </button>
+            )}
+          </div>
         </div>
       </Popup>
     </Marker>
