@@ -1,20 +1,17 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { v4 as uuidv4 } from "uuid";
-import "./Report.css";
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import { selectToken, selectUserId } from "../../features/auth/authSelectors";
+import { createReport } from "../../features/reports/reportsThunks";
 import ReportForm from "../../components/reportForm/ReportForm";
-import {
-  type ReportType,
-  type ReportStatus,
-  addReport,
-} from "../../features/reports/reportsSlice";
-import { selectUserId } from "../../features/auth/authSelectors";
+import { type ReportType } from "../../features/reports/reportsSlice";
+import "./Report.css";
 
 const Report = () => {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const userId = useSelector(selectUserId);
+  const dispatch = useAppDispatch();
+  const userId = useAppSelector(selectUserId);
+  const token = useAppSelector(selectToken) ?? null;
 
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState<null | { lat: number; lng: number }>(
@@ -54,37 +51,27 @@ const Report = () => {
     };
   }, [watchId]);
 
-  const convertFilesToBase64 = async (files: File[]): Promise<string[]> => {
-    const promises = files.map((file) => {
-      return new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    });
-    return Promise.all(promises);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim()) return alert("Please describe the situation.");
     if (!location) return alert("Please add location before submitting.");
 
-    const mediaBase64 = await convertFilesToBase64(mediaFiles);
+    // Optional: Log file names
+    console.log(
+      "Submitting with files:",
+      mediaFiles.map((f) => f.name)
+    );
 
-    const newReport = {
-      id: uuidv4(),
-      description,
-      location,
-      type,
-      status: "new" as ReportStatus,
-      createdAt: new Date().toISOString(),
-      createdBy: userId ?? null,
-      media: mediaBase64,
-    };
+    dispatch(
+      createReport({
+        description,
+        location,
+        type,
+        media: mediaFiles,
+        token,
+      })
+    );
 
-    dispatch(addReport(newReport));
     navigate("/map");
   };
 
@@ -103,6 +90,7 @@ const Report = () => {
         mediaFiles={mediaFiles}
         setMediaFiles={setMediaFiles}
       />
+
       {!userId && (
         <div className="register-login-container">
           <div className="register-container">

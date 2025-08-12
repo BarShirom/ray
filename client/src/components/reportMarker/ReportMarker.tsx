@@ -1,7 +1,14 @@
 import { Marker, Popup } from "react-leaflet";
 import L from "leaflet";
+import { useSelector } from "react-redux";
+import { useAppDispatch } from "../../app/hooks";
 import type { Report } from "../../features/reports/reportsSlice";
-import "./ReportMarker.css"
+import {
+  claimReport,
+  resolveReport,
+} from "../../features/reports/reportsThunks";
+import { selectToken, selectUserId } from "../../features/auth/authSelectors";
+import "./ReportMarker.css";
 
 interface ReportMarkerProps {
   report: Report;
@@ -53,8 +60,21 @@ function getIcon(type: Report["type"], status: Report["status"]): L.Icon {
   });
 }
 
-
 const ReportMarker = ({ report }: ReportMarkerProps) => {
+  const dispatch = useAppDispatch();
+  const token = useSelector(selectToken);
+  const userId = useSelector(selectUserId);
+
+  
+  const handleClaim = () => {
+    if (token) dispatch(claimReport({ reportId: report._id, token }));
+  };
+
+  const handleResolve = () => {
+    if (token) dispatch(resolveReport({ reportId: report._id, token }));
+  };
+ console.log({ reportAssignedTo: report.assignedTo, userId });
+
   return (
     <Marker
       position={[report.location.lat, report.location.lng]}
@@ -76,7 +96,7 @@ const ReportMarker = ({ report }: ReportMarkerProps) => {
               rel="noopener noreferrer"
               className="popup-link"
             >
-              📍 Open in <strong>Waze</strong>
+              📍 Waze
             </a>
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${report.location.lat},${report.location.lng}`}
@@ -84,7 +104,7 @@ const ReportMarker = ({ report }: ReportMarkerProps) => {
               rel="noopener noreferrer"
               className="popup-link"
             >
-              🗺️ Open in <strong>Google Maps</strong>
+              🗺️ Google Maps
             </a>
           </div>
 
@@ -97,8 +117,15 @@ const ReportMarker = ({ report }: ReportMarkerProps) => {
               {new Date(report.createdAt).toLocaleString()}
             </div>
             <div>
-              <strong>Reporter:</strong> {report.createdBy ?? "Guest"}
+              <strong>Reporter:</strong> {report.createdByName ?? "Guest"}
             </div>
+
+            {(report.status === "in-progress" ||
+              report.status === "resolved") && (
+              <div>
+                <strong>Assigned to:</strong> {report.assignedToName ?? "—"}
+              </div>
+            )}
           </div>
 
           {Array.isArray(report.media) && report.media.length > 0 && (
@@ -120,6 +147,26 @@ const ReportMarker = ({ report }: ReportMarkerProps) => {
               )}
             </div>
           )}
+
+          {/* Claim / Resolve Buttons */}
+          {token && (
+            <div className="popup-actions">
+              {report.status === "new" && (
+                <button className="popup-button claim" onClick={handleClaim}>
+                  ✅ Claim Report
+                </button>
+              )}
+              {report.status === "in-progress" &&
+                report.assignedTo === userId && (
+                  <button
+                    className="popup-button resolve"
+                    onClick={handleResolve}
+                  >
+                    ✔️ Mark as Resolved
+                  </button>
+                )}
+            </div>
+          )}
         </div>
       </Popup>
     </Marker>
@@ -127,5 +174,3 @@ const ReportMarker = ({ report }: ReportMarkerProps) => {
 };
 
 export default ReportMarker;
-
-
