@@ -1,0 +1,19 @@
+/* Card */
+.card{
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:var(--r-2xl); box-shadow:var(--shadow); padding:14px;
+}
+.card__meta{ display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+.card__spacer{ margin-left:auto; color:var(--muted); font-size:12px; }
+.card__row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.card__title{ font-weight:600; line-height:1.25; }
+.card__sub{ color:var(--muted); font-size:12px; margin-top:6px; }
+
+/* Pills */
+.pill{ display:inline-block; padding:4px 9px; border-radius:999px; font-size:12px; border:1px solid transparent; text-transform:capitalize; }
+.pill--type-emergency{ background:#fee2e2; color:#991b1b; }
+.pill--type-food{ background:#d1fae5; color:#065f46; }
+.pill--type-general{ background:#dbeafe; color:#1e40af; }
+.pill--status-new{ background:#f4f4f5; color:#3f3f46; }
+.pill--status-inprogress{ background:#fef3c7; color:#92400e; }
+.pill--status-resolved{ background:#d1fae5; color:#065f46; }

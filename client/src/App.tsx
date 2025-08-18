@@ -7,15 +7,17 @@ import Login from "./pages/login/Login";
 import UsersRoutes from "./routes/UsersRoutes";
 import ManageReports from "./pages/manageReports/ManageReports";
 import PublicRoutes from "./routes/PublicRoutes";
-import Map from "./pages/map/Map";
+
 import About from "./pages/about/About";
+import MapPage from "./pages/mapPage/MapPage";
 
 const App = () => {
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
-          <Route path="map" element={<Map />} />
+         
+          <Route path="map-page" element={<MapPage />} />
           <Route path="about" element={<About />} />
           <Route path="/" element={<Report />} />
 

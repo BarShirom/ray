@@ -1,0 +1,94 @@
+/* Page grid (width unchanged) */
+.map-layout{
+  max-width:1120px; margin:0 auto; padding:16px;
+  display:grid; gap:16px; grid-template-columns:1fr;
+  align-items:stretch;
+}
+@media(min-width:900px){
+  .map-layout{ grid-template-columns:280px minmax(0,1fr) 350px; }
+}
+
+/* Panels & heights */
+.panel{
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:var(--r-2xl); box-shadow:var(--shadow);
+  padding:var(--panel-pad);
+  display:flex; flex-direction:column;
+}
+.side-left, .side-right{
+  height: var(--map-h);
+  overflow: auto;
+  overscroll-behavior: contain;     /* NEW: prevents bounce stealing scroll */
+}
+
+/* Map area */
+.map-center{ padding:12px; }
+.leaflet-root{ height: var(--map-h); width:100%; border-radius:12px; }
+.leaflet-container{ height:100%; width:100%; border-radius:12px; }
+
+/* Filters (single row chips) */
+.side-left .section-title{ font-weight:600; margin-bottom:10px; }
+.side-left .filters{
+  display:flex !important; flex-direction:row !important;
+  align-items:center; gap:10px; margin:4px 0 14px;
+  white-space:nowrap; flex-wrap:nowrap; overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width: thin;                     /* NEW: nicer scrollbar on Firefox */
+}
+.side-left .filters::-webkit-scrollbar{ height: 6px; }        /* NEW */
+.side-left .filters::-webkit-scrollbar-thumb{ background:#d1d5db; border-radius:8px; }  /* NEW */
+
+.side-left .filters label{
+  display:inline-flex !important; align-items:center; gap:6px;
+  padding:6px 10px; border:1px solid var(--border);
+  border-radius:10px; background:var(--panel); line-height:1; white-space:nowrap;
+  cursor: pointer;                          /* NEW: feels clickable */
+}
+.side-left .filters input[type="checkbox"]{ margin:0; flex:0 0 auto; accent-color:var(--brand); }
+
+/* Right list */
+.list-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.report-list{ display:grid; gap:14px; }
+
+/* REMOVE the .btn block here to avoid duplication with App.css */
+
+/* Mobile: keep panels same height as map */
+@media (max-width: 768px){
+  .leaflet-root{ height: 60vh; }
+  .side-left, .side-right{ height: 60vh; }
+}
+
+.side-left .filters{
+  display: grid !important;                 /* override the previous flex */
+  grid-auto-flow: row;
+  gap: 10px;
+  margin: 4px 0 14px;
+  overflow: auto;                           /* scroll if very tall */
+  -webkit-overflow-scrolling: touch;
+}
+
+.side-left .filters label{
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  line-height: 1.1;
+  /* Full-width “chip” feel */
+  width: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.side-left .filters input[type="checkbox"]{
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--brand);
+}
+
+/* space between filters and legend */
+.side-left .legend-wrap{
+  margin-top: 40px;   /* bump to 20–24px if you want more air */
+}

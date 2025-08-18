@@ -1,16 +1,36 @@
 import { Outlet } from "react-router-dom";
-import "./Layout.css"
 import Navbar from "../navbar/Navbar";
+import "./Layout.css";
 
-const Layout = () => {
+export default function Layout() {
   return (
-    <div className="layout-container">
-        <Navbar/>
-      <main>
+    <div className="app">
+      <header className="app__header">
+        <div className="app__header-inner">
+          <Navbar />
+        </div>
+      </header>
+
+      <main className="app__main">
         <Outlet />
       </main>
     </div>
   );
-};
+}
 
-export default Layout;
+// import { Outlet } from "react-router-dom";
+// import "./Layout.css"
+// import Navbar from "../navbar/Navbar";
+
+// const Layout = () => {
+//   return (
+//     <div className="layout-container">
+//         <Navbar/>
+//       <main>
+//         <Outlet />
+//       </main>
+//     </div>
+//   );
+// };
+
+// export default Layout;

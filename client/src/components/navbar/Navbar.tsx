@@ -1,40 +1,62 @@
-import { Link, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import "./Navbar.css";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { logoutUser } from "../../features/auth/authThunks";
 import { selectToken } from "../../features/auth/authSelectors";
-const Navbar = () => {
-  const navigate = useNavigate();
-  const dispatch = useAppDispatch();
 
+export default function Navbar() {
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const token = useAppSelector(selectToken);
   const isLoggedIn = Boolean(token);
 
-  const handleLogout = () => {
-    dispatch(logoutUser());
+  const handleLogout = async () => {
+    await dispatch(logoutUser());
     navigate("/");
   };
+
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
+    `nav-item ${isActive ? "is-active" : ""}`;
+
   return (
-    <nav className="navbar-container">
-      <div className="navbar-brand">
-        <h1>RAY</h1>
-        <h3>Make Street Cats Visible</h3>
+    <nav className="nav">
+      <div className="nav__brand">
+        <span className="nav__title">Ray - Make Street Cats Visible</span>
       </div>
 
-      <div className="navbar-links">
-        <Link to="/">Report</Link>
-        <Link to="/map">Map</Link>
-        <Link to="/about">About</Link>
+      <div className="nav__spacer" />
 
-        {isLoggedIn && (
+      <div className="nav__items">
+        {/* primary CTA always visible */}
+        <NavLink
+          to="/"
+          className={({ isActive }) =>
+            `nav-item nav-item--primary ${isActive ? "is-active" : ""}`
+          }
+        >
+          New report
+        </NavLink>
+
+        <NavLink to="/map-page" className={linkClass}>
+          Map page
+        </NavLink>
+
+        {isLoggedIn ? (
           <>
-            <Link to="/manage-reports">Manage Reports</Link>
-            <button onClick={handleLogout}>Logout</button>
+            <NavLink to="/manage-reports" className={linkClass}>
+              My reports
+            </NavLink>
+            <button className="nav-item nav-item--ghost" onClick={handleLogout}>
+              Log out
+            </button>
           </>
+        ) : (
+          <NavLink to="/register" className={linkClass}>
+            Sign up
+          </NavLink>
         )}
       </div>
     </nav>
   );
-};
+}
 
-export default Navbar;

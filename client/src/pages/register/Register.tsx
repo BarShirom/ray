@@ -34,7 +34,7 @@ const Register = () => {
       }
 
       
-      navigate("/map");
+      navigate("/map-page");
     } catch (err) {
       console.error("❌ Register error:", err);
       setError("Something went wrong");

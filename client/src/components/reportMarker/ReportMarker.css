@@ -1,117 +1,69 @@
-.popup-content {
-  font-family: Arial, sans-serif;
-  font-size: 0.9rem;
-  line-height: 1.4;
-  max-width: 220px;
+/* Inherit app font + colors */
+.popup-content{ font: inherit; color: var(--text); max-width: 260px; }
+
+/* header */
+.popup-header{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.popup-emoji{ font-size:18px; }
+.popup-title{ font-weight:600; letter-spacing:.2px; }
+
+/* description */
+.popup-description{
+  margin:6px 0 10px;
+  color: var(--text);
 }
 
-.popup-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 1rem;
-  margin-bottom: 6px;
+/* link chips (Waze / Google) */
+.popup-links{ display:flex; gap:8px; margin-bottom:8px; }
+.chip-link{
+  text-decoration:none;
+  border:1px solid var(--border);
+  background: var(--panel);
+  color: inherit;
+  padding:4px 8px;
+  border-radius:10px;
+  font-size: 13px;
+}
+.chip-link:hover{
+  background:#f9fafb;
 }
 
-.popup-emoji {
-  font-size: 1.2rem;
+/* meta info */
+.popup-meta{
+  display:grid; gap:4px;
+  font-size:12px; color: var(--muted);
+  margin-bottom:8px;
+}
+.popup-meta strong{ color: var(--text); font-weight:600; }
+
+/* media */
+.popup-media{ display:grid; gap:6px; }
+.popup-image, .popup-video{
+  width:100%; border-radius:10px;
+  border:1px solid var(--border);
+  background: #000; /* avoids white flash when video loads */
+  max-height: 180px; object-fit: cover;
 }
 
-.popup-description {
-  margin: 4px 0 8px;
-  font-style: italic;
-  color: #444;
+/* actions (reuse global .btn; adjust size here) */
+.popup-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:8px; }
+.btn.btn-compact{ padding:6px 10px; border-radius:10px; font-size:13px; }
+
+/* brand/success variants to match tokens */
+.btn-brand{
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.btn-brand:hover{ background: var(--brand-900); }
+
+.btn-success{
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+.btn-success:hover{
+  filter: brightness(.95);
 }
 
-.popup-links {
-  margin: 8px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.popup-link {
-  color: #0077cc;
-  text-decoration: none;
-  font-size: 0.9rem;
-}
-
-.popup-link:hover {
-  text-decoration: underline;
-  color: #005999;
-}
-
-.popup-meta {
-  margin-top: 8px;
-  font-size: 0.85rem;
-  color: #333;
-}
-
-.popup-media {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.popup-image {
-  width: 100%;
-  max-height: 150px;
-  object-fit: cover;
-  border-radius: 6px;
-}
-
-.popup-video {
-  width: 100%;
-  max-height: 180px;
-  border-radius: 6px;
-}
-
-.popup-actions {
-  margin-top: 10px;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.popup-button {
-  padding: 6px 10px;
-  font-size: 0.85rem;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-}
-
-.popup-button.claim {
-  background-color: #4caf50;
-  color: white;
-}
-
-.popup-button.claim:hover {
-  background-color: #388e3c;
-}
-
-.popup-button.resolve {
-  background-color: #2196f3;
-  color: white;
-}
-
-.popup-button.resolve:hover {
-  background-color: #1976d2;
-}
-
-@media (max-width: 480px) {
-  .popup-content {
-    font-size: 0.8rem;
-  }
-
-  .popup-link {
-    font-size: 0.8rem;
-  }
-
-  .popup-header {
-    font-size: 0.9rem;
-  }
-}
+/* dark theme hover fallback */
+:root[data-theme="dark"] .chip-link:hover{ background: #111418; }

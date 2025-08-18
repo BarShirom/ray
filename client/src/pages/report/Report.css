@@ -1,80 +1,108 @@
-.report-main-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  max-width: 700px;
-  margin: auto;
-  font-family: "Segoe UI", sans-serif;
+/* src/pages/report/Report.css */
+
+/* page container aligns with the app's max width rhythm */
+.report-page{
+  max-width: 720px;         /* comfortable single-column width */
+  margin: 0 auto;
+  padding: 16px;
 }
 
-.register-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+/* header above the panel */
+.report-header{ margin-bottom: 12px; }
+.report-title{ margin: 0; font-size: 20px; font-weight: 600; letter-spacing: .2px; }
+.report-sub{ margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 
+/* panel is already styled globally via .panel; add local spacing if needed */
+.report-panel{ padding: 16px; }
+
+/* --- generic styling for typical form markup inside ReportForm --- */
+.report-panel form{ display: grid; gap: 12px; }
+
+/* group a label + control */
+.report-panel .field{ display: grid; gap: 6px; }
+.report-panel .label{ font-weight: 500; font-size: 14px; }
+
+/* inputs, textarea, selects, and file inputs share a "control" look */
+.report-panel input[type="text"],
+.report-panel input[type="url"],
+.report-panel input[type="file"],
+.report-panel textarea,
+.report-panel select,
+.report-panel .control{
   width: 100%;
-  text-align: center;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
 }
 
-.register-container h3 {
-  font-size: 1.6rem;
-  margin-bottom: 0.2rem;
+.report-panel textarea{ min-height: 120px; resize: vertical; }
+
+/* focus state consistent with the rest of the app */
+.report-panel input:focus,
+.report-panel textarea:focus,
+.report-panel select:focus,
+.report-panel .control:focus{
+  outline: none;
+  border-color: color-mix(in oklab, var(--brand) 45%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand) 35%, transparent);
 }
 
-.register-paragraph {
-  font-size: 1.05rem;
-  color: #444;
-  margin-bottom: 1rem;
+/* location row: button + status text */
+.report-panel .row{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.report-panel .status{ display:flex; align-items:center; gap:6px; color: var(--muted); font-size: 12px; }
+.report-panel .status-dot{
+  width: 8px; height: 8px; border-radius: 999px; background: #ef4444;
 }
+.report-panel .status-dot.is-ready{ background: #10b981; }
 
-.register-btn {
-  padding: 0.75rem 1.5rem;
-  background-color: #4a3aff;
-  color: white;
-  font-weight: bold;
-  font-size: 1rem;
-  border: none;
-  border-radius: 6px;
+/* type selection chips (works if you add simple classnames; see note below) */
+.report-panel .chip-group{ display: flex; flex-wrap: wrap; gap: 8px; }
+.report-panel .chip{
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
   cursor: pointer;
-  transition: background-color 0.2s;
+  user-select: none;
+  text-transform: capitalize;
+  font-size: 14px;
+}
+.report-panel .chip.is-selected{
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand) 35%, transparent);
+  background: color-mix(in oklab, var(--brand) 10%, transparent);
+  border-color: color-mix(in oklab, var(--brand) 40%, var(--border));
+}
+.report-panel input[type="radio"]{ accent-color: var(--brand); }
+
+/* media picker + previews (if you show thumbnails) */
+.report-panel .media-grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px;
+}
+.report-panel .media-thumb{
+  width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
+  border: 1px solid var(--border); border-radius: 10px;
 }
 
-.register-btn:hover {
-  background-color: #372dbf;
-}
+/* actions row */
+.report-panel .actions{ display:flex; justify-content:flex-end; gap: 8px; margin-top: 6px; }
 
-.login-container {
-  text-align: center;
-  margin-top: 1rem;
+/* use your shared .btn styles from App.css */
+.report-panel .btn-primary{
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
 }
+.report-panel .btn-primary:hover{ background: var(--brand-900); }
 
-.login-btn {
-  padding: 0.75rem 1.5rem;
-  background-color: #4a3aff;
-  color: white;
-  font-weight: bold;
-  font-size: 1rem;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.login-btn:hover {
-  background-color: #372dbf;
-}
-
-.action-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 1rem;
-}
-
-.login-paragraph {
-  font-size: 1rem;
-  color: #444;
-  margin: 0;
+/* mobile tweaks */
+@media (max-width: 520px){
+  .report-page{ padding: 12px; }
+  .report-panel{ padding: 12px; }
 }

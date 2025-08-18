@@ -1,19 +1,31 @@
-/* Main layout container */
-.layout-container {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    background-color: #fafafa;
-    font-family: "Segoe UI", sans-serif;
-  }
-  
-  /* Main content outlet */
-  .layout-container main {
-    flex: 1;
-    padding: 0.5rem 1rem;
-    max-width: 1200px;
-    margin: 0 auto;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  
+.app{
+  min-height:100vh;
+  background:var(--bg);
+  color:var(--text);
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial;
+}
+
+.app__header{
+  position: sticky;
+  top: 0;
+  z-index: 40;
+
+  /* Fallback first, enhanced second */
+  background: var(--panel);
+  background: color-mix(in oklab, var(--panel) 88%, transparent);
+
+  /* Nice blur on supported browsers */
+  backdrop-filter: blur(6px);
+
+  border-bottom: 1px solid var(--border);
+}
+
+.app__header-inner{
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 12px 16px;
+}
+
+.app__main{
+  padding: 16px;
+}
