@@ -1,64 +1,102 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import "./Login.css";
 import { useAppDispatch } from "../../app/hooks";
 import { loginUser } from "../../features/auth/authThunks";
 
-const Login = () => {
+export default function Login() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg("");
-
+    setErr(null);
+    setLoading(true);
     try {
-      const resultAction = await dispatch(loginUser({ email, password }));
-
-      if (loginUser.rejected.match(resultAction)) {
-        setErrorMsg((resultAction.payload as string) || "Login failed");
-        return;
-      }
-
+      await dispatch(loginUser({ email, password })).unwrap();
       navigate("/map-page");
-    } catch (err) {
-      console.log("❌ Login error:", err);
-      setErrorMsg("Something went wrong");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+          ? error
+          : "Login failed. Please check your details.";
+      setErr(message);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="login-container">
-      <h2>Login</h2>
-      <form onSubmit={handleSubmit} className="login-form">
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
+    <div className="auth-page">
+      <section className="panel auth-panel">
+        {err && <div className="alert">{err}</div>}
 
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+        <form className="auth-form" onSubmit={onSubmit}>
+          <div className="field">
+            <label htmlFor="email" className="label">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              className="control"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
 
-        {errorMsg && <p className="error-message">{errorMsg}</p>}
+          <div className="field">
+            <label htmlFor="password" className="label">
+              Password
+            </label>
+            <div className="input-with-button">
+              <input
+                id="password"
+                type={showPw ? "text" : "password"}
+                autoComplete="current-password"
+                className="control"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="reveal"
+                onClick={() => setShowPw((s) => !s)}
+                aria-label={showPw ? "Hide password" : "Show password"}
+              >
+                {showPw ? "Hide" : "Show"}
+              </button>
+            </div>
+          </div>
 
-        <button type="submit">Login</button>
-      </form>
+          {/* Left-aligned submit button */}
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={loading || !email || !password}
+          >
+            {loading ? "Logging in..." : "Log in"}
+          </button>
+
+          <p className="hint">
+            No account?{" "}
+            <Link to="/register" className="link">
+              Sign up
+            </Link>
+          </p>
+        </form>
+      </section>
     </div>
   );
-};
-
-export default Login;
+}

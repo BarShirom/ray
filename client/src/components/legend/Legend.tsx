@@ -77,10 +77,10 @@ export default function Legend({
       <div className="legend-grid">
         <Item keyName="emergency" dot="dot--red" label="Emergency" />
         <Item keyName="food" dot="dot--green" label="Food" />
-        <Item keyName="general" dot="dot--blue" label="General" />
-        <Item keyName="new" dot="dot--gray" label="New" />
-        <Item keyName="in-progress" dot="dot--amber" label="In progress" />
-        <Item keyName="resolved" dot="dot--emerald" label="Resolved" />
+        <Item keyName="general" dot="dot--yellow" label="General" />
+
+        <Item keyName="in-progress" dot="dot--blue" label="In progress" />
+        <Item keyName="resolved" dot="dot--gray" label="Resolved" />
       </div>
     </div>
   );

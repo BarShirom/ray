@@ -1,16 +1,23 @@
-// ❌ remove the local `type Report = ...`
+import "./ReportCard.css";
+import { useSelector } from "react-redux";
+import { selectToken, selectUserId } from "../../features/auth/authSelectors";
 import type { Report } from "../../features/reports/reportsSlice";
-import "./ReportCard.css"
 
-// helper to show the assignee name from both shapes you use
+// accept both {_id} and {id}
 type Assigned =
   | string
-  | { _id: string; firstName?: string; lastName?: string }
+  | { _id?: string; id?: string; firstName?: string; lastName?: string }
   | null
   | undefined;
+
+const assignedToId = (assigned: Assigned) => {
+  if (!assigned) return null;
+  if (typeof assigned === "string") return assigned;
+  return assigned._id ?? assigned.id ?? null;
+};
+
 const assignedToName = (assigned: Assigned | undefined, fallback?: string) => {
-  if (!assigned) return fallback ?? "—";
-  if (typeof assigned === "string") return fallback ?? "—";
+  if (!assigned || typeof assigned === "string") return fallback ?? "—";
   const { firstName, lastName } = assigned;
   const name = [firstName, lastName].filter(Boolean).join(" ").trim();
   return name || (fallback ?? "—");
@@ -23,6 +30,10 @@ export default function ReportCard({
   report: Report;
   onPrimary: (id: string, status: Report["status"]) => void;
 }) {
+  const token = useSelector(selectToken);
+  const userId = useSelector(selectUserId);
+  const isLoggedIn = !!token;
+
   const typeClass =
     report.type === "emergency"
       ? "pill pill--type-emergency"
@@ -44,6 +55,14 @@ export default function ReportCard({
       ? "Resolve"
       : "View";
 
+  const showClaim = isLoggedIn && report.status === "new";
+  const showResolve =
+    isLoggedIn &&
+    report.status === "in-progress" &&
+    assignedToId(report.assignedTo) === userId;
+
+  const showButton = showClaim || showResolve;
+
   return (
     <div className="card">
       <div className="card__meta">
@@ -64,17 +83,26 @@ export default function ReportCard({
             report.status === "resolved") && (
             <div className="card__sub">
               Assigned to:{" "}
-              <b>{assignedToName(report.assignedTo, report.assignedToName ?? undefined)}</b>
+              <b>
+                {assignedToName(
+                  report.assignedTo,
+                  report.assignedToName ?? undefined
+                )}
+              </b>
             </div>
           )}
         </div>
-        <button
-          className="btn"
-          onClick={() => onPrimary(report._id, report.status)}
-        >
-          {primaryLabel}
-        </button>
+
+        {showButton && (
+          <button
+            className="btn"
+            onClick={() => onPrimary(report._id, report.status)}
+          >
+            {primaryLabel}
+          </button>
+        )}
       </div>
     </div>
   );
 }
+

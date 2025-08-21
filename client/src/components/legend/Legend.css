@@ -1,32 +1,52 @@
 /* container + title */
-.legend { font: inherit; color: var(--text); }
+.legend {
+  font: inherit;
+  color: var(--text);
+}
 .legend-title {
-  font-weight: 600; font-size: 12px; letter-spacing: .02em;
-  color: var(--muted); margin-bottom: 8px; text-transform: uppercase;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
 }
 
 /* grid (default: 2 columns) */
 .legend-grid {
-  display: grid; grid-template-columns: repeat(2, minmax(0,1fr));
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
-@media (max-width: 480px){
-  .legend-grid { grid-template-columns: 1fr; }
+@media (max-width: 480px) {
+  .legend-grid {
+    grid-template-columns: 1fr;
+  }
 }
 /* force single column when you need it */
-.legend--compact .legend-grid { grid-template-columns: 1fr; }
+.legend--compact .legend-grid {
+  grid-template-columns: 1fr;
+}
 
 /* items */
 .legend-item {
-  display: flex; align-items: center; gap: 8px;
-  min-height: 28px; border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  border-radius: 10px;
 }
 .legend-item--clickable {
-  padding: 4px 8px; cursor: pointer;
-  transition: background .15s ease, box-shadow .15s ease;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
-.legend-item--clickable:hover { background: #f9fafb; }
-:root[data-theme="dark"] .legend-item--clickable:hover { background: #111418; }
+.legend-item--clickable:hover {
+  background: #f9fafb;
+}
+:root[data-theme="dark"] .legend-item--clickable:hover {
+  background: #111418;
+}
 .legend-item--active {
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand) 35%, transparent);
   background: color-mix(in oklab, var(--brand) 8%, transparent);
@@ -36,41 +56,72 @@
 }
 
 /* dot colors (match your chips) */
-.dot { width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto; }
-.dot--red     { background: #ef4444; }  /* emergency */
-.dot--green   { background: #10b981; }  /* food */
-.dot--blue    { background: #3b82f6; }  /* general */
-.dot--gray    { background: #9ca3af; }  /* new */
-.dot--amber   { background: #f59e0b; }  /* in progress */
-.dot--emerald { background: #059669; }  /* resolved */
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.dot--red {
+  background: #ef4444;
+} /* emergency */
+.dot--green {
+  background: #10b981;
+} /* food */
+.dot--yellow {
+  background: #facc15;
+} /* general */
+.dot--gray {
+  background: #9ca3af;
+} /* resolved */
+.dot--blue {
+  background: #3b82f6;
+} /* in progress */
+.dot--emerald {
+  background: #059669;
+} /* resolved */
 
 /* labels + optional counts */
-.legend-label { flex: 1 1 auto; font-size: 14px; }
+.legend-label {
+  flex: 1 1 auto;
+  font-size: 14px;
+}
 .legend-count {
-  font-size: 12px; color: var(--muted);
-  border: 1px solid var(--border); border-radius: 999px;
-  padding: 2px 6px; line-height: 1;
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 6px;
+  line-height: 1;
 }
 
 /* divider (if you want sections) */
-.legend-divider { height: 1px; background: var(--border); margin: 8px 0; opacity: .9; }
+.legend-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+  opacity: 0.9;
+}
 
 /* RTL support */
-html[dir="rtl"] .legend-item { flex-direction: row-reverse; }
-html[dir="rtl"] .legend-label { text-align: right; }
+html[dir="rtl"] .legend-item {
+  flex-direction: row-reverse;
+}
+html[dir="rtl"] .legend-label {
+  text-align: right;
+}
 
 /* ---- Horizontal / single-line legend (row mode) ---- */
-.legend--row .legend-grid{
-  display: flex;                /* instead of grid */
+.legend--row .legend-grid {
+  display: flex; /* instead of grid */
   gap: 8px;
-  flex-wrap: nowrap;            /* keep on one line */
-  overflow-x: auto;             /* scroll if they don't fit */
+  flex-wrap: nowrap; /* keep on one line */
+  overflow-x: auto; /* scroll if they don't fit */
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  scrollbar-color: rgba(0,0,0,.25) transparent;
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
 }
-.legend--row .legend-item{
-  flex: 0 0 auto;               /* prevent shrinking */
+.legend--row .legend-item {
+  flex: 0 0 auto; /* prevent shrinking */
   padding: 4px 8px;
 }
-

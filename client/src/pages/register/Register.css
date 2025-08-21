@@ -1,57 +1,118 @@
-.register-container {
-    max-width: 400px;
-    margin: 4rem auto;
-    padding: 2rem;
-    background-color: #ffffff;
-    border: 1px solid #ccc;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-    font-family: "Segoe UI", sans-serif;
+/* Align with app rhythm */
+.auth-page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* Panel uses global .panel */
+.auth-panel {
+  padding: 16px;
+}
+
+/* Form grid */
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+.auth-form .btn-primary{
+  justify-self: start;     /* key line */
+  margin-top: 4px;         /* optional breathing room */
+}
+/* Fields */
+.field {
+  display: grid;
+  gap: 6px;
+}
+.label {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* Controls look like the rest of the app */
+.control {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+}
+.control:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--brand) 45%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand) 35%, transparent);
+}
+
+/* Password reveal */
+.input-with-button {
+  position: relative;
+  display: grid;
+}
+.reveal {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.reveal:hover {
+  background: #f9fafb;
+}
+
+/* Hints / links */
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 2px 0 0;
+}
+.link {
+  color: var(--brand);
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+
+.actions{ justify-content: flex-start; }
+
+/* Buttons: you already have .btn globally; add primary here */
+.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--brand-900);
+}
+.btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Error */
+.alert {
+  border: 1px solid #fecaca;
+  background: #fee2e2;
+  color: #7f1d1d;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+/* Mobile */
+@media (max-width: 520px) {
+  .auth-page {
+    padding: 12px;
   }
-  
-  .register-container h2 {
-    text-align: center;
-    margin-bottom: 1rem;
-    color: #4a3aff;
+  .auth-panel {
+    padding: 12px;
   }
-  
-  .register-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  
-  .register-form label {
-    font-weight: 500;
-    margin-bottom: 0.3rem;
-  }
-  
-  .register-form input {
-    padding: 0.7rem;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    font-size: 1rem;
-  }
-  
-  .register-form button {
-    padding: 0.8rem;
-    background-color: #4a3aff;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-weight: bold;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-  }
-  
-  .register-form button:hover {
-    background-color: #372fc9;
-  }
-  
-  .error-message {
-    color: red;
-    font-size: 0.9rem;
-    text-align: center;
-  }
-  
+}

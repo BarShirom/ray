@@ -23,13 +23,19 @@ const emojiForType = (type: Report["type"]) =>
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// accept both {_id} and {id}
 type Assigned =
   | string
-  | { _id: string; firstName?: string; lastName?: string }
+  | { _id?: string; id?: string; firstName?: string; lastName?: string }
   | null
   | undefined;
-const assignedToId = (assigned: Assigned) =>
-  typeof assigned === "string" ? assigned : assigned?._id ?? null;
+
+const assignedToId = (assigned: Assigned) => {
+  if (!assigned) return null;
+  if (typeof assigned === "string") return assigned;
+  return assigned._id ?? assigned.id ?? null;
+};
+
 const assignedToName = (assigned: Assigned, fallback?: string) => {
   if (!assigned || typeof assigned === "string") return fallback ?? "—";
   const name = [assigned.firstName, assigned.lastName]
@@ -84,6 +90,7 @@ export default function ReportMarker({ report }: { report: Report }) {
   const dispatch = useAppDispatch();
   const token = useSelector(selectToken);
   const userId = useSelector(selectUserId);
+  const isLoggedIn = !!token;
 
   const icon = useMemo(
     () => buildIcon(report.type, report.status),
@@ -91,12 +98,12 @@ export default function ReportMarker({ report }: { report: Report }) {
   );
 
   const canResolve =
-    !!token &&
+    isLoggedIn &&
     report.status === "in-progress" &&
     assignedToId(report.assignedTo) === userId;
 
   const handleClaim = () => {
-    const authToken = token ?? undefined; // normalize null -> undefined (avoids TS2345)
+    const authToken = token ?? undefined;
     if (authToken)
       dispatch(claimReport({ reportId: report._id, token: authToken }));
   };
@@ -105,6 +112,9 @@ export default function ReportMarker({ report }: { report: Report }) {
     if (authToken)
       dispatch(resolveReport({ reportId: report._id, token: authToken }));
   };
+
+  const showClaim = isLoggedIn && report.status === "new";
+  const showResolve = canResolve;
 
   return (
     <Marker position={[report.location.lat, report.location.lng]} icon={icon}>
@@ -184,26 +194,29 @@ export default function ReportMarker({ report }: { report: Report }) {
             </div>
           )}
 
-          <div className="popup-actions">
-            {token && report.status === "new" && (
-              <button
-                className="btn btn-compact btn-brand"
-                onClick={handleClaim}
-              >
-                🧰 Claim
-              </button>
-            )}
-            {canResolve && (
-              <button
-                className="btn btn-compact btn-success"
-                onClick={handleResolve}
-              >
-                ✔️ Mark as Resolved
-              </button>
-            )}
-          </div>
+          {(showClaim || showResolve) && (
+            <div className="popup-actions">
+              {showClaim && (
+                <button
+                  className="btn btn-compact btn-brand"
+                  onClick={handleClaim}
+                >
+                  🧰 Claim
+                </button>
+              )}
+              {showResolve && (
+                <button
+                  className="btn btn-compact btn-success"
+                  onClick={handleResolve}
+                >
+                  ✔️ Mark as Resolved
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </Popup>
     </Marker>
   );
 }
+
