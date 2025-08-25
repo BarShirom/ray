@@ -5,9 +5,8 @@ import "./App.css";
 import Register from "./pages/register/Register";
 import Login from "./pages/login/Login";
 import UsersRoutes from "./routes/UsersRoutes";
-import ManageReports from "./pages/manageReports/ManageReports";
+import MyReports from "./pages/myReports/MyReports";
 import PublicRoutes from "./routes/PublicRoutes";
-
 import About from "./pages/about/About";
 import MapPage from "./pages/mapPage/MapPage";
 
@@ -27,7 +26,7 @@ const App = () => {
           </Route>
 
           <Route element={<UsersRoutes />}>
-            <Route path="manage-reports" element={<ManageReports />} />
+            <Route path="my-reports" element={<MyReports />} />
           </Route>
         </Route>
       </Routes>

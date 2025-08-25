@@ -1,0 +1,4 @@
+.myreports { max-width: 920px; margin: 0 auto; }
+.myreports .list-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.myreports .hint{ color:var(--muted); font-size:12px; }
+.myreports .empty{ color:var(--muted); padding:24px; text-align:center; }

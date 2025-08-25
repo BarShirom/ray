@@ -197,19 +197,13 @@ export default function ReportMarker({ report }: { report: Report }) {
           {(showClaim || showResolve) && (
             <div className="popup-actions">
               {showClaim && (
-                <button
-                  className="btn btn-compact btn-brand"
-                  onClick={handleClaim}
-                >
-                  🧰 Claim
+                <button className="btn btn-brand" onClick={handleClaim}>
+                  Claim
                 </button>
               )}
               {showResolve && (
-                <button
-                  className="btn btn-compact btn-success"
-                  onClick={handleResolve}
-                >
-                  ✔️ Mark as Resolved
+                <button className="btn btn-brand" onClick={handleResolve}>
+                  Mark as Resolved
                 </button>
               )}
             </div>

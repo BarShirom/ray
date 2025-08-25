@@ -27,7 +27,7 @@ export default function Navbar() {
       <div className="nav__spacer" />
 
       <div className="nav__items">
-        {/* primary CTA always visible */}
+       
         <NavLink
           to="/"
           className={({ isActive }) =>
@@ -38,12 +38,12 @@ export default function Navbar() {
         </NavLink>
 
         <NavLink to="/map-page" className={linkClass}>
-          Map page
+          Map
         </NavLink>
 
         {isLoggedIn ? (
           <>
-            <NavLink to="/manage-reports" className={linkClass}>
+            <NavLink to="/my-reports" className={linkClass}>
               My reports
             </NavLink>
             <button className="nav-item nav-item--ghost" onClick={handleLogout}>

@@ -11,7 +11,8 @@ export type ReportType = "emergency" | "food" | "general";
 export type ReportStatus = "new" | "in-progress" | "resolved";
 
 export interface Report {
-  distanceKm: any;
+  updatedAt: string;
+  distanceKm: number | null;
   _id: string;
   description: string;
   location: { lat: number; lng: number };

@@ -13,19 +13,32 @@ import { selectToken } from "../../features/auth/authSelectors";
 import ReportMarker from "../../components/reportMarker/ReportMarker";
 import ReportCard from "../../components/reportCard/ReportCard";
 import Legend from "../../components/legend/Legend";
+import type {
+  Report,
+  ReportType as TypeKey,
+  ReportStatus as StatusKey,
+} from "../../features/reports/reportsSlice";
 import "./MapPage.css";
 
-type TypeKey = "emergency" | "food" | "general";
-type StatusKey = "in-progress" | "resolved"; // <-- no "new"
-type LegendKey = TypeKey | StatusKey | "new"; // keep "new" for counts/legend if you want
+type LegendKey = TypeKey | StatusKey;
 
 const ALL_TYPES: TypeKey[] = ["emergency", "food", "general"];
-const ALL_STATUSES: StatusKey[] = ["in-progress", "resolved"]; // <-- only these
+const ALL_STATUSES: StatusKey[] = ["new", "in-progress", "resolved"];
+
+// Normalize server variants: "in progress", "in_progress" -> "in-progress"
+const normStatus = (s: StatusKey | string): StatusKey => {
+  const k = String(s ?? "")
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-");
+  return (
+    k === "new" || k === "in-progress" || k === "resolved" ? k : "new"
+  ) as StatusKey;
+};
 
 export default function MapPage() {
   const dispatch = useAppDispatch();
-  const reports = useSelector(selectAllReports);
-  const token = useSelector(selectToken) ?? undefined;
+  const reports = useSelector(selectAllReports) as Report[];
+  const token = (useSelector(selectToken) ?? null) as string | null;
 
   // checkbox-driven filters
   const [activeTypes, setActiveTypes] = useState<Set<TypeKey>>(
@@ -43,7 +56,7 @@ export default function MapPage() {
   const onTypeChange = useCallback(
     (t: TypeKey) => (e: React.ChangeEvent<HTMLInputElement>) => {
       setActiveTypes((prev) => {
-        const next = new Set(prev);
+        const next = new Set<TypeKey>(prev);
         if (e.target.checked) next.add(t);
         else next.delete(t);
         return next;
@@ -55,7 +68,7 @@ export default function MapPage() {
   const onStatusChange = useCallback(
     (s: StatusKey) => (e: React.ChangeEvent<HTMLInputElement>) => {
       setActiveStatuses((prev) => {
-        const next = new Set(prev);
+        const next = new Set<StatusKey>(prev);
         if (e.target.checked) next.add(s);
         else next.delete(s);
         return next;
@@ -64,31 +77,25 @@ export default function MapPage() {
     []
   );
 
- 
+  // legend counts
   const counts = useMemo(() => {
     const c: Partial<Record<LegendKey, number>> = {};
     for (const r of reports) {
-      const t = r.type as TypeKey;
+      const t: TypeKey = r.type;
       c[t] = (c[t] ?? 0) + 1;
 
-      
-      if (r.status === "in-progress" || r.status === "resolved") {
-        c[r.status] = (c[r.status] ?? 0) + 1;
-      } else {
-      
-        c["new"] = (c["new"] ?? 0) + 1;
-      }
+      const st: StatusKey = normStatus(r.status);
+      c[st] = (c[st] ?? 0) + 1;
     }
     return c;
   }, [reports]);
 
-  // apply both filters (types + only the two statuses)
+  // filtered list (types + statuses)
   const filteredReports = useMemo(
     () =>
       reports.filter(
         (r) =>
-          activeTypes.has(r.type as TypeKey) &&
-          activeStatuses.has(r.status as StatusKey)
+          activeTypes.has(r.type) && activeStatuses.has(normStatus(r.status))
       ),
     [reports, activeTypes, activeStatuses]
   );
@@ -100,14 +107,13 @@ export default function MapPage() {
       ? centerSource[centerSource.length - 1].location
       : defaultCenter;
 
-  const onPrimary = (
-    id: string,
-    status: "new" | "in-progress" | "resolved"
-  ) => {
+  const onPrimary = (id: string, status: StatusKey) => {
     if (!token) return;
-    if (status === "new") dispatch(claimReport({ reportId: id, token }));
-    else if (status === "in-progress")
+    if (status === "new") {
+      dispatch(claimReport({ reportId: id, token }));
+    } else if (status === "in-progress") {
       dispatch(resolveReport({ reportId: id, token }));
+    }
   };
 
   return (
@@ -143,11 +149,19 @@ export default function MapPage() {
           </label>
         </div>
 
-        {/* Status filters (no "New") */}
+        {/* Status filters (includes "New") */}
         <div className="legend-title" style={{ marginTop: 6 }}>
           Status
         </div>
         <div className="filters">
+          <label>
+            <input
+              type="checkbox"
+              checked={activeStatuses.has("new")}
+              onChange={onStatusChange("new")}
+            />{" "}
+            New
+          </label>
           <label>
             <input
               type="checkbox"
@@ -166,7 +180,6 @@ export default function MapPage() {
           </label>
         </div>
 
-        
         <div className="legend-wrap">
           <Legend counts={counts} />
         </div>
@@ -205,4 +218,3 @@ export default function MapPage() {
     </div>
   );
 }
-

@@ -1,69 +1,99 @@
 /* Inherit app font + colors */
-.popup-content{ font: inherit; color: var(--text); max-width: 260px; }
+.popup-content {
+  font: inherit;
+  color: var(--text);
+  max-width: 260px;
+}
 
 /* header */
-.popup-header{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-.popup-emoji{ font-size:18px; }
-.popup-title{ font-weight:600; letter-spacing:.2px; }
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.popup-emoji { font-size: 18px; }
+.popup-title { font-weight: 600; letter-spacing: .2px; }
 
 /* description */
-.popup-description{
-  margin:6px 0 10px;
+.popup-description {
+  margin: 6px 0 10px;
   color: var(--text);
 }
 
 /* link chips (Waze / Google) */
-.popup-links{ display:flex; gap:8px; margin-bottom:8px; }
-.chip-link{
-  text-decoration:none;
-  border:1px solid var(--border);
+.popup-links {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.chip-link {
+  text-decoration: none;
+  border: 1px solid var(--border);
   background: var(--panel);
   color: inherit;
-  padding:4px 8px;
-  border-radius:10px;
+  padding: 4px 8px;
+  border-radius: 10px;
   font-size: 13px;
 }
-.chip-link:hover{
-  background:#f9fafb;
-}
+.chip-link:hover { background: #f9fafb; }
 
 /* meta info */
-.popup-meta{
-  display:grid; gap:4px;
-  font-size:12px; color: var(--muted);
-  margin-bottom:8px;
+.popup-meta {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
 }
-.popup-meta strong{ color: var(--text); font-weight:600; }
+.popup-meta strong {
+  color: var(--text);
+  font-weight: 600;
+}
 
 /* media */
-.popup-media{ display:grid; gap:6px; }
-.popup-image, .popup-video{
-  width:100%; border-radius:10px;
-  border:1px solid var(--border);
+.popup-media { display: grid; gap: 6px; }
+.popup-image,
+.popup-video {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
   background: #000; /* avoids white flash when video loads */
-  max-height: 180px; object-fit: cover;
+  max-height: 180px;
+  object-fit: cover;
 }
 
-/* actions (reuse global .btn; adjust size here) */
-.popup-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:8px; }
-.btn.btn-compact{ padding:6px 10px; border-radius:10px; font-size:13px; }
+/* actions */
+.popup-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+.popup-actions .btn {
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-weight: 500;
+}
 
-/* brand/success variants to match tokens */
-.btn-brand{
+/* button variants (shared with cards/my reports) */
+.btn-brand {
   background: var(--brand);
   border-color: var(--brand);
   color: #fff;
 }
-.btn-brand:hover{ background: var(--brand-900); }
+.btn-brand:hover { background: var(--brand-900); }
 
-.btn-success{
+.btn-success {
   background: var(--success);
   border-color: var(--success);
   color: #fff;
 }
-.btn-success:hover{
-  filter: brightness(.95);
-}
+.btn-success:hover { filter: brightness(.95); }
 
 /* dark theme hover fallback */
-:root[data-theme="dark"] .chip-link:hover{ background: #111418; }
+:root[data-theme="dark"] .chip-link:hover {
+  background: #111418;
+}
