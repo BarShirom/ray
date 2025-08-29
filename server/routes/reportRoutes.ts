@@ -9,18 +9,17 @@ import {
   getUserStats,
 } from "../controllers/reportController";
 import { authMiddleware } from "../middleware/authMiddleware";
-import upload from "../middleware/uploadMiddleware"; 
+import upload from "../middleware/uploadMiddleware";
 import { optionalAuthMiddleware } from "../middleware/optionalAuthMiddleware";
 
 const router = express.Router();
 
 router.get("/", getAllReports);
 
-
 router.post(
   "/",
   optionalAuthMiddleware,
-  upload.array("media", 6),
+
   createReport
 );
 
@@ -31,4 +30,3 @@ router.get("/stats", authMiddleware, getGlobalStats);
 router.get("/stats/me", authMiddleware, getUserStats);
 
 export default router;
-

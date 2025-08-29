@@ -205,9 +205,6 @@ export default function MapPage() {
       <aside className="panel side-right">
         <div className="list-header">
           <span>Nearby reports</span>
-          <button className="btn" onClick={() => dispatch(fetchReports())}>
-            Refresh
-          </button>
         </div>
         <div className="report-list">
           {filteredReports.map((r) => (

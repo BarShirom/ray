@@ -4,6 +4,7 @@ import { selectIsLoggedIn } from "../features/auth/authSelectors";
 
 const PublicRoutes = () => {
   const isLoggedIn = useAppSelector(selectIsLoggedIn);
+  console.log("PublicRoutes isLoggedIn =", isLoggedIn);
 
   return isLoggedIn ? <Navigate to="/map-page" replace /> : <Outlet />;
 };

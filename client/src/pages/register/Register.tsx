@@ -5,6 +5,7 @@ import { useAppDispatch } from "../../app/hooks";
 import { registerUser } from "../../features/auth/authThunks";
 
 export default function Register() {
+  console.log("Register mounted");
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 

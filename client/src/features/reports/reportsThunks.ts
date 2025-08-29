@@ -1,128 +1,85 @@
+// features/reports/reportsThunks.ts
 import { createAsyncThunk } from "@reduxjs/toolkit";
-import type { Report } from "./reportsSlice";
-import axios from "axios";
+import type { Report, ReportType } from "./reportsSlice";
+import { http } from "../../api/http";
 
-const API_REPORTS_URL = "http://localhost:3000/api/reports";
-
-const getAuthHeader = (token: string | null) => ({
-  headers: {
-    Authorization: token ? `Bearer ${token}` : "",
-  },
-});
+const authHeader = (token: string | null) =>
+  token ? { Authorization: `Bearer ${token}` } : {};
 
 export const fetchReports = createAsyncThunk<Report[]>(
   "reports/fetchAll",
   async () => {
-    try {
-      const response = await axios.get(`${API_REPORTS_URL}`);
-      return response.data as Report[];
-    } catch (error) {
-      console.log(error);
-      throw error;
-    }
+    const { data } = await http.get<Report[]>("/api/reports");
+    return data;
   }
 );
 
+// send Cloudinary URLs (strings), not File objects
 export const createReport = createAsyncThunk<
   Report,
   {
     description: string;
-    type: Report["type"];
+    type: ReportType;
     location: { lat: number; lng: number };
-    media?: File[];
+    media?: string[]; // Cloudinary URLs
     token: string | null;
   }
->("reports/create", async ({ description, type, location, media, token }) => {
-  try {
-    const formData = new FormData();
-    formData.append("description", description);
-    formData.append("type", type);
-    formData.append("location", JSON.stringify(location));
-
-    if (media && media.length > 0) {
-      media.forEach((file) => {
-        formData.append("media", file); // ✅ File objects only
-      });
-    }
-
-    
-    const config = {
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    };
-
-    const response = await axios.post(`${API_REPORTS_URL}`, formData, config);
-    return response.data as Report;
-  } catch (error) {
-    console.log(error);
-    throw error;
+>(
+  "reports/create",
+  async ({ description, type, location, media = [], token }) => {
+    const payload = { description, type, location, media };
+    const { data } = await http.post<Report>("/api/reports", payload, {
+      headers: { ...authHeader(token) },
+    });
+    return data;
   }
-});
+);
 
 export const claimReport = createAsyncThunk<
   Report,
   { reportId: string; token: string | null }
 >("reports/claim", async ({ reportId, token }) => {
-  try {
-    const response = await axios.patch(
-      `${API_REPORTS_URL}/${reportId}/claim`,
-      {},
-      getAuthHeader(token)
-    );
-    return response.data as Report;
-  } catch (error) {
-    console.log(error);
-    throw error;
-  }
+  const { data } = await http.patch<Report>(
+    `/api/reports/${reportId}/claim`,
+    {},
+    {
+      headers: { ...authHeader(token) },
+    }
+  );
+  return data;
 });
 
 export const resolveReport = createAsyncThunk<
   Report,
   { reportId: string; token: string | null }
 >("reports/resolve", async ({ reportId, token }) => {
-  try {
-    const response = await axios.patch(
-      `${API_REPORTS_URL}/${reportId}/resolve`,
-      {},
-      getAuthHeader(token)
-    );
-    return response.data as Report;
-  } catch (error) {
-    console.log(error);
-    throw error;
-  }
+  const { data } = await http.patch<Report>(
+    `/api/reports/${reportId}/resolve`,
+    {},
+    {
+      headers: { ...authHeader(token) },
+    }
+  );
+  return data;
 });
 
 export const fetchUserStats = createAsyncThunk<
   { total: number; resolved: number; inProgress: number },
   string | null
 >("reports/fetchUserStats", async (token) => {
-  try {
-    const response = await axios.get(
-      `${API_REPORTS_URL}/stats/me`,
-      getAuthHeader(token)
-    );
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    throw error;
-  }
+  const { data } = await http.get("/api/reports/stats/me", {
+    headers: { ...authHeader(token) },
+  });
+  return data;
 });
 
 export const fetchMyReports = createAsyncThunk<Report[], string | null>(
   "reports/fetchMyReports",
   async (token) => {
-    try {
-      const response = await axios.get(
-        `${API_REPORTS_URL}/me`,
-        getAuthHeader(token)
-      );
-      return response.data as Report[];
-    } catch (error) {
-      console.log(error);
-      throw error;
-    }
+    const { data } = await http.get<Report[]>("/api/reports/me", {
+      headers: { ...authHeader(token) },
+    });
+    return data;
   }
 );
 
@@ -130,15 +87,8 @@ export const fetchGlobalStats = createAsyncThunk<
   { total: number; resolved: number; inProgress: number; new: number },
   string | null
 >("reports/fetchGlobalStats", async (token) => {
-  try {
-    const response = await axios.get(
-      `${API_REPORTS_URL}/stats`,
-      getAuthHeader(token)
-    );
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    throw error;
-  }
+  const { data } = await http.get("/api/reports/stats", {
+    headers: { ...authHeader(token) },
+  });
+  return data;
 });
-

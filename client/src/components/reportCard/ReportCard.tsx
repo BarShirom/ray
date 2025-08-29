@@ -3,7 +3,7 @@ import { useSelector } from "react-redux";
 import { selectToken, selectUserId } from "../../features/auth/authSelectors";
 import type { Report } from "../../features/reports/reportsSlice";
 
-// accept both {_id} and {id}
+
 type Assigned =
   | string
   | { _id?: string; id?: string; firstName?: string; lastName?: string }

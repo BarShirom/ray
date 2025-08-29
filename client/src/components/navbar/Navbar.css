@@ -1,28 +1,75 @@
-/* src/components/navbar/Navbar.css */
-.nav{
-  display:flex; align-items:center; gap:12px;
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  
 }
-.nav__brand{ display:flex; align-items:baseline; gap:8px; }
-.nav__title{ font-weight:600; color:var(--muted); font-size:18px; letter-spacing:.2px; }
 
-.nav__spacer{ margin-left:auto; }
-.nav__items{ display:flex; align-items:center; gap:8px; }
-
-.nav-item{
-  text-decoration:none; color:inherit; cursor:pointer;
-  border:1px solid var(--border);
-  background:var(--panel);
-  padding:8px 12px; border-radius:12px; font-size:14px;
+.nav__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: #5bc0de;
 }
-.nav-item:hover{ background:#f9fafb; }
-.nav-item.is-active{ box-shadow:0 0 0 2px color-mix(in oklab, var(--brand) 30%, transparent); }
 
-.nav-item--primary{
-  background:var(--brand); border-color:var(--brand); color:#fff;
+.nav__logo {
+  height: 100px;
+  width: auto;
 }
-.nav-item--primary:hover{ background:var(--brand-900); }
+.nav__title {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
 
-.nav-item.nav-item--ghost{
-  background:var(--panel);
+/* Mobile: logo-only */
+@media (max-width: 640px) {
+  .nav__title {
+    display: none;
+  }
+  .nav__logo {
+    height: 100px;
+  }
 }
-.nav button.nav-item{ border:1px solid var(--border); }
+
+.nav__spacer {
+  margin-left: auto;
+}
+.nav__items {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-item {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+.nav-item:hover {
+  background: #f9fafb;
+}
+.nav-item.is-active {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand) 30%, transparent);
+}
+
+.nav-item--primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.nav-item--primary:hover {
+  background: var(--brand-900);
+}
+
+.nav-item.nav-item--ghost {
+  background: var(--panel);
+}
+.nav button.nav-item {
+  border: 1px solid var(--border);
+}
