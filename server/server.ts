@@ -7,6 +7,17 @@ import reportRoutes from "./routes/reportRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 
 dotenv.config();
+console.log("[Railway ENV] MONGO_URI:", !!process.env.MONGO_URI);
+console.log("[Railway ENV] JWT_SECRET:", !!process.env.JWT_SECRET);
+console.log(
+  "[Railway ENV] CLOUDINARY_CLOUD_NAME:",
+  !!process.env.CLOUDINARY_CLOUD_NAME
+);
+console.log(
+  "[Railway ENV] ALLOWED_ORIGINS:",
+  process.env.ALLOWED_ORIGINS || "(empty)"
+);
+
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
