@@ -1,6 +1,6 @@
 // src/controllers/reportController.ts
 import { Request, Response, RequestHandler } from "express";
-import ReportModel from "../models/ReportModel";
+import ReportModel from "../models/ReportModel.js";
 
 type ReportType = "emergency" | "food" | "general"; // adjust to your union
 
