@@ -7,17 +7,6 @@ import reportRoutes from "./routes/reportRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 
 dotenv.config();
-console.log("[Railway ENV] MONGO_URI:", !!process.env.MONGO_URI);
-console.log("[Railway ENV] JWT_SECRET:", !!process.env.JWT_SECRET);
-console.log(
-  "[Railway ENV] CLOUDINARY_CLOUD_NAME:",
-  !!process.env.CLOUDINARY_CLOUD_NAME
-);
-console.log(
-  "[Railway ENV] ALLOWED_ORIGINS:",
-  process.env.ALLOWED_ORIGINS || "(empty)"
-);
-
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
@@ -60,9 +49,6 @@ app.get("/", (_req, res) => {
   res.send("Ray backend is running!");
 });
 
-// NOTE: avoid local disk on Railway
-// app.use("/uploads", express.static("uploads"));
-
 // --- error handler (must have 4 args) ---
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error("[error]", err?.name, err?.message, err?.stack);
@@ -85,4 +71,3 @@ mongoose
     console.error("❌ MongoDB connection error:", err);
     process.exit(1);
   });
-
