@@ -24,25 +24,12 @@ const emojiForType = (type: Report["type"]) =>
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // accept both {_id} and {id}
-type Assigned =
-  | string
-  | { _id?: string; id?: string; firstName?: string; lastName?: string }
-  | null
-  | undefined;
+type Assigned = string | { _id?: string; id?: string } | null | undefined;
 
 const assignedToId = (assigned: Assigned) => {
   if (!assigned) return null;
   if (typeof assigned === "string") return assigned;
   return assigned._id ?? assigned.id ?? null;
-};
-
-const assignedToName = (assigned: Assigned, fallback?: string) => {
-  if (!assigned || typeof assigned === "string") return fallback ?? "—";
-  const name = [assigned.firstName, assigned.lastName]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  return name || (fallback ?? "—");
 };
 
 type MediaLike = string | { url: string; type?: "image" | "video" };
@@ -159,16 +146,12 @@ export default function ReportMarker({ report }: { report: Report }) {
               {new Date(report.createdAt).toLocaleString()}
             </div>
             <div>
-              <strong>Reporter:</strong> {report.createdByName ?? "Guest"}
+              <strong>Reporter:</strong> {report.createdBy?.name ?? "Guest"}
             </div>
             {(report.status === "in-progress" ||
               report.status === "resolved") && (
               <div>
-                <strong>Assigned to:</strong>{" "}
-                {assignedToName(
-                  report.assignedTo,
-                  report.assignedToName ?? undefined
-                )}
+                <strong>Assigned to:</strong> {report.assignedTo?.name ?? "—"}
               </div>
             )}
           </div>
@@ -213,4 +196,3 @@ export default function ReportMarker({ report }: { report: Report }) {
     </Marker>
   );
 }
-

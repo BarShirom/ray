@@ -3,24 +3,12 @@ import { useSelector } from "react-redux";
 import { selectToken, selectUserId } from "../../features/auth/authSelectors";
 import type { Report } from "../../features/reports/reportsSlice";
 
-
-type Assigned =
-  | string
-  | { _id?: string; id?: string; firstName?: string; lastName?: string }
-  | null
-  | undefined;
-
-const assignedToId = (assigned: Assigned) => {
+const assignedToId = (
+  assigned: { _id?: string; id?: string } | string | null | undefined
+) => {
   if (!assigned) return null;
   if (typeof assigned === "string") return assigned;
   return assigned._id ?? assigned.id ?? null;
-};
-
-const assignedToName = (assigned: Assigned | undefined, fallback?: string) => {
-  if (!assigned || typeof assigned === "string") return fallback ?? "—";
-  const { firstName, lastName } = assigned;
-  const name = [firstName, lastName].filter(Boolean).join(" ").trim();
-  return name || (fallback ?? "—");
 };
 
 export default function ReportCard({
@@ -82,13 +70,7 @@ export default function ReportCard({
           {(report.status === "in-progress" ||
             report.status === "resolved") && (
             <div className="card__sub">
-              Assigned to:{" "}
-              <b>
-                {assignedToName(
-                  report.assignedTo,
-                  report.assignedToName ?? undefined
-                )}
-              </b>
+              Assigned to: <b>{report.assignedTo?.name ?? "—"}</b>
             </div>
           )}
         </div>
@@ -105,4 +87,3 @@ export default function ReportCard({
     </div>
   );
 }
-

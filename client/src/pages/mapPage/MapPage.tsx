@@ -1,4 +1,3 @@
-// src/pages/mapPage/MapPage.tsx
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSelector } from "react-redux";
 import { useAppDispatch } from "../../app/hooks";
@@ -52,7 +51,6 @@ export default function MapPage() {
     dispatch(fetchReports());
   }, [dispatch]);
 
-  // handlers
   const onTypeChange = useCallback(
     (t: TypeKey) => (e: React.ChangeEvent<HTMLInputElement>) => {
       setActiveTypes((prev) => {
@@ -81,9 +79,7 @@ export default function MapPage() {
   const counts = useMemo(() => {
     const c: Partial<Record<LegendKey, number>> = {};
     for (const r of reports) {
-      const t: TypeKey = r.type;
-      c[t] = (c[t] ?? 0) + 1;
-
+      c[r.type] = (c[r.type] ?? 0) + 1;
       const st: StatusKey = normStatus(r.status);
       c[st] = (c[st] ?? 0) + 1;
     }
@@ -149,7 +145,7 @@ export default function MapPage() {
           </label>
         </div>
 
-        {/* Status filters (includes "New") */}
+        {/* Status filters */}
         <div className="legend-title" style={{ marginTop: 6 }}>
           Status
         </div>

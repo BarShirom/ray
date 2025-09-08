@@ -1,4 +1,3 @@
-
 import { useMemo } from "react";
 import { useSelector } from "react-redux";
 import { useAppDispatch } from "../../app/hooks";
@@ -15,12 +14,11 @@ const getId = (v: MaybeId) =>
 
 export default function MyReports() {
   const dispatch = useAppDispatch();
-  const reports = useSelector(selectAllReports);
-  const userId = useSelector(selectUserId);
-  const rawToken = useSelector(selectToken);
-  const token: string | null = rawToken ?? null; // thunk expects string | null
 
-  // only reports the user claimed
+  const reports = useSelector(selectAllReports) as Report[];
+  const userId = useSelector(selectUserId);
+  const token = useSelector(selectToken) ?? null;
+
   const mine = useMemo<Report[]>(() => {
     const list = reports.filter((r) => getId(r.assignedTo) === userId);
     return list.slice().sort((a, b) => {
@@ -30,13 +28,12 @@ export default function MyReports() {
     });
   }, [reports, userId]);
 
-  // exact signature required by ReportCard
   const handlePrimary = (id: string, status: ReportStatus) => {
-    if (!token) return; // not authenticated
-    if (status === "resolved") return; // already resolved
+    if (!token) return;
+    if (status === "resolved") return;
 
     const r = reports.find((x) => x._id === id);
-    if (!r || getId(r.assignedTo) !== userId) return; // ensure ownership
+    if (!r || getId(r.assignedTo) !== userId) return;
 
     dispatch(resolveReport({ reportId: id, token }));
   };
@@ -53,11 +50,7 @@ export default function MyReports() {
       ) : (
         <div className="report-list">
           {mine.map((r) => (
-            <ReportCard
-              key={r._id}
-              report={r}
-              onPrimary={handlePrimary} 
-            />
+            <ReportCard key={r._id} report={r} onPrimary={handlePrimary} />
           ))}
         </div>
       )}
