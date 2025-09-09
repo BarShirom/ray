@@ -51,6 +51,10 @@ export default function ReportCard({
 
   const showButton = showClaim || showResolve;
 
+  // 🔽 name fallbacks (flat or populated)
+  const assigneeName =
+    report.assignedToName ?? report.assignedTo?.name ?? undefined;
+
   return (
     <div className="card">
       <div className="card__meta">
@@ -70,7 +74,7 @@ export default function ReportCard({
           {(report.status === "in-progress" ||
             report.status === "resolved") && (
             <div className="card__sub">
-              Assigned to: <b>{report.assignedTo?.name ?? "—"}</b>
+              Assigned to: <b>{assigneeName ?? "—"}</b>
             </div>
           )}
         </div>

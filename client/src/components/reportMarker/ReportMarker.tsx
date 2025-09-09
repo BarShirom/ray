@@ -103,6 +103,12 @@ export default function ReportMarker({ report }: { report: Report }) {
   const showClaim = isLoggedIn && report.status === "new";
   const showResolve = canResolve;
 
+  // 🔽 name fallbacks (flat or populated)
+  const reporterName =
+    report.createdBy?.name ?? report.createdByName ?? "Guest";
+  const assigneeName =
+    report.assignedToName ?? report.assignedTo?.name ?? undefined;
+
   return (
     <Marker position={[report.location.lat, report.location.lng]} icon={icon}>
       <Popup>
@@ -146,12 +152,12 @@ export default function ReportMarker({ report }: { report: Report }) {
               {new Date(report.createdAt).toLocaleString()}
             </div>
             <div>
-              <strong>Reporter:</strong> {report.createdBy?.name ?? "Guest"}
+              <strong>Reporter:</strong> {reporterName}
             </div>
             {(report.status === "in-progress" ||
               report.status === "resolved") && (
               <div>
-                <strong>Assigned to:</strong> {report.assignedTo?.name ?? "—"}
+                <strong>Assigned to:</strong> {assigneeName ?? "—"}
               </div>
             )}
           </div>
