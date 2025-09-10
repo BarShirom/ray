@@ -2,6 +2,36 @@ import { Request, Response, RequestHandler } from "express";
 import ReportModel from "../models/ReportModel.js";
 
 type ReportType = "emergency" | "food" | "general";
+
+// ---- shared helpers ----
+const POPULATE = [
+  { path: "createdBy", select: "firstName lastName name" },
+  { path: "assignedTo", select: "firstName lastName name" },
+] as const;
+
+function fullNameFrom(u: any | null | undefined) {
+  if (!u) return null;
+  if (u.name) return u.name;
+  const parts = [u.firstName, u.lastName].filter(Boolean);
+  return parts.length ? parts.join(" ") : null;
+}
+
+function withComputedNames<T extends any>(r: T) {
+  // NOTE: r could be a plain object from .lean() or a Mongoose doc.toObject()
+  const createdByName =
+    (r as any).createdByName ?? fullNameFrom((r as any).createdBy);
+  const assignedToName =
+    (r as any).assignedToName ?? fullNameFrom((r as any).assignedTo);
+
+  return {
+    ...(r as any),
+    createdByName: createdByName ?? null,
+    assignedToName: assignedToName ?? null,
+  };
+}
+
+// ---- controllers ----
+
 export const createReport: RequestHandler = async (req, res, next) => {
   try {
     const { description, type, location, media } = req.body as {
@@ -11,9 +41,9 @@ export const createReport: RequestHandler = async (req, res, next) => {
       media?: string[];
     };
 
-    const user = (req as any).user; // expect {_id, firstName, lastName} from auth middleware
+    const user = (req as any).user; // expect {_id, firstName, lastName, (optional name)}
     const createdBy = user?._id ?? null;
-    const createdByName = user ? `${user.firstName} ${user.lastName}` : "Guest";
+    const createdByName = user ? fullNameFrom(user) : "Guest";
 
     const doc = await ReportModel.create({
       description,
@@ -22,10 +52,13 @@ export const createReport: RequestHandler = async (req, res, next) => {
       media: media ?? [],
       status: "new",
       createdBy,
-      createdByName, // ✅ set it here
+      createdByName, // ensure set at creation
     });
 
-    res.status(201).json(doc);
+    // Populate for a consistent response shape, then compute names as a fallback
+    const populated = await doc.populate(POPULATE as any);
+    const out = withComputedNames(populated.toObject());
+    res.status(201).json(out);
   } catch (err) {
     next(err);
   }
@@ -34,9 +67,13 @@ export const createReport: RequestHandler = async (req, res, next) => {
 export const getAllReports = async (req: Request, res: Response) => {
   try {
     const reports = await ReportModel.find()
-      .populate("createdBy", "firstName lastName")
-      .populate("assignedTo", "firstName lastName");
-    res.json(reports);
+      .sort({ createdAt: -1 })
+      .populate(POPULATE as any)
+      .lean(); // return plain objects
+
+    // Ensure names are present even if stored fields were null
+    const out = reports.map(withComputedNames);
+    res.json(out);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch reports" });
   }
@@ -44,12 +81,16 @@ export const getAllReports = async (req: Request, res: Response) => {
 
 export const getMyReports = async (req: Request, res: Response) => {
   try {
+    const user = (req as any).user;
     const reports = await ReportModel.find({
-      assignedTo: (req as any).user?._id,
+      assignedTo: user?._id, // your logic currently returns "assigned to me"
     })
-      .populate("createdBy", "firstName lastName")
-      .populate("assignedTo", "firstName lastName");
-    res.json(reports);
+      .sort({ createdAt: -1 })
+      .populate(POPULATE as any)
+      .lean();
+
+    const out = reports.map(withComputedNames);
+    res.json(out);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch your reports" });
   }
@@ -73,15 +114,13 @@ export const claimReport = async (
 
     const user = (req as any).user;
     report.assignedTo = user._id;
-    report.assignedToName = `${user.firstName} ${user.lastName}`;
+    report.assignedToName = fullNameFrom(user) ?? report.assignedToName ?? null;
     report.status = "in-progress";
     await report.save();
 
-    res.json({
-      ...report.toObject(),
-      assignedTo: report.assignedTo.toString(),
-      assignedToName: report.assignedToName,
-    });
+    const populated = await report.populate(POPULATE as any);
+    const out = withComputedNames(populated.toObject());
+    res.json(out);
   } catch (err) {
     res.status(500).json({ error: "Failed to claim report" });
   }
@@ -109,7 +148,9 @@ export const resolveReport = async (
     report.status = "resolved";
     await report.save();
 
-    res.json(report);
+    const populated = await report.populate(POPULATE as any);
+    const out = withComputedNames(populated.toObject());
+    res.json(out);
   } catch (err) {
     res.status(500).json({ error: "Failed to resolve report" });
   }

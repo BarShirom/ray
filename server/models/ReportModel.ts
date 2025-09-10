@@ -17,27 +17,34 @@ const reportSchema = new mongoose.Schema(
       lat: { type: Number, required: true },
       lng: { type: Number, required: true },
     },
+
+    // relations
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
-    createdByName: { type: String, default: null },
     assignedTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
+
+    // denormalized, stored for convenience
+    createdByName: { type: String, default: null },
     assignedToName: { type: String, default: null },
+
     media: {
       type: [String],
       default: [],
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-
+// helpful indexes
 reportSchema.index({ status: 1 });
 reportSchema.index({ assignedTo: 1 });
 
