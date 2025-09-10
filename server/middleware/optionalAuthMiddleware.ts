@@ -1,46 +1,44 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import UserModel from "../models/UserModel.js";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 interface JwtPayload {
-  id: string;
-}
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: any;
-    }
-  }
+  id?: string;
+  _id?: string;
 }
 
 export const optionalAuthMiddleware = async (
   req: Request,
   _res: Response,
   next: NextFunction
-): Promise<void> => {
-  const authHeader = req.headers.authorization;
+) => {
+  try {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith("Bearer ")) return next();
 
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.split(" ")[1];
+    const token = auth.slice(7);
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return next();
 
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-      const user = await UserModel.findById(decoded.id).select(
-        "_id firstName lastName email"
-      );
+    const decoded = jwt.verify(token, secret) as JwtPayload;
+    const userId = decoded.id ?? decoded._id;
+    if (!userId) return next();
 
-      if (user) {
-        req.user = user;
-      }
-    } catch (err) {
-      console.log("⚠️ Optional auth failed:", err);
-      // Don't stop the request — just continue as guest
+    const user = await UserModel.findById(userId)
+      .select("_id firstName lastName name email")
+      .lean();
+
+    if (user) {
+      (req as any).user = {
+        _id: String(user._id),
+        firstName: user.firstName,
+        lastName: user.lastName,
+        name: (user as any).name,
+        email: user.email,
+      };
     }
+  } catch {
+    // ignore and continue as guest
   }
-
   next();
 };
