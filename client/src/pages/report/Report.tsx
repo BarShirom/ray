@@ -72,6 +72,7 @@ const Report = () => {
     setSubmitting(true);
     try {
       const mediaUrls = mediaFiles.length ? await uploadMedia(mediaFiles) : [];
+      console.log("createReport token →", token);
       await dispatch(
         createReport({ description, location, type, media: mediaUrls, token })
       ).unwrap();

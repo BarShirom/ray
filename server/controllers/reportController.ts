@@ -1,9 +1,7 @@
-// src/controllers/reportController.ts
 import { Request, Response, RequestHandler } from "express";
 import ReportModel from "../models/ReportModel.js";
 
-type ReportType = "emergency" | "food" | "general"; // adjust to your union
-
+type ReportType = "emergency" | "food" | "general";
 export const createReport: RequestHandler = async (req, res, next) => {
   try {
     const { description, type, location, media } = req.body as {
@@ -13,13 +11,18 @@ export const createReport: RequestHandler = async (req, res, next) => {
       media?: string[];
     };
 
+    const user = (req as any).user; // expect {_id, firstName, lastName} from auth middleware
+    const createdBy = user?._id ?? null;
+    const createdByName = user ? `${user.firstName} ${user.lastName}` : "Guest";
+
     const doc = await ReportModel.create({
       description,
       type,
       location,
       media: media ?? [],
       status: "new",
-      createdBy: (req as any).user?.id ?? null, // if optionalAuth attaches user
+      createdBy,
+      createdByName, // ✅ set it here
     });
 
     res.status(201).json(doc);

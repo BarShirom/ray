@@ -1,4 +1,3 @@
-// api/http.ts
 import axios from "axios";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
@@ -10,9 +9,9 @@ if (!BASE) {
 }
 
 export const http = axios.create({
-  baseURL: BASE, // e.g. https://ray-production-f8b3.up.railway.app
+  baseURL: BASE, 
   headers: { "Content-Type": "application/json" },
-  withCredentials: false, // set true only if your API uses cookies
+  withCredentials: false, 
 });
 
 export default http;
