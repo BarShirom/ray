@@ -55,6 +55,8 @@ export default function ReportCard({
   const assigneeName =
     report.assignedToName ?? report.assignedTo?.name ?? undefined;
 
+  const reporterName =
+    report.createdByName ?? report.createdBy?.name ?? "Guest";
   return (
     <div className="card">
       <div className="card__meta">
@@ -71,6 +73,11 @@ export default function ReportCard({
       <div className="card__row">
         <div>
           <div className="card__title">{report.description}</div>
+
+          <div className="card__sub">
+            Reporter: <b>{reporterName}</b>
+          </div>
+
           {(report.status === "in-progress" ||
             report.status === "resolved") && (
             <div className="card__sub">

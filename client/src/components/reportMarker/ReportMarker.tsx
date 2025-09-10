@@ -105,7 +105,7 @@ export default function ReportMarker({ report }: { report: Report }) {
 
   // 🔽 name fallbacks (flat or populated)
   const reporterName =
-    report.createdBy?.name ?? report.createdByName ?? "Guest";
+    report.createdByName ?? report.createdBy?.name ?? "Guest";
   const assigneeName =
     report.assignedToName ?? report.assignedTo?.name ?? undefined;
 
