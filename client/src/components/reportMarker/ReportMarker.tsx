@@ -49,7 +49,7 @@ const toMedia = (item: MediaLike) => {
   return { url, kind: kind as "image" | "video" };
 };
 
-// png icons must exist in /public/icons
+
 const buildIcon = (type: Report["type"], status: Report["status"]) => {
   let iconFile = "marker-icon.png";
   if (status === "resolved") iconFile = "marker-icon-grey.png";

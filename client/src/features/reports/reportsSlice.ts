@@ -67,7 +67,7 @@ const reportsSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder.addCase(fetchReports.fulfilled, (_state, action) => {
-      // ✅ Replace with fetched array
+     
       return Array.isArray(action.payload) ? action.payload : [];
     });
 
@@ -76,7 +76,7 @@ const reportsSlice = createSlice({
     });
 
     builder.addCase(createReport.fulfilled, (state, action) => {
-      // prepend newly created report
+      
       if (action.payload) state.unshift(action.payload);
     });
 

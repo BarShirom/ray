@@ -53,7 +53,7 @@ export default function ReportCard({
 
   const showButton = showClaim || showResolve;
 
-  // use helpers
+  
   const reporterName = getReporterName(report);
   const assigneeName = getAssigneeName(report);
 
