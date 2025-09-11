@@ -35,7 +35,7 @@ export default function MyReports() {
     const r = reports.find((x) => x._id === id);
     if (!r || getId(r.assignedTo) !== userId) return;
 
-    dispatch(resolveReport({ reportId: id, token }));
+    dispatch(resolveReport({ reportId: id }));
   };
 
   return (

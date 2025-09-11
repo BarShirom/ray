@@ -74,7 +74,7 @@ const Report = () => {
       const mediaUrls = mediaFiles.length ? await uploadMedia(mediaFiles) : [];
       console.log("createReport token →", token);
       await dispatch(
-        createReport({ description, location, type, media: mediaUrls, token })
+        createReport({ description, location, type, media: mediaUrls })
       ).unwrap();
       navigate("/map-page");
     } catch (err: unknown) {

@@ -106,9 +106,9 @@ export default function MapPage() {
   const onPrimary = (id: string, status: StatusKey) => {
     if (!token) return;
     if (status === "new") {
-      dispatch(claimReport({ reportId: id, token }));
+      dispatch(claimReport({ reportId: id }));
     } else if (status === "in-progress") {
-      dispatch(resolveReport({ reportId: id, token }));
+      dispatch(resolveReport({ reportId: id }));
     }
   };
 
