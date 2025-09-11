@@ -1,7 +1,7 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
 import { http } from "../../api/http";
 import type { RootState } from "../../app/store";
-import { selectToken } from "../auth/authSelectors";
+import { selectName, selectToken, selectUserId } from "../auth/authSelectors";
 import type { Report, ReportType } from "./reportsSlice";
 
 const authHeader = (token: string | null) =>
@@ -39,15 +39,34 @@ export const claimReport = createAsyncThunk<
   { reportId: string },
   { state: RootState }
 >("reports/claim", async ({ reportId }, { getState }) => {
-  const token = selectToken(getState());
+  const state = getState();
+  const token = selectToken(state);
+  const meId = selectUserId(state);
+  const meName = selectName(state);
+
   const { data } = await http.patch<Report>(
     `/api/reports/${reportId}/claim`,
     {},
-    {
-      headers: authHeader(token),
-    }
+    { headers: authHeader(token) }
   );
-  return data;
+
+  const rawAssigned: unknown = (data as { assignedTo?: unknown }).assignedTo;
+
+  let assignedTo: Report["assignedTo"] | undefined;
+
+  if (rawAssigned && typeof rawAssigned === "object") {
+    assignedTo = rawAssigned as Report["assignedTo"];
+  } else if (typeof rawAssigned === "string") {
+    assignedTo = { _id: rawAssigned, name: data.assignedToName ?? meName };
+  } else if (meId) {
+    assignedTo = { _id: meId, name: meName };
+  }
+
+  return {
+    ...data,
+    assignedTo,
+    assignedToName: data.assignedToName ?? meName ?? undefined,
+  };
 });
 
 export const resolveReport = createAsyncThunk<

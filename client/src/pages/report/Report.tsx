@@ -56,7 +56,6 @@ const Report = () => {
     };
   }, [watchId]);
 
-  // Async worker that does the real submit
   const submitReport = useCallback(async () => {
     setError(null);
 
@@ -84,10 +83,9 @@ const Report = () => {
     }
   }, [description, location, type, mediaFiles, token, dispatch, navigate]);
 
-  // React expects a void-returning event handler
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
-    void submitReport(); // fire and forget the async work
+    void submitReport();
   };
 
   return (

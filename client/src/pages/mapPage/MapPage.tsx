@@ -24,7 +24,6 @@ type LegendKey = TypeKey | StatusKey;
 const ALL_TYPES: TypeKey[] = ["emergency", "food", "general"];
 const ALL_STATUSES: StatusKey[] = ["new", "in-progress", "resolved"];
 
-// Normalize server variants: "in progress", "in_progress" -> "in-progress"
 const normStatus = (s: StatusKey | string): StatusKey => {
   const k = String(s ?? "")
     .toLowerCase()
@@ -39,7 +38,6 @@ export default function MapPage() {
   const reports = useSelector(selectAllReports) as Report[];
   const token = (useSelector(selectToken) ?? null) as string | null;
 
-  // checkbox-driven filters
   const [activeTypes, setActiveTypes] = useState<Set<TypeKey>>(
     () => new Set(ALL_TYPES)
   );
@@ -75,7 +73,6 @@ export default function MapPage() {
     []
   );
 
-  // legend counts
   const counts = useMemo(() => {
     const c: Partial<Record<LegendKey, number>> = {};
     for (const r of reports) {
@@ -86,7 +83,6 @@ export default function MapPage() {
     return c;
   }, [reports]);
 
-  // filtered list (types + statuses)
   const filteredReports = useMemo(
     () =>
       reports.filter(
@@ -117,7 +113,6 @@ export default function MapPage() {
       <aside className="panel side-left">
         <div className="section-title">Filters</div>
 
-        {/* Type filters */}
         <div className="filters" style={{ marginBottom: 10 }}>
           <label>
             <input
@@ -145,7 +140,6 @@ export default function MapPage() {
           </label>
         </div>
 
-        {/* Status filters */}
         <div className="legend-title" style={{ marginTop: 6 }}>
           Status
         </div>
