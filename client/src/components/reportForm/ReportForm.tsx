@@ -6,7 +6,7 @@ import "./ReportForm.css";
 interface ReportFormProps {
   description: string;
   setDescription: (value: string) => void;
-  handleSubmit: React.FormEventHandler<HTMLFormElement>; // <-- change here
+  handleSubmit: React.FormEventHandler<HTMLFormElement>; 
   useLocation: () => void;
   locationReady: boolean;
   location: { lat: number; lng: number } | null;
@@ -18,7 +18,7 @@ interface ReportFormProps {
 }
 
 const MAX_FILES = 6;
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB per file
+const MAX_FILE_SIZE = 50 * 1024 * 1024; 
 
 export default function ReportForm({
   description,

@@ -10,6 +10,13 @@ import {
 export type ReportType = "emergency" | "food" | "general";
 export type ReportStatus = "new" | "in-progress" | "resolved";
 
+export interface ReportUser {
+  _id: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
 export interface Report {
   updatedAt: string;
   distanceKm: number | null;
@@ -18,17 +25,17 @@ export interface Report {
   type: ReportType;
   status: ReportStatus;
   createdAt: string;
-  createdBy?: { _id: string; name: string } | null;
-  createdByName?: string;
-  assignedTo?: { _id: string; name: string } | null;
-  assignedToName?: string;
+  createdBy?: ReportUser | null;
+  createdByName?: string | null;
+  assignedTo?: ReportUser | null;
+  assignedToName?: string | null;
   media?: string[];
   location: { lat: number; lng: number; address?: string | null };
 }
 
 type ReportsState = Report[];
 
-// ✅ Ensure initial state is always an array
+
 const initialState: ReportsState = [];
 
 const reportsSlice = createSlice({

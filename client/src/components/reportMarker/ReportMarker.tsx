@@ -9,9 +9,10 @@ import {
   resolveReport,
 } from "../../features/reports/reportsThunks";
 import { selectToken, selectUserId } from "../../features/auth/authSelectors";
+import { getReporterName } from "../../features/reports/getReporterName";
+import { getAssigneeName } from "../../features/reports/getAssigneeName";
 import "./ReportMarker.css";
 
-// helpers
 const emojiForType = (type: Report["type"]) =>
   type === "emergency"
     ? "🚨"
@@ -23,9 +24,7 @@ const emojiForType = (type: Report["type"]) =>
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-// accept both {_id} and {id}
 type Assigned = string | { _id?: string; id?: string } | null | undefined;
-
 const assignedToId = (assigned: Assigned) => {
   if (!assigned) return null;
   if (typeof assigned === "string") return assigned;
@@ -90,24 +89,18 @@ export default function ReportMarker({ report }: { report: Report }) {
     assignedToId(report.assignedTo) === userId;
 
   const handleClaim = () => {
-    const authToken = token ?? undefined;
-    if (authToken)
-      dispatch(claimReport({ reportId: report._id, token: authToken }));
+    if (isLoggedIn) dispatch(claimReport({ reportId: report._id }));
   };
+
   const handleResolve = () => {
-    const authToken = token ?? undefined;
-    if (authToken)
-      dispatch(resolveReport({ reportId: report._id, token: authToken }));
+    if (isLoggedIn) dispatch(resolveReport({ reportId: report._id }));
   };
 
   const showClaim = isLoggedIn && report.status === "new";
   const showResolve = canResolve;
 
-  // 🔽 name fallbacks (flat or populated)
-  const reporterName =
-    report.createdByName ?? report.createdBy?.name ?? "Guest";
-  const assigneeName =
-    report.assignedToName ?? report.assignedTo?.name ?? undefined;
+  const reporterName = getReporterName(report);
+  const assigneeName = getAssigneeName(report);
 
   return (
     <Marker position={[report.location.lat, report.location.lng]} icon={icon}>
@@ -157,7 +150,7 @@ export default function ReportMarker({ report }: { report: Report }) {
             {(report.status === "in-progress" ||
               report.status === "resolved") && (
               <div>
-                <strong>Assigned to:</strong> {assigneeName ?? "—"}
+                <strong>Assigned to:</strong> {assigneeName}
               </div>
             )}
           </div>

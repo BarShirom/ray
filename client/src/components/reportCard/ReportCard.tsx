@@ -2,6 +2,8 @@ import "./ReportCard.css";
 import { useSelector } from "react-redux";
 import { selectToken, selectUserId } from "../../features/auth/authSelectors";
 import type { Report } from "../../features/reports/reportsSlice";
+import { getReporterName } from "../../features/reports/getReporterName";
+import { getAssigneeName } from "../../features/reports/getAssigneeName";
 
 const assignedToId = (
   assigned: { _id?: string; id?: string } | string | null | undefined
@@ -51,12 +53,10 @@ export default function ReportCard({
 
   const showButton = showClaim || showResolve;
 
-  // 🔽 name fallbacks (flat or populated)
-  const assigneeName =
-    report.assignedToName ?? report.assignedTo?.name ?? undefined;
+  // use helpers
+  const reporterName = getReporterName(report);
+  const assigneeName = getAssigneeName(report);
 
-  const reporterName =
-    report.createdByName ?? report.createdBy?.name ?? "Guest";
   return (
     <div className="card">
       <div className="card__meta">
@@ -81,7 +81,7 @@ export default function ReportCard({
           {(report.status === "in-progress" ||
             report.status === "resolved") && (
             <div className="card__sub">
-              Assigned to: <b>{assigneeName ?? "—"}</b>
+              Assigned to: <b>{assigneeName}</b>
             </div>
           )}
         </div>
