@@ -7,6 +7,11 @@ import {
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import { validateBody } from "../middleware/validateBody.js";
 import { createFeedingStationSchema } from "../validation/feedingStationSchemas.js";
+import {
+  createFeedingLog,
+  getLogsForStation,
+} from "../controllers/feedingLogController.js";
+import { createFeedingLogSchema } from "../validation/feedingLogSchemas.js";
 
 const router = express.Router();
 
@@ -17,6 +22,13 @@ router.post(
   createFeedingStation
 );
 router.get("/", getAllFeedingStations);
+router.post(
+  "/:stationId/feedings",
+  authMiddleware,
+  validateBody(createFeedingLogSchema),
+  createFeedingLog
+);
+router.get("/:stationId/feedings", getLogsForStation);
 router.get("/:id", getFeedingStationById);
 
 export default router;
