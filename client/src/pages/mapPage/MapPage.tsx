@@ -10,6 +10,7 @@ import {
 } from "../../features/feedingStations/feedingStationsSelectors";
 import type { FeedingStation } from "../../features/feedingStations/types";
 import FeedingStationMarker from "../../components/feedingStationMarker/FeedingStationMarker";
+import FeedingStationDetails from "../../components/feedingStationDetails/FeedingStationDetails";
 import {
   fetchReports,
   claimReport,
@@ -63,6 +64,7 @@ export default function MapPage() {
   const stations = useSelector(selectAllFeedingStations);
   const stationsLoading = useSelector(selectFeedingStationsLoading);
   const stationsError = useSelector(selectFeedingStationsError);
+  const [selectedStation, setSelectedStation] = useState<FeedingStation | null>(null);
   const token = (useSelector(selectToken) ?? null) as string | null;
 
   const [activeTypes, setActiveTypes] = useState<Set<TypeKey>>(
@@ -230,7 +232,7 @@ export default function MapPage() {
           />
           <StationViewport stations={stations} />
           {stations.map((station) => (
-            <FeedingStationMarker key={station._id} station={station} />
+            <FeedingStationMarker key={station._id} station={station} onSelect={setSelectedStation} />
           ))}
           {filteredReports.map((report) => (
             <ReportMarker key={report._id} report={report} />
@@ -248,6 +250,9 @@ export default function MapPage() {
           ))}
         </div>
       </aside>
+      {selectedStation && (
+        <FeedingStationDetails key={selectedStation._id} station={selectedStation} onClose={() => setSelectedStation(null)} />
+      )}
     </div>
   );
 }

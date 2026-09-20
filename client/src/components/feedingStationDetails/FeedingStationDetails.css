@@ -1,0 +1,51 @@
+.station-details {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2xl);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.station-details[open] { display: flex; flex-direction: column; }
+.station-details::backdrop { background: #0008; }
+.station-details-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.station-details-header h2 { margin: 4px 0 0; font-size: 22px; overflow-wrap: anywhere; }
+.station-details-header small { color: var(--muted); }
+.station-details-body { padding: 0 16px 16px; overflow-y: auto; overscroll-behavior: contain; }
+.station-details-image { width: 100%; max-height: 200px; object-fit: cover; border-radius: 12px; margin-top: 16px; }
+.station-details-note { white-space: pre-wrap; overflow-wrap: anywhere; }
+.station-details-success { border-left: 3px solid var(--success); padding-left: 10px; }
+.station-details .btn { min-height: 44px; }
+.station-details .btn:disabled { opacity: .6; cursor: wait; }
+.station-feeding-form fieldset { border: 1px solid var(--border); border-radius: 12px; margin: 14px 0 0; padding: 12px; min-width: 0; }
+.station-feeding-form select, .station-feeding-form textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 6px 0 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px;
+  background: var(--panel);
+  color: var(--text);
+}
+.station-feeding-form textarea { resize: vertical; }
+.station-feeding-options, .station-feeding-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.station-feeding-options label { display: flex; align-items: center; gap: 6px; min-height: 44px; }
+.station-feeding-history { margin-top: 24px; }
+.station-feeding-history ul { list-style: none; margin: 0; padding: 0; }
+.station-feeding-history li { border-top: 1px solid var(--border); padding: 12px 0; }
+.station-feeding-history li p { margin: 6px 0 0; }
+.station-feeding-period { text-transform: capitalize; }

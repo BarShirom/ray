@@ -14,11 +14,13 @@ import { combineReducers } from "redux";
 import authReducer from "../features/auth/authSlice";
 import reportsReducer from "../features/reports/reportsSlice"; 
 import feedingStationsReducer from "../features/feedingStations/feedingStationsSlice";
+import feedingLogsReducer from "../features/feedingLogs/feedingLogsSlice";
 
 const rootReducer = combineReducers({
   auth: authReducer,
   reports: reportsReducer, 
   feedingStations: feedingStationsReducer,
+  feedingLogs: feedingLogsReducer,
 });
 
 const persistConfig = {

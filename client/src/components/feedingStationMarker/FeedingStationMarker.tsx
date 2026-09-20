@@ -11,7 +11,10 @@ const stationIcon = L.divIcon({
   popupAnchor: [0, -20],
 });
 
-export default function FeedingStationMarker({ station }: { station: FeedingStation }) {
+export default function FeedingStationMarker({ station, onSelect }: {
+  station: FeedingStation;
+  onSelect: (station: FeedingStation) => void;
+}) {
   return (
     <Marker
       position={[station.location.lat, station.location.lng]}
@@ -19,12 +22,14 @@ export default function FeedingStationMarker({ station }: { station: FeedingStat
       title={`Feeding station: ${station.name}`}
       alt={`Feeding station: ${station.name}`}
       zIndexOffset={500}
+      eventHandlers={{ click: () => onSelect(station) }}
     >
       <Popup>
         <div className="feeding-station-popup">
           <small>Feeding station</small>
           <strong>{station.name}</strong>
           <p>Estimated cats: {station.estimatedCats}<br />Estimated kittens: {station.estimatedKittens}</p>
+          <button type="button" className="btn" onClick={() => onSelect(station)}>Station details</button>
         </div>
       </Popup>
     </Marker>
