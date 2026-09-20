@@ -5,6 +5,7 @@ import cors from "cors";
 import helmet from "helmet";
 import authRoutes from "./routes/authRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
+import feedingStationRoutes from "./routes/feedingStationRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 
 dotenv.config();
@@ -76,6 +77,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/api/upload", uploadRoutes as Router);
 app.use("/api/auth", authRoutes as Router);
 app.use("/api/reports", reportRoutes as Router);
+app.use("/api/feeding-stations", feedingStationRoutes);
 
 // health
 app.get("/healthz", (_req, res) => {
