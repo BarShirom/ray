@@ -36,14 +36,13 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     res.status(201).json({
       user: {
-        id: newUser._id,
+        id: newUser._id.toString(),
         firstName: newUser.firstName,
         lastName: newUser.lastName,
         email: newUser.email,
         company: newUser.company,
-        token
       },
-      
+      token,
     });
   } catch (error) {
     console.error("Register error:", error);
@@ -78,14 +77,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     res.json({
       user: {
-        id: user._id,
+        id: user._id.toString(),
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
         company: user.company,
-        token
       },
-     
+      token,
     });
   } catch (error) {
     console.error("Login error:", error);
