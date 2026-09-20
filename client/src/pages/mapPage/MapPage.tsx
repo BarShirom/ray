@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useSelector } from "react-redux";
+import { Link } from "react-router-dom";
 import { useAppDispatch } from "../../app/hooks";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import { fetchFeedingStations } from "../../features/feedingStations/feedingStationsThunks";
@@ -11,6 +12,9 @@ import {
 import type { FeedingStation } from "../../features/feedingStations/types";
 import FeedingStationMarker from "../../components/feedingStationMarker/FeedingStationMarker";
 import FeedingStationDetails from "../../components/feedingStationDetails/FeedingStationDetails";
+import CreateFeedingStation from "../../components/createFeedingStation/CreateFeedingStation";
+import StationLocationPicker from "../../components/createFeedingStation/StationLocationPicker";
+import { clearStationCreateError } from "../../features/feedingStations/feedingStationsSlice";
 import {
   fetchReports,
   claimReport,
@@ -66,6 +70,17 @@ export default function MapPage() {
   const stationsError = useSelector(selectFeedingStationsError);
   const [selectedStation, setSelectedStation] = useState<FeedingStation | null>(null);
   const token = (useSelector(selectToken) ?? null) as string | null;
+  const [creationMode, setCreationMode] = useState(false);
+  const [pickingLocation, setPickingLocation] = useState(false);
+  const [creationLocation, setCreationLocation] = useState<FeedingStation["location"] | null>(null);
+  const [createdStation, setCreatedStation] = useState<FeedingStation | null>(null);
+
+  const cancelCreation = () => {
+    setCreationMode(false);
+    setPickingLocation(false);
+    setCreationLocation(null);
+    dispatch(clearStationCreateError());
+  };
 
   const [activeTypes, setActiveTypes] = useState<Set<TypeKey>>(
     () => new Set(ALL_TYPES)
@@ -220,6 +235,20 @@ export default function MapPage() {
       </aside>
 
       <section className="panel map-center">
+        <div className="station-map-toolbar">
+          {creationMode && token ? (
+            <><p role="status">{pickingLocation ? "Click or tap a point on the map for your station." : "Station location selected."}</p>
+              <button className="btn" type="button" onClick={cancelCreation}>Cancel station creation</button></>
+          ) : token ? (
+            <button className="btn btn-brand" type="button" onClick={() => {
+              dispatch(clearStationCreateError());
+              setCreatedStation(null);
+              setCreationMode(true);
+              setPickingLocation(true);
+            }}>Add Feeding Station</button>
+          ) : <p><Link to="/login">Log in</Link> or <Link to="/register">sign up</Link> to add a feeding station.</p>}
+          {createdStation && <p role="status">Created {createdStation.name}. <button className="btn" type="button" onClick={() => setSelectedStation(createdStation)}>View station</button></p>}
+        </div>
         <MapContainer
           center={[center.lat, center.lng]}
           zoom={13}
@@ -231,6 +260,10 @@ export default function MapPage() {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <StationViewport stations={stations} />
+          {creationMode && token && <StationLocationPicker enabled={pickingLocation} location={creationLocation} onSelect={(location) => {
+            setCreationLocation(location);
+            setPickingLocation(false);
+          }} />}
           {stations.map((station) => (
             <FeedingStationMarker key={station._id} station={station} onSelect={setSelectedStation} />
           ))}
@@ -253,6 +286,11 @@ export default function MapPage() {
       {selectedStation && (
         <FeedingStationDetails key={selectedStation._id} station={selectedStation} onClose={() => setSelectedStation(null)} />
       )}
+      {creationMode && token && <CreateFeedingStation open={!pickingLocation} location={creationLocation}
+        onCancel={cancelCreation} onChangeLocation={() => setPickingLocation(true)} onCreated={(station) => {
+          cancelCreation();
+          setCreatedStation(station);
+        }} />}
     </div>
   );
 }

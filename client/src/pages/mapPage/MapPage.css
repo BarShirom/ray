@@ -23,6 +23,9 @@
 
 /* Map area */
 .map-center{ padding:12px; }
+.station-map-toolbar { margin-bottom: 12px; }
+.station-map-toolbar p { margin: 6px 0; }
+.station-map-toolbar .btn { min-height: 44px; }
 .leaflet-root{ height: var(--map-h); width:100%; border-radius:12px; }
 .leaflet-container{ height:100%; width:100%; border-radius:12px; }
 

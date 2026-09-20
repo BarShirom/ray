@@ -11,3 +11,12 @@ export interface FeedingStation {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface CreateFeedingStationData {
+  name: string;
+  location: { lat: number; lng: number };
+  estimatedCats: number;
+  estimatedKittens: number;
+  image?: string;
+  notes?: string;
+}
