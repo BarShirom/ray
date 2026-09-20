@@ -1,0 +1,26 @@
+.feeding-station-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #7c3aed;
+  box-shadow: 0 2px 6px #0005;
+  font-size: 21px;
+}
+
+.feeding-station-popup {
+  color: #1f2937;
+  min-width: 160px;
+}
+
+.feeding-station-popup small,
+.feeding-station-popup strong {
+  display: block;
+}
+
+.feeding-station-popup strong {
+  margin-top: 4px;
+  font-size: 16px;
+}

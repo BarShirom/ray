@@ -47,6 +47,13 @@
 .side-left .filters input[type="checkbox"]{ margin:0; flex:0 0 auto; accent-color:var(--brand); }
 
 /* Right list */
+.feeding-stations-summary {
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.feeding-stations-summary p { margin: 6px 0; }
+
 .list-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
 .report-list{ display:grid; gap:14px; }
 

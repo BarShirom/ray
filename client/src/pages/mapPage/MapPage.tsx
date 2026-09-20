@@ -1,7 +1,15 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useSelector } from "react-redux";
 import { useAppDispatch } from "../../app/hooks";
-import { MapContainer, TileLayer } from "react-leaflet";
+import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import { fetchFeedingStations } from "../../features/feedingStations/feedingStationsThunks";
+import {
+  selectAllFeedingStations,
+  selectFeedingStationsLoading,
+  selectFeedingStationsError,
+} from "../../features/feedingStations/feedingStationsSelectors";
+import type { FeedingStation } from "../../features/feedingStations/types";
+import FeedingStationMarker from "../../components/feedingStationMarker/FeedingStationMarker";
 import {
   fetchReports,
   claimReport,
@@ -33,9 +41,28 @@ const normStatus = (s: StatusKey | string): StatusKey => {
   ) as StatusKey;
 };
 
+function StationViewport({ stations }: { stations: FeedingStation[] }) {
+  const map = useMap();
+  const fitted = useRef(false);
+
+  useEffect(() => {
+    if (fitted.current || stations.length === 0) return;
+    map.fitBounds(stations.map((station) => [station.location.lat, station.location.lng]), {
+      padding: [24, 24],
+      maxZoom: 13,
+    });
+    fitted.current = true;
+  }, [map, stations]);
+
+  return null;
+}
+
 export default function MapPage() {
   const dispatch = useAppDispatch();
   const reports = useSelector(selectAllReports) as Report[];
+  const stations = useSelector(selectAllFeedingStations);
+  const stationsLoading = useSelector(selectFeedingStationsLoading);
+  const stationsError = useSelector(selectFeedingStationsError);
   const token = (useSelector(selectToken) ?? null) as string | null;
 
   const [activeTypes, setActiveTypes] = useState<Set<TypeKey>>(
@@ -46,6 +73,7 @@ export default function MapPage() {
   );
 
   useEffect(() => {
+    dispatch(fetchFeedingStations());
     dispatch(fetchReports());
   }, [dispatch]);
 
@@ -94,10 +122,10 @@ export default function MapPage() {
 
   const defaultCenter = { lat: 32.0853, lng: 34.7818 };
   const centerSource = filteredReports.length ? filteredReports : reports;
-  const center =
+  const center = stations[0]?.location ?? (
     centerSource.length > 0
       ? centerSource[centerSource.length - 1].location
-      : defaultCenter;
+      : defaultCenter);
 
   const onPrimary = (id: string, status: StatusKey) => {
     if (!token) return;
@@ -111,7 +139,21 @@ export default function MapPage() {
   return (
     <div className="map-layout">
       <aside className="panel side-left">
-        <div className="section-title">Filters</div>
+        <div className="feeding-stations-summary">
+          <div className="section-title">Feeding stations</div>
+          <p>Purple cat markers show community-cat feeding stations.</p>
+          {stationsLoading && <p role="status">Loading feeding stations...</p>}
+          {stationsError && (
+            <div role="alert">
+              <p>Could not load feeding stations: {stationsError}</p>
+              <button type="button" onClick={() => dispatch(fetchFeedingStations())}>Retry</button>
+            </div>
+          )}
+          {!stationsLoading && !stationsError && (
+            <p role="status">{stations.length ? `${stations.length} feeding stations on the map` : "No feeding stations yet."}</p>
+          )}
+        </div>
+        <div className="section-title">Report filters</div>
 
         <div className="filters" style={{ marginBottom: 10 }}>
           <label>
@@ -186,6 +228,10 @@ export default function MapPage() {
             attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+          <StationViewport stations={stations} />
+          {stations.map((station) => (
+            <FeedingStationMarker key={station._id} station={station} />
+          ))}
           {filteredReports.map((report) => (
             <ReportMarker key={report._id} report={report} />
           ))}

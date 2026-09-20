@@ -13,10 +13,12 @@ import storage from "redux-persist/lib/storage";
 import { combineReducers } from "redux";
 import authReducer from "../features/auth/authSlice";
 import reportsReducer from "../features/reports/reportsSlice"; 
+import feedingStationsReducer from "../features/feedingStations/feedingStationsSlice";
 
 const rootReducer = combineReducers({
   auth: authReducer,
   reports: reportsReducer, 
+  feedingStations: feedingStationsReducer,
 });
 
 const persistConfig = {
