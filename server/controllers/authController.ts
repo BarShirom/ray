@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import User from "../models/UserModel.js";
+import { mongoUserStore as users } from "../users/mongoUserStore.js";
+import { serializeAuthResponse } from "../serializers/authResponse.js";
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   const JWT_SECRET = process.env.JWT_SECRET;
@@ -14,36 +15,26 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   const { firstName, lastName, email, password, company } = req.body;
 
   try {
-    const existingUser = await User.findOne({ email });
+    const existingUser = await users.findByEmail(email);
     if (existingUser) {
       res.status(400).json({ msg: "User already exists" });
       return;
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = await User.create({
+    const newUser = await users.create({
       firstName,
       lastName,
       email,
-      password: hashedPassword,
+      passwordHash: hashedPassword,
       company,
-      
     });
 
-    const token = jwt.sign({ id: newUser._id }, JWT_SECRET, {
+    const token = jwt.sign({ id: newUser.publicId }, JWT_SECRET, {
       expiresIn: "7d",
     });
 
-    res.status(201).json({
-      user: {
-        id: newUser._id.toString(),
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        email: newUser.email,
-        company: newUser.company,
-      },
-      token,
-    });
+    res.status(201).json(serializeAuthResponse(newUser, token));
   } catch (error) {
     console.error("Register error:", error);
     res.status(500).json({ msg: "Server error" });
@@ -61,30 +52,21 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body;
 
   try {
-    const user = await User.findOne({ email });
+    const user = await users.findCredentialsByEmail(email);
     if (!user) {
       res.status(400).json({ msg: "Invalid email or password" });
       return;
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       res.status(400).json({ msg: "Invalid email or password" });
       return;
     }
 
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: user.publicId }, JWT_SECRET, { expiresIn: "7d" });
 
-    res.json({
-      user: {
-        id: user._id.toString(),
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        company: user.company,
-      },
-      token,
-    });
+    res.json(serializeAuthResponse(user, token));
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ msg: "Server error" });

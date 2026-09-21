@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import UserModel from "../models/UserModel.js";
+import { mongoUserStore as users } from "../users/mongoUserStore.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -34,9 +34,7 @@ export const authMiddleware = async (
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-    const user = await UserModel.findById(decoded.id).select(
-      "_id firstName lastName email"
-    );
+    const user = await users.findIdentityByPublicId(decoded.id);
 
     if (!user) {
       res.status(401).json({ error: "User not found" });
@@ -44,7 +42,6 @@ export const authMiddleware = async (
     }
 
     req.user = user;
-    console.log("🔐 req.user in middleware:", req.user);
     next();
   } catch (err) {
     res.status(401).json({ error: "Invalid or expired token" });

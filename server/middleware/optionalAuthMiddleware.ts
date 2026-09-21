@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import UserModel from "../models/UserModel.js";
+import { mongoUserStore as users } from "../users/mongoUserStore.js";
 
 interface JwtPayload {
   id?: string;
@@ -24,18 +24,10 @@ export const optionalAuthMiddleware = async (
     const userId = decoded.id ?? decoded._id;
     if (!userId) return next();
 
-    const user = await UserModel.findById(userId)
-      .select("_id firstName lastName name email")
-      .lean();
+    const user = await users.findIdentityByPublicId(userId, { includeLegacyName: true });
 
     if (user) {
-      (req as any).user = {
-        _id: String(user._id),
-        firstName: user.firstName,
-        lastName: user.lastName,
-        name: (user as any).name,
-        email: user.email,
-      };
+      req.user = user;
     }
   } catch {
     // ignore and continue as guest

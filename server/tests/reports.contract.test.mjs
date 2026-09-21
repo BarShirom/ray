@@ -67,7 +67,7 @@ test("report list preserves populated objects, stored names, fallback names and 
 });
 test("/me queries assigned-to-me and returns an array", async (t) => {
   const { request, token } = await startApp(t);
-  // Middleware supplies an ObjectId; equality is checked without depending on its constructor.
+  // Middleware supplies a public-ID string; compare the same identity as before.
   t.mock.method(Report, "find", (filter) => {
     assert.deepEqual(Object.keys(filter), ["assignedTo"]);
     assert.equal(String(filter.assignedTo), ids.user);
