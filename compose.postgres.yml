@@ -1,0 +1,41 @@
+name: ray-postgres
+
+services:
+  db:
+    image: postgis/postgis:18-3.6
+    profiles: [dev]
+    environment:
+      # Local-only example credentials; never use these for deployment.
+      POSTGRES_USER: ray_local
+      POSTGRES_PASSWORD: ray_local_only
+      POSTGRES_DB: ray_local
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - ray_local_data:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U ray_local -d ray_local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  test-db:
+    image: postgis/postgis:18-3.6
+    profiles: [test]
+    environment:
+      # Disposable local test service only.
+      POSTGRES_USER: ray_test
+      POSTGRES_PASSWORD: ray_test_only
+      POSTGRES_DB: ray_test
+    ports:
+      - "127.0.0.1:55433:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U ray_test -d ray_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  ray_local_data:

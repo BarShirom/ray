@@ -7,22 +7,27 @@
     "dev": "tsx watch server.ts",
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate": "npm run build && node dist/db/migrate-local.js",
+    "test:postgres": "npm run build && node --test tests/integration/*.test.mjs"
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=22.22.0 <23"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
     "dotenv": "^17.0.0",
+    "drizzle-orm": "0.45.2",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.1",
     "multer": "^1.4.5-lts.1",
     "multer-storage-cloudinary": "^4.0.0",
+    "pg": "8.23.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -31,6 +36,8 @@
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^1.4.13",
+    "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.10",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }
