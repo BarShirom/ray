@@ -1,3 +1,4 @@
+import { isPostgresPreview } from "../../preview";
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
@@ -95,7 +96,8 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
           <label htmlFor="station-notes">Notes (optional)</label>
           <textarea id="station-notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
           <label htmlFor="station-image">Image (optional, up to 25 MB)</label>
-          <input id="station-image" type="file" accept="image/*" onChange={(event) => {
+          {isPostgresPreview && <p>Uploads unavailable in local preview. Continue without an image.</p>}
+          <input disabled={isPostgresPreview} id="station-image" type="file" accept="image/*" onChange={(event) => {
             const file = event.target.files?.[0] ?? null;
             setUploadedImage(undefined);
             setImage(null);

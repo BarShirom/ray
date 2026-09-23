@@ -1,8 +1,7 @@
 // Report.tsx
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useCallback } from "react";
-import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import { selectToken } from "../../features/auth/authSelectors";
+import { useAppDispatch } from "../../app/hooks";
 import { createReport } from "../../features/reports/reportsThunks";
 import ReportForm from "../../components/reportForm/ReportForm";
 import { type ReportType } from "../../features/reports/reportsSlice";
@@ -20,7 +19,6 @@ function getErrorMessage(err: unknown): string {
 const Report = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const token = useAppSelector(selectToken) ?? null;
 
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState<LatLng | null>(null);
@@ -71,7 +69,6 @@ const Report = () => {
     setSubmitting(true);
     try {
       const mediaUrls = mediaFiles.length ? await uploadMedia(mediaFiles) : [];
-      console.log("createReport token →", token);
       await dispatch(
         createReport({ description, location, type, media: mediaUrls })
       ).unwrap();
@@ -81,7 +78,7 @@ const Report = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [description, location, type, mediaFiles, token, dispatch, navigate]);
+  }, [description, location, type, mediaFiles, dispatch, navigate]);
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();

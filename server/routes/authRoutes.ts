@@ -5,9 +5,9 @@ import type { UserStore } from "../users/userStore.js";
 import { validateBody } from "../middleware/validateBody.js";
 import { registerSchema, loginSchema } from "../validation/authSchemas.js";
 
-export function createAuthRouter(users: UserStore) {
+export function createAuthRouter(users: UserStore, getSecret = () => process.env.JWT_SECRET) {
   const router = express.Router();
-  const { register, login } = createAuthHandlers(users);
+  const { register, login } = createAuthHandlers(users, getSecret);
 
   router.post("/register", validateBody(registerSchema), register);
   router.post("/login", validateBody(loginSchema), login);

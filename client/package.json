@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:postgres": "vite --mode postgres",
+    "build:postgres": "tsc -b && vite build --mode postgres"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.8.2",

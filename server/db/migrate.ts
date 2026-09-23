@@ -4,7 +4,7 @@ import type { createPostgres } from "./connection.js";
 import { assertDatabaseIdentity, localConfig, type LocalTarget } from "./local-config.js";
 
 // Works both from db/*.ts and compiled dist/db/*.js.
-const migrationsFolder = fileURLToPath(new URL(
+export const migrationsFolder = fileURLToPath(new URL(
   import.meta.url.endsWith(".ts") ? "./migrations/" : "../../db/migrations/", import.meta.url,
 ));
 

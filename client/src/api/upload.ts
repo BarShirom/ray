@@ -1,3 +1,4 @@
+import { isPostgresPreview } from "../preview";
 // api/upload.ts
 import axios from "axios";
 
@@ -11,6 +12,7 @@ if (!BASE) {
 type UploadedItem = { url: string; public_id: string };
 
 export async function uploadMedia(files: File[]): Promise<string[]> {
+  if (isPostgresPreview) throw new Error("uploads unavailable in local preview");
   const form = new FormData();
   files.forEach((f) => form.append("media", f)); // field name "media" matches your router
 

@@ -5,9 +5,9 @@ import { mongoUserStore } from "../users/mongoUserStore.js";
 import type { UserStore } from "../users/userStore.js";
 import { serializeAuthResponse } from "../serializers/authResponse.js";
 
-export function createAuthHandlers(users: UserStore) {
+export function createAuthHandlers(users: UserStore, getSecret = () => process.env.JWT_SECRET) {
   const register = async (req: Request, res: Response): Promise<void> => {
-    const JWT_SECRET = process.env.JWT_SECRET;
+    const JWT_SECRET = getSecret();
     if (!JWT_SECRET) {
       console.error("❌ JWT_SECRET is missing in environment variables");
       res.status(500).json({ msg: "Internal server error" });
@@ -45,7 +45,7 @@ export function createAuthHandlers(users: UserStore) {
   };
 
   const login = async (req: Request, res: Response): Promise<void> => {
-    const JWT_SECRET = process.env.JWT_SECRET;
+    const JWT_SECRET = getSecret();
     if (!JWT_SECRET) {
       console.error("❌ JWT_SECRET is missing in environment variables");
       res.status(500).json({ msg: "Internal server error" });

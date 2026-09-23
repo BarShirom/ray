@@ -10,7 +10,11 @@
     "start": "node dist/server.js",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "npm run build && node dist/db/migrate-local.js",
-    "test:postgres": "npm run build && node --test --test-concurrency=1 tests/integration/*.test.mjs"
+    "test:postgres": "npm run build && node --test --test-concurrency=1 tests/integration/*.test.mjs",
+    "dev:postgres": "tsx watch preview-server.ts",
+    "start:postgres": "node dist/preview-server.js",
+    "db:migrate:preview": "npm run build && node dist/db/migrate-preview.js",
+    "db:seed:preview": "npm run build && node dist/db/seed-preview.js"
   },
   "engines": {
     "node": ">=22.22.0 <23"

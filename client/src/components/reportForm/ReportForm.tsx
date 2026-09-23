@@ -1,3 +1,4 @@
+import { isPostgresPreview } from "../../preview";
 import React from "react";
 import type { ReportType } from "../../features/reports/reportsSlice";
 import MapPreview from "../mapPreview/MapPreview";
@@ -111,11 +112,13 @@ export default function ReportForm({
       </div>
 
       {/* Media */}
+      {isPostgresPreview && <p>Uploads unavailable in local preview. Continue without media.</p>}
       <div className="field">
         <label htmlFor="media" className="label">
           Media (optional)
         </label>
         <input
+          disabled={isPostgresPreview}
           type="file"
           id="media"
           accept="image/*,video/*"

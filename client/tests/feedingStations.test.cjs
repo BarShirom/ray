@@ -6,7 +6,7 @@ const ts = require("typescript");
 require.extensions[".ts"] = (module, filename) => {
   const source = fs.readFileSync(filename, "utf8").replace(
     "import.meta.env.VITE_API_URL", JSON.stringify("http://fixture.invalid")
-  );
+  ).replace("import.meta.env.MODE", JSON.stringify("development"));
   module._compile(ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true },
   }).outputText, filename);

@@ -2,16 +2,13 @@ import { NavLink, useNavigate } from "react-router-dom";
 import "./Navbar.css";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { logoutUser } from "../../features/auth/authThunks";
-import { selectToken, selectName } from "../../features/auth/authSelectors";
+import { selectToken } from "../../features/auth/authSelectors";
 
 export default function Navbar() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const token = useAppSelector(selectToken);
-  const userName = useAppSelector(selectName);
   const isLoggedIn = Boolean(token);
-  console.log("navbar token =", token);
-  console.log("userName =", userName);
 
   const handleLogout = async () => {
     await dispatch(logoutUser());

@@ -8,7 +8,7 @@ interface JwtPayload {
   _id?: string;
 }
 
-export const createOptionalAuthMiddleware = (users: UserStore) => async (
+export const createOptionalAuthMiddleware = (users: UserStore, getSecret = () => process.env.JWT_SECRET) => async (
   req: Request,
   _res: Response,
   next: NextFunction
@@ -18,7 +18,7 @@ export const createOptionalAuthMiddleware = (users: UserStore) => async (
     if (!auth || !auth.startsWith("Bearer ")) return next();
 
     const token = auth.slice(7);
-    const secret = process.env.JWT_SECRET;
+    const secret = getSecret();
     if (!secret) return next();
 
     const decoded = jwt.verify(token, secret) as JwtPayload;

@@ -37,5 +37,24 @@ services:
       timeout: 3s
       retries: 30
 
+  preview-db:
+    image: postgis/postgis:18-3.6
+    profiles: [preview]
+    environment:
+      # Synthetic local preview only; never use these credentials for deployment.
+      POSTGRES_USER: ray_preview
+      POSTGRES_PASSWORD: ray_preview_only
+      POSTGRES_DB: ray_preview
+    ports:
+      - "127.0.0.1:55434:5432"
+    volumes:
+      - ray_preview_data:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U ray_preview -d ray_preview"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
   ray_local_data:
+  ray_preview_data:

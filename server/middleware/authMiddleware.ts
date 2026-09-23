@@ -2,9 +2,6 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { mongoUserStore } from "../users/mongoUserStore.js";
 import type { UserStore } from "../users/userStore.js";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 interface JwtPayload {
   id: string;
@@ -19,7 +16,7 @@ declare global {
   }
 }
 
-export const createAuthMiddleware = (users: UserStore) => async (
+export const createAuthMiddleware = (users: UserStore, getSecret = () => process.env.JWT_SECRET) => async (
   req: Request,
   res: Response,
   next: NextFunction
@@ -34,7 +31,7 @@ export const createAuthMiddleware = (users: UserStore) => async (
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+    const decoded = jwt.verify(token, getSecret()!) as JwtPayload;
     const user = await users.findIdentityByPublicId(decoded.id);
 
     if (!user) {

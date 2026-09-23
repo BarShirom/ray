@@ -1,14 +1,12 @@
+import "dotenv/config";
 import express, { type Router, type ErrorRequestHandler } from "express";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
 import cors from "cors";
 import helmet from "helmet";
 import authRoutes from "./routes/authRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import feedingStationRoutes from "./routes/feedingStationRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;

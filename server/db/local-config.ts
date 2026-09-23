@@ -1,7 +1,8 @@
 import type pg from "pg";
 
-export type LocalTarget = "local" | "test";
+export type LocalTarget = "local" | "test" | "preview";
 const targets = {
+  preview: { variable: "RAY_PREVIEW_DATABASE_URL", port: "55434", database: "ray_preview", user: "ray_preview" },
   local: { variable: "RAY_LOCAL_DATABASE_URL", port: "55432", database: "ray_local", user: "ray_local" },
   test: { variable: "RAY_TEST_DATABASE_URL", port: "55433", database: "ray_test", user: "ray_test" },
 } as const;
