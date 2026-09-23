@@ -1,11 +1,12 @@
 import type { RequestHandler } from "express";
-import mongoose from "mongoose";
-import FeedingLogModel from "../models/FeedingLogModel.js";
-import FeedingStationModel from "../models/FeedingStationModel.js";
+import { mongoFeedingLogStore as logs } from "../feedingLogs/mongoFeedingLogStore.js";
+import { mongoFeedingStationStore as stations } from "../feedingStations/mongoFeedingStationStore.js";
+import { serializeFeedingLog } from "../serializers/feedingLogResponse.js";
+import { isPublicId } from "../utils/publicId.js";
 
 export const createFeedingLog: RequestHandler = async (req, res, next) => {
   const { stationId } = req.params;
-  if (!mongoose.isObjectIdOrHexString(stationId)) {
+  if (!isPublicId(stationId)) {
     res.status(400).json({
       message: "Validation failed",
       errors: [{ field: "stationId", message: "Invalid feeding station ID" }],
@@ -14,7 +15,7 @@ export const createFeedingLog: RequestHandler = async (req, res, next) => {
   }
 
   try {
-    const station = await FeedingStationModel.findById(stationId).lean();
+    const station = await stations.findByPublicId(stationId);
     if (!station) {
       res.status(404).json({ message: "Feeding station not found" });
       return;
@@ -25,7 +26,7 @@ export const createFeedingLog: RequestHandler = async (req, res, next) => {
     }
 
     const { fedAt, period, food, water, note } = req.body;
-    const log = await FeedingLogModel.create({
+    const log = await logs.create({
       stationId,
       userId: req.user._id,
       fedAt,
@@ -35,7 +36,7 @@ export const createFeedingLog: RequestHandler = async (req, res, next) => {
       note,
     });
 
-    res.status(201).json(log);
+    res.status(201).json(serializeFeedingLog(log));
   } catch (err) {
     next(err);
   }
@@ -43,7 +44,7 @@ export const createFeedingLog: RequestHandler = async (req, res, next) => {
 
 export const getLogsForStation: RequestHandler = async (req, res, next) => {
   const { stationId } = req.params;
-  if (!mongoose.isObjectIdOrHexString(stationId)) {
+  if (!isPublicId(stationId)) {
     res.status(400).json({
       message: "Validation failed",
       errors: [{ field: "stationId", message: "Invalid feeding station ID" }],
@@ -52,17 +53,15 @@ export const getLogsForStation: RequestHandler = async (req, res, next) => {
   }
 
   try {
-    const station = await FeedingStationModel.findById(stationId).lean();
+    const station = await stations.findByPublicId(stationId);
     if (!station) {
       res.status(404).json({ message: "Feeding station not found" });
       return;
     }
 
-    const logs = await FeedingLogModel.find({ stationId })
-      .sort({ fedAt: -1, createdAt: -1 })
-      .lean();
+    const records = await logs.listForStation(stationId);
 
-    res.json(logs);
+    res.json(records.map(serializeFeedingLog));
   } catch (err) {
     next(err);
   }

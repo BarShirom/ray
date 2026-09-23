@@ -187,7 +187,7 @@ test("feeding log endpoints with stubbed database calls", async (t) => {
     let status;
     const res = { status(code) { status = code; return this; }, json() {} };
     await createFeedingLog({
-      params: { stationId }, user: { _id: userId }, body: { stationId: forgedId, userId: forgedId },
+      params: { stationId }, user: { _id: userId.toString() }, body: { stationId: forgedId, userId: forgedId },
     }, res, (err) => { throw err; });
     assert.equal(status, 201);
     assert.equal(state.created.stationId, stationId);
