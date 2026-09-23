@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, geometry, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, doublePrecision, geometry, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 const identity = () => ({
   id: uuid("id").defaultRandom().primaryKey(),
@@ -61,6 +61,11 @@ export const feedingStations = pgTable("feeding_stations", {
   estimatedKittens: integer("estimated_kittens").notNull().default(0),
   image: text("image"),
   notes: text("notes"),
+  // Old SQL values (including null) remain present; new writes encode omission.
+  imagePresent: boolean("image_present").notNull().default(true),
+  notesPresent: boolean("notes_present").notNull().default(true),
+  legacyVersion: doublePrecision("legacy_version"),
+  legacyVersionPresent: boolean("legacy_version_present").notNull().default(false),
   createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
   active: boolean("active").notNull().default(true),
   ...timestamps(),
@@ -84,6 +89,10 @@ export const feedingLogs = pgTable("feeding_logs", {
   food: boolean("food").notNull().default(true),
   water: boolean("water").notNull().default(false),
   note: text("note"),
+  periodPresent: boolean("period_present").notNull().default(true),
+  notePresent: boolean("note_present").notNull().default(true),
+  legacyVersion: doublePrecision("legacy_version"),
+  legacyVersionPresent: boolean("legacy_version_present").notNull().default(false),
   ...timestamps(),
 }, (t) => [
   check("feeding_logs_public_id_hex", sql`${t.publicId} ~ '^[0-9a-f]{24}$'`),

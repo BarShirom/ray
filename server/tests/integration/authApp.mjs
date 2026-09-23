@@ -4,7 +4,7 @@ import express from "express";
 import dotenv from "dotenv";
 
 // Only composition/endpoints are test-owned; auth logic and validation are production code.
-export async function startPostgresAuthApp(t, store) {
+export async function startPostgresAuthApp(t, store, feeding) {
   const previousSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = "ray-postgres-auth-tests-only-synthetic-secret";
   t.after(() => {
@@ -22,6 +22,14 @@ export async function startPostgresAuthApp(t, store) {
   app.use("/api/auth", createAuthRouter(store));
   app.get("/protected", createAuthMiddleware(store), (req, res) => res.json({ user: req.user }));
   app.get("/optional", createOptionalAuthMiddleware(store), (req, res) => res.json({ user: req.user ?? null }));
+  if (feeding) {
+    const { createFeedingStationRouter } = await import("../../dist/routes/feedingStationRoutes.js");
+    app.use("/api/feeding-stations", createFeedingStationRouter(feeding.stations, feeding.logs, createAuthMiddleware(store)));
+  }
+  // Mirror the existing startup error envelope without importing startup/services.
+  app.use((err, _req, res, _next) => res.status(500).json({
+    error: err?.name || "ServerError", message: err?.message || "Internal Server Error",
+  }));
   const server = app.listen(0, "127.0.0.1");
   t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
   await once(server, "listening");

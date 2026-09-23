@@ -29,6 +29,13 @@
       "when": 1790142431995,
       "tag": "0003_user_compatibility",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790143954675,
+      "tag": "0004_feeding_compatibility",
+      "breakpoints": true
     }
   ]
 }
