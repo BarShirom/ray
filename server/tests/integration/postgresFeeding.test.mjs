@@ -21,6 +21,7 @@ import { serializeFeedingStation } from "../../dist/serializers/feedingStationRe
 import { serializeFeedingLog } from "../../dist/serializers/feedingLogResponse.js";
 import { openTestDatabase } from "./database.mjs";
 import { startPostgresAuthApp } from "./authApp.mjs";
+import { observeDatabaseTime, assertDatabaseTimestamp, assertPersistedTimestamp } from "./timestamps.mjs";
 
 const publicId = () => randomBytes(12).toString("hex");
 const location = { lat: 32.085312345, lng: 34.781812345 };
@@ -125,25 +126,27 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
   const logRow = async (id) => (await db.select().from(feedingLogs).where(eq(feedingLogs.publicId, id)))[0];
 
   await t.test("adapters preserve observed Mongo defaults, whitelist, Dates, public IDs and actual spatial/FK values", async () => {
-    const before = Date.now();
-    const station = await stations.create(stationInput(user.publicId.toUpperCase(), {
+    const stationTime = await observeDatabaseTime(db, () => stations.create(stationInput(user.publicId.toUpperCase(), {
       active: false, publicId: publicId(), legacyVersion: 99, imagePresent: true, notesPresent: true,
-    }));
+    })));
+    const station = stationTime.value;
     assert.match(station.publicId, /^[0-9a-f]{24}$/);
     assert.equal(station.name, "Synthetic station");
     assert.deepEqual(station.location, location);
     assert.deepEqual([station.estimatedCats, station.estimatedKittens, station.active, station.legacyVersion], [0, 0, true, 0]);
     for (const key of ["image", "notes"]) assert.equal(Object.hasOwn(station, key), false);
-    const log = await logs.create({ stationId: station.publicId.toUpperCase(), userId: user.publicId.toUpperCase(), legacyVersion: 99, notePresent: true });
+    const logTime = await observeDatabaseTime(db, () => logs.create({ stationId: station.publicId.toUpperCase(), userId: user.publicId.toUpperCase(), legacyVersion: 99, notePresent: true }));
+    const log = logTime.value;
     assert.match(log.publicId, /^[0-9a-f]{24}$/);
     assert.deepEqual([log.food, log.water, log.legacyVersion], [true, false, 0]);
     assert.equal(log.stationId, station.publicId);
     assert.equal(log.userId, user.publicId);
     for (const key of ["period", "note"]) assert.equal(Object.hasOwn(log, key), false);
-    for (const date of [station.createdAt, station.updatedAt, log.fedAt, log.createdAt, log.updatedAt]) {
-      assert.ok(date instanceof Date);
-      assert.ok(date.getTime() >= before && date.getTime() <= Date.now());
-    }
+    for (const field of ["createdAt", "updatedAt"]) assertDatabaseTimestamp(station[field], stationTime, "station " + field);
+    for (const field of ["fedAt", "createdAt", "updatedAt"]) assertDatabaseTimestamp(log[field], logTime, "log " + field);
+    assert.deepEqual(log.fedAt, log.createdAt);
+    assert.deepEqual(log.updatedAt, log.createdAt);
+    assert.deepEqual(station.updatedAt, station.createdAt);
     assert.deepEqual(await stations.findByPublicId(station.publicId.toUpperCase()), station);
     assert.deepEqual(await logs.listForStation(station.publicId.toUpperCase()), [log]);
     const sr = await stationRow(station.publicId), lr = await logRow(log.publicId);
@@ -381,12 +384,16 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
     assert.equal(created.body.notes, "  ");
     const path = `${base}/${created.body._id}`;
     assert.deepEqual(await request("GET", `${path}/feedings`), { status: 200, body: [] });
-    const beforeTime = Date.now();
-    const feeding = await request("POST", `${path}/feedings`, {}, b.bearer);
+    const feedingTime = await observeDatabaseTime(db, () => request("POST", `${path}/feedings`, {}, b.bearer));
+    const feeding = feedingTime.value;
     assert.equal(feeding.status, 201);
     keysAre(feeding.body, logKeys);
     assert.deepEqual([feeding.body.food, feeding.body.water, feeding.body.__v], [true, false, 0]);
-    assert.ok(Date.parse(feeding.body.fedAt) >= beforeTime && Date.parse(feeding.body.fedAt) <= Date.now());
+    const persisted = await logRow(feeding.body._id);
+    for (const field of ["fedAt", "createdAt", "updatedAt"]) {
+      assertDatabaseTimestamp(persisted[field], feedingTime, "persisted log " + field);
+      assertPersistedTimestamp(feeding.body[field], persisted[field], field);
+    }
     const blankNote = await request("POST", `${path}/feedings`, { note: "  " }, b.bearer);
     assert.equal(blankNote.status, 201);
     assert.equal(blankNote.body.note, "");

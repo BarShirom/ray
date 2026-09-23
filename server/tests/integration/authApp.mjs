@@ -4,7 +4,7 @@ import express from "express";
 import dotenv from "dotenv";
 
 // Only composition/endpoints are test-owned; auth logic and validation are production code.
-export async function startPostgresAuthApp(t, store, feeding) {
+export async function startPostgresAuthApp(t, store, feeding, reports) {
   const previousSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = "ray-postgres-auth-tests-only-synthetic-secret";
   t.after(() => {
@@ -25,6 +25,10 @@ export async function startPostgresAuthApp(t, store, feeding) {
   if (feeding) {
     const { createFeedingStationRouter } = await import("../../dist/routes/feedingStationRoutes.js");
     app.use("/api/feeding-stations", createFeedingStationRouter(feeding.stations, feeding.logs, createAuthMiddleware(store)));
+  }
+  if (reports) {
+    const { createReportRouter } = await import("../../dist/routes/reportRoutes.js");
+    app.use("/api/reports", createReportRouter(reports, createAuthMiddleware(store), createOptionalAuthMiddleware(store)));
   }
   // Mirror the existing startup error envelope without importing startup/services.
   app.use((err, _req, res, _next) => res.status(500).json({

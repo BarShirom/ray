@@ -40,6 +40,8 @@ export const reports = pgTable("reports", {
   createdByName: text("created_by_name"),
   assignedToName: text("assigned_to_name"),
   media: text("media").array().notNull().default(sql`ARRAY[]::text[]`),
+  legacyVersion: doublePrecision("legacy_version"),
+  legacyVersionPresent: boolean("legacy_version_present").notNull().default(false),
   ...timestamps(),
 }, (t) => [
   check("reports_public_id_hex", sql`${t.publicId} ~ '^[0-9a-f]{24}$'`),

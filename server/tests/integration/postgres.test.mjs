@@ -7,6 +7,7 @@ import { users, reports, feedingStations, feedingLogs } from "../../dist/db/sche
 import { localConfig } from "../../dist/db/local-config.js";
 import { applyLocalMigrations } from "../../dist/db/migrate.js";
 import { cleanupTestDatabase, openTestDatabase } from "./database.mjs";
+import { transactionTime, observeDatabaseTime, assertDatabaseTimestamp } from "./timestamps.mjs";
 
 const publicId = () => randomBytes(12).toString("hex");
 const point = { x: 34.7818, y: 32.0853 }; // longitude, latitude; deliberately asymmetric
@@ -50,18 +51,24 @@ test("real PostgreSQL/PostGIS foundation", async (t) => {
     t.diagnostic(`Database versions: PostgreSQL ${versions.rows[0].postgres}, PostGIS ${versions.rows[0].postgis}`);
   });
 
-  const before = Date.now();
-  const user = await one(users, userValues());
-  const station = await one(feedingStations, { publicId: publicId(), name: "Synthetic garden", location: point, createdBy: user.id });
-  const report = await one(reports, { publicId: publicId(), description: "Synthetic report", type: "general", location: point });
-  const log = await one(feedingLogs, { publicId: publicId(), stationId: station.id, userId: user.id });
+  const defaultTimes = new Map();
+  const generated = (table, values) => db.transaction(async (tx) => {
+    const expected = await transactionTime(tx);
+    const [row] = await tx.insert(table).values(values).returning();
+    defaultTimes.set(row.id, expected);
+    return row;
+  });
+  const user = await generated(users, userValues());
+  const station = await generated(feedingStations, { publicId: publicId(), name: "Synthetic garden", location: point, createdBy: user.id });
+  const report = await generated(reports, { publicId: publicId(), description: "Synthetic report", type: "general", location: point });
+  const log = await generated(feedingLogs, { publicId: publicId(), stationId: station.id, userId: user.id });
   const fixtures = [[users, user], [reports, report], [feedingStations, station], [feedingLogs, log]];
 
   await t.test("all four tables return UUIDs, public IDs, defaults and nullable fields", () => {
     for (const [, row] of fixtures) {
       assert.match(row.id, /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/);
       assert.match(row.publicId, /^[0-9a-f]{24}$/);
-      for (const field of ["createdAt", "updatedAt"]) assert.ok(row[field].getTime() >= before && row[field].getTime() <= Date.now());
+      for (const field of ["createdAt", "updatedAt"]) assert.deepEqual(row[field], defaultTimes.get(row.id), `${field} must equal this insert transaction's rounded now()`);
     }
     assert.equal(user.company, null);
     assert.equal(user.passwordHash, "$2b$04$synthetic-unchanged-hash");
@@ -77,7 +84,7 @@ test("real PostgreSQL/PostGIS foundation", async (t) => {
     assert.equal(log.water, false);
     assert.equal(log.period, null);
     assert.equal(log.note, null);
-    assert.ok(log.fedAt.getTime() >= before && log.fedAt.getTime() <= Date.now());
+    assert.deepEqual(log.fedAt, defaultTimes.get(log.id), "omitted fedAt must use the transaction default");
   });
 
   await t.test("reapplying migrations keeps journal and existing rows unchanged", async () => {
@@ -161,10 +168,14 @@ test("real PostgreSQL/PostGIS foundation", async (t) => {
       assert.equal(historical.createdAt.toISOString(), oldDate.toISOString());
       assert.equal(historical.updatedAt.toISOString(), oldDate.toISOString());
       // Direct SQL also exercises the trigger; no ORM update hook involved.
-      const updated = await db.execute(sql`UPDATE ${table} SET updated_at = ${oldDate} WHERE id = ${historical.id} RETURNING created_at, updated_at`);
+      const observation = await observeDatabaseTime(db, () => db.execute(sql`UPDATE ${table} SET updated_at = ${oldDate} WHERE id = ${historical.id} RETURNING created_at, updated_at`));
+      const updated = observation.value;
       assert.equal(new Date(updated.rows[0].created_at).toISOString(), oldDate.toISOString());
       assert.ok(new Date(updated.rows[0].updated_at).getTime() > oldDate.getTime());
-      assert.ok(Math.abs(Date.now() - new Date(updated.rows[0].updated_at).getTime()) < 5_000);
+      assertDatabaseTimestamp(new Date(updated.rows[0].updated_at), observation, "trigger updated_at");
+      const [persisted] = await db.select().from(table).where(eq(table.id, historical.id));
+      assert.deepEqual(persisted.updatedAt, new Date(updated.rows[0].updated_at));
+      assert.deepEqual(persisted.createdAt, oldDate);
     }
   });
 
