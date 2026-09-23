@@ -1,13 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { mongoUserStore as users } from "../users/mongoUserStore.js";
+import { mongoUserStore } from "../users/mongoUserStore.js";
+import type { UserStore } from "../users/userStore.js";
 
 interface JwtPayload {
   id?: string;
   _id?: string;
 }
 
-export const optionalAuthMiddleware = async (
+export const createOptionalAuthMiddleware = (users: UserStore) => async (
   req: Request,
   _res: Response,
   next: NextFunction
@@ -34,3 +35,5 @@ export const optionalAuthMiddleware = async (
   }
   next();
 };
+
+export const optionalAuthMiddleware = createOptionalAuthMiddleware(mongoUserStore);

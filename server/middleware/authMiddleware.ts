@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { mongoUserStore as users } from "../users/mongoUserStore.js";
+import { mongoUserStore } from "../users/mongoUserStore.js";
+import type { UserStore } from "../users/userStore.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -18,7 +19,7 @@ declare global {
   }
 }
 
-export const authMiddleware = async (
+export const createAuthMiddleware = (users: UserStore) => async (
   req: Request,
   res: Response,
   next: NextFunction
@@ -47,3 +48,5 @@ export const authMiddleware = async (
     res.status(401).json({ error: "Invalid or expired token" });
   }
 };
+
+export const authMiddleware = createAuthMiddleware(mongoUserStore);

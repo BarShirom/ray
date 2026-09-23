@@ -21,6 +21,11 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   company: text("company"),
+  // Existing SQL rows retain their visible value (including explicit null).
+  // New UserStore writes encode omission explicitly; no source history is inferred.
+  companyPresent: boolean("company_present").notNull().default(true),
+  legacyName: text("legacy_name"),
+  legacyNamePresent: boolean("legacy_name_present").notNull().default(false),
   ...timestamps(),
 }, (t) => [check("users_public_id_hex", sql`${t.publicId} ~ '^[0-9a-f]{24}$'`)]);
 

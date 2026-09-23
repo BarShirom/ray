@@ -10,7 +10,7 @@
     "start": "node dist/server.js",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "npm run build && node dist/db/migrate-local.js",
-    "test:postgres": "npm run build && node --test tests/integration/*.test.mjs"
+    "test:postgres": "npm run build && node --test --test-concurrency=1 tests/integration/*.test.mjs"
   },
   "engines": {
     "node": ">=22.22.0 <23"

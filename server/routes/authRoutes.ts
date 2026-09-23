@@ -1,11 +1,17 @@
 import express from "express";
-import { register, login } from "../controllers/authController.js";
+import { createAuthHandlers } from "../controllers/authController.js";
+import { mongoUserStore } from "../users/mongoUserStore.js";
+import type { UserStore } from "../users/userStore.js";
 import { validateBody } from "../middleware/validateBody.js";
 import { registerSchema, loginSchema } from "../validation/authSchemas.js";
 
-const router = express.Router();
+export function createAuthRouter(users: UserStore) {
+  const router = express.Router();
+  const { register, login } = createAuthHandlers(users);
 
-router.post("/register", validateBody(registerSchema), register);
-router.post("/login", validateBody(loginSchema), login);
+  router.post("/register", validateBody(registerSchema), register);
+  router.post("/login", validateBody(loginSchema), login);
+  return router;
+}
 
-export default router;
+export default createAuthRouter(mongoUserStore);
