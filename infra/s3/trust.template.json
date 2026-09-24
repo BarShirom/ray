@@ -1,0 +1,13 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OnlyVerifiedSetupRole",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "REPLACE_WITH_VERIFIED_SOURCE_ROLE_ARN"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}

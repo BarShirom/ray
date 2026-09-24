@@ -13,6 +13,7 @@ export interface FeedingStation {
 }
 
 export interface CreateFeedingStationData {
+  imageAssetId?: string;
   name: string;
   location: { lat: number; lng: number };
   estimatedCats: number;

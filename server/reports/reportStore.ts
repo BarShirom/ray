@@ -29,6 +29,7 @@ export interface ReportRecord {
 }
 
 export interface CreateReport {
+  mediaAssetIds?: string[];
   description: string;
   type: ReportType;
   location: { lat: number; lng: number };

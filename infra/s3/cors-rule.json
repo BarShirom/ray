@@ -1,0 +1,17 @@
+{
+  "AllowedOrigins": [
+    "http://127.0.0.1:5175"
+  ],
+  "AllowedMethods": [
+    "PUT",
+    "GET"
+  ],
+  "AllowedHeaders": [
+    "content-type",
+    "if-none-match",
+    "x-amz-checksum-sha256",
+    "x-amz-server-side-encryption",
+    "x-amz-expected-bucket-owner"
+  ],
+  "MaxAgeSeconds": 300
+}

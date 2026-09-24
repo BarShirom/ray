@@ -7,6 +7,7 @@ export async function cleanupTestDatabase(connection, url) {
   await assertDatabaseIdentity(connection.pool, "test");
   // Only objects owned by this suite; no CASCADE on domain tables or extensions.
   await connection.pool.query(`
+    DROP TABLE IF EXISTS public.media_assets;
     DROP TABLE IF EXISTS public.feeding_logs;
     DROP TABLE IF EXISTS public.feeding_stations;
     DROP TABLE IF EXISTS public.reports;
@@ -35,7 +36,7 @@ export async function openTestDatabase(t) {
   const { rows } = await lock.query("SELECT pg_try_advisory_lock(1010, 10) AS acquired");
   if (!rows[0].acquired) throw new Error("Another Ray integration suite is running");
   const existing = await connection.pool.query(`
-    SELECT to_regclass('public.users') AS users,
+    SELECT to_regclass('public.media_assets') AS media, to_regclass('public.users') AS users,
       to_regclass('public.reports') AS reports,
       to_regclass('public.feeding_stations') AS stations,
       to_regclass('public.feeding_logs') AS logs,

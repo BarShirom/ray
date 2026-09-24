@@ -1,10 +1,15 @@
 import { isPostgresPreview } from "../../preview";
-import React from "react";
+import React, { useState } from "react";
+import { validateImages } from "../../api/media";
+import { FilePreview } from "../media/Media";
 import type { ReportType } from "../../features/reports/reportsSlice";
 import MapPreview from "../mapPreview/MapPreview";
 import "./ReportForm.css";
 
 interface ReportFormProps {
+  pending?: boolean;
+  mediaEnabled?: boolean;
+  signedIn?: boolean;
   description: string;
   setDescription: (value: string) => void;
   handleSubmit: React.FormEventHandler<HTMLFormElement>; 
@@ -22,6 +27,7 @@ const MAX_FILES = 6;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; 
 
 export default function ReportForm({
+  pending = false, mediaEnabled = false, signedIn = false,
   description,
   setDescription,
   handleSubmit,
@@ -34,8 +40,13 @@ export default function ReportForm({
   mediaFiles,
   setMediaFiles,
 }: ReportFormProps) {
+  const [fileError, setFileError] = useState("");
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
+    if (isPostgresPreview) {
+      try { validateImages([...mediaFiles, ...picked], "report"); setMediaFiles([...mediaFiles, ...picked]); setFileError(""); } catch (error) { setFileError((error as Error).message); }
+      e.currentTarget.value = ""; return;
+    }
     const accepted = picked.filter(
       (f) =>
         (f.type.startsWith("image/") || f.type.startsWith("video/")) &&
@@ -50,6 +61,7 @@ export default function ReportForm({
 
   return (
     <form onSubmit={handleSubmit} className="report-form">
+      <fieldset disabled={pending} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "grid", gap: 12 }}>
       {/* Type chips */}
       <div className="field">
         <label className="label">Subject</label>
@@ -112,24 +124,25 @@ export default function ReportForm({
       </div>
 
       {/* Media */}
-      {isPostgresPreview && <p>Uploads unavailable in local preview. Continue without media.</p>}
+      {isPostgresPreview && !mediaEnabled && <p>Uploads unavailable in local preview. Continue without media.</p>}
+      {isPostgresPreview && <p>Sign in to add images. Guests can submit reports without images.</p>}
+      {fileError && <p role="alert">{fileError}</p>}
       <div className="field">
         <label htmlFor="media" className="label">
           Media (optional)
         </label>
         <input
-          disabled={isPostgresPreview}
+          disabled={pending || (isPostgresPreview && (!mediaEnabled || !signedIn))}
           type="file"
           id="media"
-          accept="image/*,video/*"
+          accept={isPostgresPreview ? "image/jpeg,image/png,image/webp" : "image/*,video/*"}
           multiple
           className="control"
           onChange={handleFileChange}
           aria-label="Add images or videos"
         />
         <p className="hint-text">
-          Up to {MAX_FILES} files. Images & videos only. Max{" "}
-          {Math.round(MAX_FILE_SIZE / (1024 * 1024))}MB each.
+          {isPostgresPreview ? "Up to 3 JPEG, PNG or WebP images, 8 MiB each. No animated images." : `Up to ${MAX_FILES} images or videos, ${Math.round(MAX_FILE_SIZE / (1024 * 1024))} MB each.`}
         </p>
 
         {mediaFiles.length > 0 && (
@@ -149,30 +162,7 @@ export default function ReportForm({
             </div>
 
             <div className="media-grid">
-              {mediaFiles.map((f, i) =>
-                f.type.startsWith("image/") ? (
-                  <img
-                    key={i}
-                    className="media-thumb"
-                    src={URL.createObjectURL(f)}
-                    alt={`Selected ${i + 1}`}
-                    onLoad={(e) =>
-                      URL.revokeObjectURL((e.target as HTMLImageElement).src)
-                    }
-                  />
-                ) : (
-                  <video
-                    key={i}
-                    className="media-thumb"
-                    controls
-                    preload="metadata"
-                    src={URL.createObjectURL(f)}
-                    onLoadedData={(e) =>
-                      URL.revokeObjectURL((e.target as HTMLVideoElement).src)
-                    }
-                  />
-                )
-              )}
+              {mediaFiles.map((file, index) => <FilePreview key={index} file={file} index={index} />)}
             </div>
           </>
         )}
@@ -188,6 +178,7 @@ export default function ReportForm({
           Submit report
         </button>
       </div>
+      </fieldset>
     </form>
   );
 }

@@ -1,5 +1,7 @@
 # Local PostgreSQL application preview (Milestone 10E)
 
+S3.1 adds separately gated image support and additive migration 0006. See the [S3 runbook](s3-media.md) for current activation and upgrade steps. Media remains disabled by default; the 10E evidence and staging list below describe its original closeout.
+
 Baseline: clean `ray-2-postgres` at
 `42dd056f5def1da9f86f3bac099f979aecf6e5d1`, with 10D.3 and its timestamp
 closeout committed. No applicable AGENTS.md was found. Docker 29.8.0,

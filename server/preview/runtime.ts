@@ -6,6 +6,9 @@ import { previewConfig } from "./config.js";
 import { assertMigrationState } from "./migration-state.js";
 import { createPreviewApp } from "./app.js";
 
+import { mediaConfig } from "../media/config.js";
+import { openS3Storage } from "../media/s3.js";
+
 export function closePreview(server: Server, connection: Pick<ReturnType<typeof createPostgres>, "close">) {
   return new Promise<void>((resolve, reject) => {
     const force = setTimeout(() => server.closeAllConnections(), 1_000);
@@ -30,16 +33,20 @@ export function listenLoopback(app: Express, port: number) {
 
 export async function startPreview(env: NodeJS.ProcessEnv = process.env) {
   const config = previewConfig(env);
+  const media = mediaConfig(env);
+  let opened: Awaited<ReturnType<typeof openS3Storage>> | undefined;
   const connection = createPostgres(config.database);
   try {
     try { await assertDatabaseIdentity(connection.pool, "preview"); }
     catch { throw new Error("Preview database unavailable or unexpected. Check the dedicated preview-db service and configuration."); }
     await assertMigrationState(connection.pool);
-    const app = createPreviewApp(connection, config.secret);
+    if (media) opened = await openS3Storage(media);
+    const app = createPreviewApp(connection, config.secret, opened?.storage, media?.prefix);
     const server = await listenLoopback(app, 4001);
     let closing: Promise<void> | undefined;
-    return { close: () => (closing ??= closePreview(server, connection)) };
+    return { mediaEnabled: !!opened, close: () => (closing ??= closePreview(server, connection).finally(() => opened?.close())) };
   } catch (error) {
+    opened?.close();
     await connection.close();
     throw error;
   }

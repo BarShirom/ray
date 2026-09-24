@@ -14,12 +14,18 @@
     "dev:postgres": "tsx watch preview-server.ts",
     "start:postgres": "node dist/preview-server.js",
     "db:migrate:preview": "npm run build && node dist/db/migrate-preview.js",
-    "db:seed:preview": "npm run build && node dist/db/seed-preview.js"
+    "db:seed:preview": "npm run build && node dist/db/seed-preview.js",
+    "media:cleanup": "npm run build && node dist/media/cleanup.js",
+    "test:s3:live": "npm run build && node tests/live/s3.mjs"
   },
   "engines": {
     "node": ">=22.22.0 <23"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1138.0",
+    "@aws-sdk/client-sts": "3.1138.0",
+    "@aws-sdk/credential-providers": "3.1138.0",
+    "@aws-sdk/s3-request-presigner": "3.1138.0",
     "bcryptjs": "^3.0.2",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
@@ -32,6 +38,7 @@
     "multer": "^1.4.5-lts.1",
     "multer-storage-cloudinary": "^4.0.0",
     "pg": "8.23.0",
+    "sharp": "0.35.4",
     "zod": "^4.6.5"
   },
   "devDependencies": {

@@ -20,6 +20,7 @@ type CreateReportPayload = {
   type: ReportType;
   location: { lat: number; lng: number };
   media?: string[];
+  mediaAssetIds?: string[];
 };
 
 export const createReport = createAsyncThunk<

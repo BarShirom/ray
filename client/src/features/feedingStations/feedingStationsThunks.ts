@@ -37,12 +37,13 @@ export const createFeedingStation = createAsyncThunk<
     if (!token) return rejectWithValue("Please log in to add a feeding station.");
     const validationError = validateStationCreation(data);
     if (validationError) return rejectWithValue(validationError);
-    const { name, location, estimatedCats, estimatedKittens, image, notes } = data;
+    const { name, location, estimatedCats, estimatedKittens, image, notes, imageAssetId } = data;
     try {
       const response = await http.post<FeedingStation>("/api/feeding-stations", {
         name: name.trim(),
         location: { lat: location.lat, lng: location.lng },
         estimatedCats, estimatedKittens, image, notes,
+        ...(imageAssetId !== undefined ? { imageAssetId } : {}),
       }, { headers: { Authorization: `Bearer ${token}` } });
       return response.data;
     } catch (error) {

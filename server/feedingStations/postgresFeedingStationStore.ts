@@ -29,7 +29,7 @@ function record(row: Row): FeedingStationRecord {
 }
 
 // Connection and migration lifecycle belong to the caller.
-export function createPostgresFeedingStationStore(db: ReturnType<typeof createPostgres>["db"]): FeedingStationStore {
+export function createPostgresFeedingStationStore(db: Pick<ReturnType<typeof createPostgres>["db"], "select" | "insert">): FeedingStationStore {
   const read = () => db.select({ ...columns, createdBy: users.publicId }).from(stations)
     .innerJoin(users, eq(stations.createdBy, users.id));
   return {

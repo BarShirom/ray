@@ -2,8 +2,9 @@ import { isPostgresPreview } from "../../preview";
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import { uploadMedia } from "../../api/upload";
-import { selectIsLoggedIn } from "../../features/auth/authSelectors";
+import { uploadImages, validateImages, type ImageUploads } from "../../api/media";
+import { FilePreview, useMediaCapability } from "../media/Media";
+import { selectIsLoggedIn, selectToken } from "../../features/auth/authSelectors";
 import { createFeedingStation } from "../../features/feedingStations/feedingStationsThunks";
 import { selectStationCreating, selectStationCreateError } from "../../features/feedingStations/feedingStationsSelectors";
 import { validateStationCreation } from "../../features/feedingStations/validateStationCreation";
@@ -19,6 +20,10 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
 }) {
   const dispatch = useAppDispatch();
   const authenticated = useAppSelector(selectIsLoggedIn);
+  const token = useAppSelector(selectToken);
+  const mediaEnabled = useMediaCapability();
+  const imageUploads = useRef<ImageUploads>(new WeakMap());
+  const [progress, setProgress] = useState("");
   const creating = useAppSelector(selectStationCreating);
   const createError = useAppSelector(selectStationCreateError);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -55,12 +60,17 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
     setError(null);
     try {
       let imageUrl = uploadedImage;
-      if (image && !imageUrl) {
+      let imageAssetId: string | undefined;
+      if (image && isPostgresPreview) {
+        if (!mediaEnabled) throw new Error("Image uploads are disabled in local preview.");
+        [imageAssetId] = await uploadImages([image], "station", token, imageUploads.current, setProgress);
+      } else if (image && !imageUrl) {
+        const { uploadMedia } = await import("../../api/upload");
         [imageUrl] = await uploadMedia([image]);
         if (!imageUrl) throw new Error("Image upload did not return a URL. Please try again.");
         setUploadedImage(imageUrl);
       }
-      const result = await dispatch(createFeedingStation({ ...data, image: imageUrl }));
+      const result = await dispatch(createFeedingStation({ ...data, ...(isPostgresPreview ? { imageAssetId } : { image: imageUrl }) }));
       if (createFeedingStation.fulfilled.match(result)) onCreated(result.payload);
     } catch (err) {
       setError(axios.isAxiosError<{ message?: string }>(err)
@@ -95,13 +105,16 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
           </div>
           <label htmlFor="station-notes">Notes (optional)</label>
           <textarea id="station-notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
-          <label htmlFor="station-image">Image (optional, up to 25 MB)</label>
-          {isPostgresPreview && <p>Uploads unavailable in local preview. Continue without an image.</p>}
-          <input disabled={isPostgresPreview} id="station-image" type="file" accept="image/*" onChange={(event) => {
+          <label htmlFor="station-image">{isPostgresPreview ? "Image (optional, JPEG/PNG/WebP up to 8 MiB)" : "Image (optional, up to 25 MB)"}</label>
+          {isPostgresPreview && !mediaEnabled && <p>Uploads unavailable in local preview. Continue without an image.</p>}
+          <input disabled={isPostgresPreview && !mediaEnabled} id="station-image" type="file" accept={isPostgresPreview ? "image/jpeg,image/png,image/webp" : "image/*"} onChange={(event) => {
             const file = event.target.files?.[0] ?? null;
             setUploadedImage(undefined);
             setImage(null);
-            if (file && (!file.type.startsWith("image/") || file.size > 25 * 1024 * 1024)) {
+            if (file && isPostgresPreview) {
+              try { validateImages([file], "station"); } catch (error) { setError((error as Error).message); event.target.value = ""; return; }
+            }
+            if (!isPostgresPreview && file && (!file.type.startsWith("image/") || file.size > 25 * 1024 * 1024)) {
               setError("Choose an image no larger than 25 MB.");
               event.target.value = "";
               return;
@@ -109,11 +122,12 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
             setError(null);
             setImage(file);
           }} />
+          {image && <FilePreview file={image} />}
           <button className="btn btn-brand" type="submit" disabled={!location || !name.trim()}>
             {pending ? "Saving station..." : "Create station"}
           </button>
         </fieldset>
-        {pending && <p role="status">{image && !uploadedImage ? "Uploading image..." : "Saving station..."}</p>}
+        {pending && <p role="status">{progress || (image && !uploadedImage ? "Uploading image..." : "Saving station...")}</p>}
         {(error || createError) && <p role="alert">{error || createError}</p>}
       </form>
     </dialog>

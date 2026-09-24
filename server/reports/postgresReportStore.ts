@@ -84,7 +84,7 @@ function personalCounts(row: { total: string; resolved: string; inProgress: stri
 }
 
 // Importing opens no connections. Caller owns the supplied Drizzle database.
-export function createPostgresReportStore(db: Database): ReportStore {
+export function createPostgresReportStore(db: Pick<Database, "select" | "insert" | "update" | "transaction">): ReportStore {
   return {
     create: (input) => safePersistence(() => db.transaction(async (tx) => {
       const createdBy = input.createdBy === null ? null : await userId(tx, input.createdBy);

@@ -1,3 +1,4 @@
+import { MediaImage } from "../media/Media";
 import "./ReportCard.css";
 import { useSelector } from "react-redux";
 import { selectToken, selectUserId } from "../../features/auth/authSelectors";
@@ -73,6 +74,7 @@ export default function ReportCard({
       <div className="card__row">
         <div>
           <div className="card__title">{report.description}</div>
+          <div className="card__media">{report.media?.filter(url => typeof url === "string" && url.startsWith("http://127.0.0.1:4001/api/media/")).map((url, index) => <MediaImage key={url} src={url} alt={`Report image ${index + 1}`} />)}</div>
 
           <div className="card__sub">
             Reporter: <b>{reporterName}</b>

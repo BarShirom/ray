@@ -1,3 +1,4 @@
+import type { ZodType } from "zod";
 import express, { type RequestHandler } from "express";
 import { createReportHandlers } from "../controllers/reportController.js";
 import type { ReportStore } from "../reports/reportStore.js";
@@ -7,11 +8,11 @@ import { optionalAuthMiddleware } from "../middleware/optionalAuthMiddleware.js"
 import { validateBody } from "../middleware/validateBody.js";
 import { createReportSchema } from "../validation/reportSchemas.js";
 
-export function createReportRouter(reports: ReportStore, authenticate: RequestHandler, optionalAuthenticate: RequestHandler) {
+export function createReportRouter(reports: ReportStore, authenticate: RequestHandler, optionalAuthenticate: RequestHandler, creationSchema: ZodType = createReportSchema) {
   const { getAllReports, getMyReports, createReport, claimReport, resolveReport, getGlobalStats, getUserStats } = createReportHandlers(reports);
   const router = express.Router();
   router.get("/", getAllReports);
-  router.post("/", optionalAuthenticate, validateBody(createReportSchema), createReport);
+  router.post("/", optionalAuthenticate, validateBody(creationSchema), createReport);
   router.get("/me", authenticate, getMyReports);
   router.patch("/:id/claim", authenticate, claimReport);
   router.patch("/:id/resolve", authenticate, resolveReport);

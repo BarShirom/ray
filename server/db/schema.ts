@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, doublePrecision, geometry, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, doublePrecision, geometry, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 const identity = () => ({
   id: uuid("id").defaultRandom().primaryKey(),
@@ -101,4 +101,46 @@ export const feedingLogs = pgTable("feeding_logs", {
   check("feeding_logs_period_allowed", sql`${t.period} IN ('morning', 'noon', 'evening')`),
   index("feeding_logs_user_id_idx").on(t.userId),
   index("feeding_logs_station_history_idx").on(t.stationId, t.fedAt.desc(), t.createdAt.desc(), t.id.desc()),
+]);
+
+// New media domain: UUID public IDs, no historical-compatibility flags.
+export const mediaAssets = pgTable("media_assets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  purpose: text("purpose").notNull(),
+  sourceKey: text("source_key").notNull().unique(),
+  outputKey: text("output_key").notNull().unique(),
+  contentType: text("content_type").notNull(),
+  byteLength: integer("byte_length").notNull(),
+  checksum: text("checksum").notNull(),
+  state: text("state").notNull().default("pending"),
+  uploadExpiresAt: timestamp("upload_expires_at", { withTimezone: true, precision: 3 }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true, precision: 3 }).notNull(),
+  processingUntil: timestamp("processing_until", { withTimezone: true, precision: 3 }),
+  lease: uuid("lease"),
+  attempts: integer("attempts").notNull().default(0),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true, precision: 3 }),
+  outputBytes: integer("output_bytes"),
+  outputChecksum: text("output_checksum"),
+  width: integer("width"),
+  height: integer("height"),
+  stationId: uuid("station_id").references(() => feedingStations.id, { onDelete: "restrict" }),
+  reportId: uuid("report_id").references(() => reports.id, { onDelete: "restrict" }),
+  position: integer("position"),
+  ...timestamps(),
+}, (t) => [
+  check("media_purpose", sql`${t.purpose} IN ('station','report')`),
+  check("media_type", sql`${t.contentType} IN ('image/jpeg','image/png','image/webp')`),
+  check("media_size", sql`${t.byteLength} BETWEEN 1 AND 8388608`),
+  check("media_checksum", sql`${t.checksum} ~ '^[A-Za-z0-9+/]{43}=$'`),
+  check("media_state", sql`${t.state} IN ('pending','processing','ready','failed','deleting','deleted')`),
+  check("media_attempts", sql`${t.attempts} BETWEEN 0 AND 5`),
+  check("media_expiry", sql`${t.expiresAt} > ${t.uploadExpiresAt}`),
+  check("media_single_parent", sql`num_nonnulls(${t.stationId}, ${t.reportId}) <= 1`),
+  check("media_attachment", sql`(${t.stationId} IS NULL AND ${t.reportId} IS NULL AND ${t.position} IS NULL) OR (${t.state} = 'ready' AND ((${t.purpose} = 'station' AND ${t.stationId} IS NOT NULL AND ${t.reportId} IS NULL AND ${t.position} IS NULL) OR (${t.purpose} = 'report' AND ${t.reportId} IS NOT NULL AND ${t.stationId} IS NULL AND ${t.position} IS NOT NULL AND ${t.position} BETWEEN 0 AND 2)))`),
+  check("media_ready_output", sql`${t.state} <> 'ready' OR (${t.outputBytes} BETWEEN 1 AND 8388608 AND ${t.outputBytes} IS NOT NULL AND ${t.outputChecksum} IS NOT NULL AND ${t.width} BETWEEN 1 AND 1600 AND ${t.width} IS NOT NULL AND ${t.height} BETWEEN 1 AND 1600 AND ${t.height} IS NOT NULL)`),
+  uniqueIndex("media_station_unique").on(t.stationId).where(sql`${t.stationId} IS NOT NULL`),
+  uniqueIndex("media_report_position_unique").on(t.reportId, t.position).where(sql`${t.reportId} IS NOT NULL`),
+  index("media_owner_expiry_idx").on(t.ownerId, t.expiresAt),
+  index("media_cleanup_idx").on(t.expiresAt).where(sql`${t.stationId} IS NULL AND ${t.reportId} IS NULL`),
 ]);

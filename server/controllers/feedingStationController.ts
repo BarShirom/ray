@@ -16,6 +16,7 @@ export function createFeedingStationHandlers(stations: FeedingStationStore) {
         estimatedCats,
         estimatedKittens,
         image,
+        ...(req.body.imageAssetId !== undefined ? { imageAssetId: req.body.imageAssetId } : {}),
         notes,
         createdBy: req.user._id,
       });

@@ -1,3 +1,4 @@
+import { MediaImage } from "../media/Media";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
@@ -66,7 +67,7 @@ export default function FeedingStationDetails({ station, onClose }: {
         <button type="button" className="btn" onClick={onClose} aria-label="Close station details">Close</button>
       </header>
       <div className="station-details-body">
-        {station.image && <img className="station-details-image" src={station.image} alt={station.name} />}
+        {station.image && <MediaImage className="station-details-image" src={station.image} alt={station.name} />}
         <p>Estimated cats: <strong>{station.estimatedCats}</strong> · Estimated kittens: <strong>{station.estimatedKittens}</strong></p>
         {station.notes && <p className="station-details-note">{station.notes}</p>}
         {logs[0] && <p>Most recent feeding: <time dateTime={logs[0].fedAt}>{new Date(logs[0].fedAt).toLocaleString()}</time></p>}

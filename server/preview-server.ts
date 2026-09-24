@@ -2,7 +2,7 @@ import { startPreview } from "./preview/runtime.js";
 
 try {
   const runtime = await startPreview();
-  console.log("Ray local PostgreSQL preview ready at http://127.0.0.1:4001 (synthetic data; uploads disabled)");
+  console.log(`Ray local PostgreSQL preview ready at http://127.0.0.1:4001 (synthetic data; images ${runtime.mediaEnabled ? "S3 enabled" : "disabled"})`);
   let stopping = false;
   const stop = async () => {
     if (stopping) return;

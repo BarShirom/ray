@@ -1,11 +1,14 @@
 // Report.tsx
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect, useCallback } from "react";
-import { useAppDispatch } from "../../app/hooks";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { createReport } from "../../features/reports/reportsThunks";
 import ReportForm from "../../components/reportForm/ReportForm";
 import { type ReportType } from "../../features/reports/reportsSlice";
-import { uploadMedia } from "../../api/upload";
+import { isPostgresPreview } from "../../preview";
+import { uploadImages, type ImageUploads } from "../../api/media";
+import { useMediaCapability } from "../../components/media/Media";
+import { selectToken } from "../../features/auth/authSelectors";
 import "./Report.css";
 
 type LatLng = { lat: number; lng: number };
@@ -19,6 +22,11 @@ function getErrorMessage(err: unknown): string {
 const Report = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const token = useAppSelector(selectToken);
+  const mediaEnabled = useMediaCapability();
+  const uploads = useRef<ImageUploads>(new WeakMap());
+  const locked = useRef(false);
+  const [progress, setProgress] = useState("");
 
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState<LatLng | null>(null);
@@ -55,6 +63,7 @@ const Report = () => {
   }, [watchId]);
 
   const submitReport = useCallback(async () => {
+    if (locked.current) return;
     setError(null);
 
     if (!description.trim()) {
@@ -66,19 +75,28 @@ const Report = () => {
       return;
     }
 
+    locked.current = true;
     setSubmitting(true);
     try {
-      const mediaUrls = mediaFiles.length ? await uploadMedia(mediaFiles) : [];
+      let attachment: { media?: string[]; mediaAssetIds?: string[] } = {};
+      if (isPostgresPreview) {
+        if (mediaFiles.length && !mediaEnabled) throw new Error("Image uploads are disabled in local preview.");
+        attachment = { mediaAssetIds: mediaFiles.length ? await uploadImages(mediaFiles, "report", token, uploads.current, setProgress) : [] };
+      } else {
+        const { uploadMedia } = await import("../../api/upload");
+        attachment = { media: mediaFiles.length ? await uploadMedia(mediaFiles) : [] };
+      }
       await dispatch(
-        createReport({ description, location, type, media: mediaUrls })
+        createReport({ description, location, type, ...attachment })
       ).unwrap();
       navigate("/map-page");
     } catch (err: unknown) {
       setError(getErrorMessage(err));
     } finally {
+      locked.current = false;
       setSubmitting(false);
     }
-  }, [description, location, type, mediaFiles, dispatch, navigate]);
+  }, [description, location, type, mediaFiles, dispatch, navigate, token, mediaEnabled]);
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
@@ -89,6 +107,9 @@ const Report = () => {
     <div className="report-page">
       <section className="panel report-panel">
         <ReportForm
+          pending={submitting}
+          mediaEnabled={mediaEnabled}
+          signedIn={!!token}
           description={description}
           setDescription={setDescription}
           handleSubmit={handleSubmit}
@@ -102,7 +123,7 @@ const Report = () => {
           setMediaFiles={setMediaFiles}
         />
         <div className="report-status">
-          {submitting && <span className="status-text">Uploading…</span>}
+          {submitting && <span className="status-text" role="status">{progress || "Saving report..."}</span>}
           {error && <span className="status-text error">{error}</span>}
         </div>
       </section>

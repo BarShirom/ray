@@ -1,3 +1,4 @@
+import type { ZodType } from "zod";
 import express, { type RequestHandler } from "express";
 import { createFeedingStationHandlers } from "../controllers/feedingStationController.js";
 import { createFeedingLogHandlers } from "../controllers/feedingLogController.js";
@@ -10,11 +11,11 @@ import type { FeedingLogStore } from "../feedingLogs/feedingLogStore.js";
 import { mongoFeedingStationStore } from "../feedingStations/mongoFeedingStationStore.js";
 import { mongoFeedingLogStore } from "../feedingLogs/mongoFeedingLogStore.js";
 
-export function createFeedingStationRouter(stations: FeedingStationStore, logs: FeedingLogStore, authenticate: RequestHandler) {
+export function createFeedingStationRouter(stations: FeedingStationStore, logs: FeedingLogStore, authenticate: RequestHandler, creationSchema: ZodType = createFeedingStationSchema) {
   const { createFeedingStation, getAllFeedingStations, getFeedingStationById } = createFeedingStationHandlers(stations);
   const { createFeedingLog, getLogsForStation } = createFeedingLogHandlers(stations, logs);
   const router = express.Router();
-  router.post("/", authenticate, validateBody(createFeedingStationSchema), createFeedingStation);
+  router.post("/", authenticate, validateBody(creationSchema), createFeedingStation);
   router.get("/", getAllFeedingStations);
   router.post("/:stationId/feedings", authenticate, validateBody(createFeedingLogSchema), createFeedingLog);
   router.get("/:stationId/feedings", getLogsForStation);

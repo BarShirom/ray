@@ -1,3 +1,4 @@
+import { MediaImage } from "../media/Media";
 import { Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import { useMemo } from "react";
@@ -33,6 +34,7 @@ const assignedToId = (assigned: Assigned) => {
 
 type MediaLike = string | { url: string; type?: "image" | "video" };
 const isImageUrl = (u: string) => {
+  if (u.startsWith("http://127.0.0.1:4001/api/media/") && u.endsWith("/content")) return true;
   if (u.startsWith("data:image")) return true;
   if (u.startsWith("data:video")) return false;
   const clean = u.split("?")[0].toLowerCase();
@@ -160,7 +162,7 @@ export default function ReportMarker({ report }: { report: Report }) {
               {report.media.map((item, idx) => {
                 const { url, kind } = toMedia(item as MediaLike);
                 return kind === "image" ? (
-                  <img
+                  <MediaImage
                     key={idx}
                     src={url}
                     alt={`Report media ${idx + 1}`}

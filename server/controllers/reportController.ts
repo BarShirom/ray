@@ -19,6 +19,7 @@ export function createReportHandlers(reports: ReportStore) {
         type,
         location,
         media,
+        ...(req.body.mediaAssetIds !== undefined ? { mediaAssetIds: req.body.mediaAssetIds } : {}),
         createdBy: user?._id ?? null,
         createdByName: user ? reportFullName(user) : "Guest",
       });
