@@ -1,4 +1,5 @@
 .myreports { max-width: 920px; margin: 0 auto; }
-.myreports .list-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.myreports .list-header{ display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.myreports h1{ font-size:20px; margin:0; }
 .myreports .hint{ color:var(--muted); font-size:12px; }
 .myreports .empty{ color:var(--muted); padding:24px; text-align:center; }

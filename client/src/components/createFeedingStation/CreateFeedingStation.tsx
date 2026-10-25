@@ -1,6 +1,5 @@
 import { isPostgresPreview } from "../../preview";
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { uploadImages, validateImages, type ImageUploads } from "../../api/media";
 import { FilePreview, useMediaCapability } from "../media/Media";
@@ -9,6 +8,8 @@ import { createFeedingStation } from "../../features/feedingStations/feedingStat
 import { selectStationCreating, selectStationCreateError } from "../../features/feedingStations/feedingStationsSelectors";
 import { validateStationCreation } from "../../features/feedingStations/validateStationCreation";
 import type { FeedingStation } from "../../features/feedingStations/types";
+import { t } from "../../i18n";
+import { localizeError } from "../../i18n/errors";
 import "./CreateFeedingStation.css";
 
 export default function CreateFeedingStation({ open, location, onCancel, onChangeLocation, onCreated }: {
@@ -46,7 +47,7 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!authenticated || locked.current || creating) return;
-    if (!location) { setError("Select a location on the map."); return; }
+    if (!location) { setError(t("stations.selectLocation")); return; }
     const data = {
       name, location,
       estimatedCats: cats.trim() ? Number(cats) : NaN,
@@ -54,7 +55,7 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
       notes: notes.trim() || undefined,
     };
     const validationError = validateStationCreation(data);
-    if (validationError) { setError(validationError); return; }
+    if (validationError) { setError(localizeError(validationError, "station")); return; }
     locked.current = true;
     setBusy(true);
     setError(null);
@@ -73,9 +74,7 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
       const result = await dispatch(createFeedingStation({ ...data, ...(isPostgresPreview ? { imageAssetId } : { image: imageUrl }) }));
       if (createFeedingStation.fulfilled.match(result)) onCreated(result.payload);
     } catch (err) {
-      setError(axios.isAxiosError<{ message?: string }>(err)
-        ? err.response?.data?.message ?? err.message
-        : err instanceof Error ? err.message : "Could not upload the image. Please try again.");
+      setError(localizeError(err, "upload"));
     } finally {
       locked.current = false;
       setBusy(false);
@@ -85,37 +84,37 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
   return (
     <dialog ref={dialog} className="create-station-dialog" aria-labelledby="create-station-title"
       onCancel={(event) => { event.preventDefault(); if (!pending) onCancel(); }}>
-      <header><h2 id="create-station-title">Add Feeding Station</h2>
-        <button className="btn" type="button" disabled={pending} onClick={onCancel}>Cancel</button>
+      <header><h2 id="create-station-title">{t("stations.add")}</h2>
+        <button className="btn" type="button" disabled={pending} onClick={onCancel}>{t("stations.cancel")}</button>
       </header>
-      <form onSubmit={submit}>
+      <form onSubmit={submit} noValidate>
         <fieldset disabled={pending || !authenticated}>
-          <legend className="create-station-legend">Station information</legend>
+          <legend className="create-station-legend">{t("stations.information")}</legend>
           <p className="create-station-location">{location
-            ? `Location selected: ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`
-            : "Select a location on the map."}</p>
-          <button className="btn" type="button" onClick={onChangeLocation}>Change map location</button>
-          <label htmlFor="station-name">Station name</label>
-          <input id="station-name" value={name} onChange={(event) => setName(event.target.value)} required />
+            ? <>{t("stations.selectedLocation")} <bdi dir="ltr">{location.lat.toFixed(5)}, {location.lng.toFixed(5)}</bdi></>
+            : t("stations.selectLocation")}</p>
+          <button className="btn" type="button" onClick={onChangeLocation}>{t("stations.changeLocation")}</button>
+          <label htmlFor="station-name">{t("stations.name")}</label>
+          <input id="station-name" dir="auto" value={name} onChange={(event) => setName(event.target.value)} required />
           <div className="create-station-counts">
-            <div><label htmlFor="station-cats">Estimated cats</label>
+            <div><label htmlFor="station-cats">{t("stations.estimatedCats")}</label>
               <input id="station-cats" type="number" min="0" step="1" required value={cats} onChange={(event) => setCats(event.target.value)} /></div>
-            <div><label htmlFor="station-kittens">Estimated kittens</label>
+            <div><label htmlFor="station-kittens">{t("stations.estimatedKittens")}</label>
               <input id="station-kittens" type="number" min="0" step="1" required value={kittens} onChange={(event) => setKittens(event.target.value)} /></div>
           </div>
-          <label htmlFor="station-notes">Notes (optional)</label>
-          <textarea id="station-notes" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
-          <label htmlFor="station-image">{isPostgresPreview ? "Image (optional, JPEG/PNG/WebP up to 8 MiB)" : "Image (optional, up to 25 MB)"}</label>
-          {isPostgresPreview && !mediaEnabled && <p>Uploads unavailable in local preview. Continue without an image.</p>}
+          <label htmlFor="station-notes">{t("stations.notes")}</label>
+          <textarea id="station-notes" dir="auto" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
+          <label htmlFor="station-image">{t(isPostgresPreview ? "stations.imagePreview" : "stations.imageLegacy")}</label>
+          {isPostgresPreview && !mediaEnabled && <p>{t("stations.uploadsUnavailable")}</p>}
           <input disabled={isPostgresPreview && !mediaEnabled} id="station-image" type="file" accept={isPostgresPreview ? "image/jpeg,image/png,image/webp" : "image/*"} onChange={(event) => {
             const file = event.target.files?.[0] ?? null;
             setUploadedImage(undefined);
             setImage(null);
             if (file && isPostgresPreview) {
-              try { validateImages([file], "station"); } catch (error) { setError((error as Error).message); event.target.value = ""; return; }
+              try { validateImages([file], "station"); } catch (error) { setError(localizeError(error, "upload")); event.target.value = ""; return; }
             }
             if (!isPostgresPreview && file && (!file.type.startsWith("image/") || file.size > 25 * 1024 * 1024)) {
-              setError("Choose an image no larger than 25 MB.");
+              setError(localizeError("Choose an image no larger than 25 MB.", "upload"));
               event.target.value = "";
               return;
             }
@@ -123,11 +122,11 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
             setImage(file);
           }} />
           {image && <FilePreview file={image} />}
-          <button className="btn btn-brand" type="submit" disabled={!location || !name.trim()}>
-            {pending ? "Saving station..." : "Create station"}
+          <button className="btn btn-brand" type="submit" disabled={!location}>
+            {t(pending ? "stations.saving" : "stations.create")}
           </button>
         </fieldset>
-        {pending && <p role="status">{progress || (image && !uploadedImage ? "Uploading image..." : "Saving station...")}</p>}
+        {pending && <p role="status">{progress || t(image && !uploadedImage ? "media.uploadingImage" : "stations.saving")}</p>}
         {(error || createError) && <p role="alert">{error || createError}</p>}
       </form>
     </dialog>

@@ -1,23 +1,40 @@
-/* Align with app rhythm */
-.auth-page{
+﻿.auth-page {
   max-width: 480px;
-  margin: 0 auto;
+  margin-inline: auto;
+  padding: 16px;
+  min-width: 0;
+}
+
+.auth-page .auth-panel {
   padding: 16px;
 }
 
-/* Panel uses global .panel */
-.auth-panel{ padding: 16px; }
+.auth-title {
+  margin-block: 0 16px;
+  font-size: 1.5rem;
+  line-height: 1.5;
+}
 
-/* Form grid */
-.auth-form{ display: grid; gap: 12px; }
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
 
-/* Fields */
-.field{ display: grid; gap: 6px; }
-.label{ font-weight: 500; font-size: 14px; }
+.auth-form .field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
 
-/* Controls look like the rest of the app */
-.control{
+.auth-form .label {
+  font-weight: 500;
+  font-size: 14px;
+  text-align: start;
+}
+
+.auth-form .control {
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   border: 1px solid var(--border);
   background: var(--panel);
@@ -25,50 +42,111 @@
   border-radius: 12px;
   padding: 10px 12px;
   font: inherit;
-}
-.control:focus{
-  outline: none;
-  border-color: color-mix(in oklab, var(--brand) 45%, var(--border));
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand) 35%, transparent);
+  line-height: 1.5;
+  text-align: start;
 }
 
-/* Password reveal button */
-.input-with-button{ position: relative; display: grid; }
-.reveal{
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  border: 1px solid var(--border); background: var(--panel);
-  border-radius: 10px; padding: 6px 8px; cursor: pointer; font-size: 12px;
+.auth-form .control:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
-.reveal:hover{ background:#f9fafb; }
 
-/* Submit left-aligned like inputs */
-.auth-form .btn-primary{
+.auth-form .control[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.auth-form .input-with-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+
+.auth-form .reveal {
+  position: static;
+  transform: none;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.auth-form .reveal:hover {
+  background: #f9fafb;
+}
+
+.auth-form .btn-primary {
   justify-self: start;
-  margin-top: 4px;
-}
-
-/* Links + hints */
-.hint{ color: var(--muted); font-size: 12px; margin: 2px 0 0; }
-.link{ color: var(--brand); text-decoration: none; }
-.link:hover{ text-decoration: underline; }
-
-/* Primary button variant (relies on global .btn) */
-.btn-primary{
+  margin-block-start: 4px;
   background: var(--brand);
   border-color: var(--brand);
   color: #fff;
 }
-.btn-primary:hover{ background: var(--brand-900); }
-.btn[disabled]{ opacity:.6; cursor:not-allowed; }
 
-/* Error */
-.alert{
-  border: 1px solid #fecaca; background: #fee2e2; color: #7f1d1d;
-  border-radius: 12px; padding: 10px 12px; font-size: 14px;
+.auth-form .btn-primary:hover {
+  background: var(--brand-900);
 }
 
-/* Mobile */
-@media (max-width: 520px){
-  .auth-page{ padding: 12px; }
-  .auth-panel{ padding: 12px; }
+.auth-form .btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-form .hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin-block: 2px 0;
+  overflow-wrap: anywhere;
+}
+
+.auth-form .link {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.auth-form .link:hover {
+  text-decoration: underline;
+}
+
+.auth-form .actions {
+  justify-content: flex-start;
+}
+
+.auth-page .alert {
+  border: 1px solid #fecaca;
+  background: #fee2e2;
+  color: #7f1d1d;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-block-end: 12px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.auth-form .field-error {
+  margin: 0;
+  color: #991b1b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.auth-form button:focus-visible,
+.auth-form a:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+}
+
+@media (max-width: 520px) {
+  .auth-page {
+    padding: 12px;
+  }
+
+  .auth-page .auth-panel {
+    padding: 12px;
+  }
 }

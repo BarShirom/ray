@@ -1,4 +1,5 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
+import { localizeError } from "../../i18n/errors";
 import { http } from "../../api/http";
 import type { RootState } from "../../app/store";
 import { selectName, selectToken, selectUserId } from "../auth/authSelectors";
@@ -7,10 +8,16 @@ import type { Report, ReportType } from "./reportsSlice";
 const authHeader = (token: string | null) =>
   token ? { Authorization: `Bearer ${token}` } : undefined;
 
+// Preserve structured API errors until the localized frontend presentation boundary.
+async function reportRequest<T>(request: () => Promise<T>): Promise<T> {
+  try { return await request(); }
+  catch (error) { throw new Error(localizeError(error, "report")); }
+}
+
 export const fetchReports = createAsyncThunk<Report[]>(
   "reports/fetchAll",
   async () => {
-    const { data } = await http.get<Report[]>("/api/reports");
+    const { data } = await reportRequest(() => http.get<Report[]>("/api/reports"));
     return data;
   }
 );
@@ -29,9 +36,9 @@ export const createReport = createAsyncThunk<
   { state: RootState }
 >("reports/create", async (payload, { getState }) => {
   const token = selectToken(getState());
-  const { data } = await http.post<Report>("/api/reports", payload, {
+  const { data } = await reportRequest(() => http.post<Report>("/api/reports", payload, {
     headers: authHeader(token),
-  });
+  }));
   return data;
 });
 
@@ -45,11 +52,11 @@ export const claimReport = createAsyncThunk<
   const meId = selectUserId(state);
   const meName = selectName(state);
 
-  const { data } = await http.patch<Report>(
+  const { data } = await reportRequest(() => http.patch<Report>(
     `/api/reports/${reportId}/claim`,
     {},
     { headers: authHeader(token) }
-  );
+  ));
 
   const rawAssigned: unknown = (data as { assignedTo?: unknown }).assignedTo;
 
@@ -76,13 +83,13 @@ export const resolveReport = createAsyncThunk<
   { state: RootState }
 >("reports/resolve", async ({ reportId }, { getState }) => {
   const token = selectToken(getState());
-  const { data } = await http.patch<Report>(
+  const { data } = await reportRequest(() => http.patch<Report>(
     `/api/reports/${reportId}/resolve`,
     {},
     {
       headers: authHeader(token),
     }
-  );
+  ));
   return data;
 });
 
@@ -92,9 +99,9 @@ export const fetchUserStats = createAsyncThunk<
   { state: RootState }
 >("reports/fetchUserStats", async (_void, { getState }) => {
   const token = selectToken(getState());
-  const { data } = await http.get("/api/reports/stats/me", {
+  const { data } = await reportRequest(() => http.get("/api/reports/stats/me", {
     headers: authHeader(token),
-  });
+  }));
   return data as { total: number; resolved: number; inProgress: number };
 });
 
@@ -104,9 +111,9 @@ export const fetchMyReports = createAsyncThunk<
   { state: RootState }
 >("reports/fetchMyReports", async (_void, { getState }) => {
   const token = selectToken(getState());
-  const { data } = await http.get<Report[]>("/api/reports/me", {
+  const { data } = await reportRequest(() => http.get<Report[]>("/api/reports/me", {
     headers: authHeader(token),
-  });
+  }));
   return data;
 });
 
@@ -116,9 +123,9 @@ export const fetchGlobalStats = createAsyncThunk<
   { state: RootState }
 >("reports/fetchGlobalStats", async (_void, { getState }) => {
   const token = selectToken(getState());
-  const { data } = await http.get("/api/reports/stats", {
+  const { data } = await reportRequest(() => http.get("/api/reports/stats", {
     headers: authHeader(token),
-  });
+  }));
   return data as {
     total: number;
     resolved: number;

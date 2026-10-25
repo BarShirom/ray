@@ -1,22 +1,11 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
-import axios from "axios";
+import { localizeError } from "../../i18n/errors";
 import { http } from "../../api/http";
 import type { RootState } from "../../app/store";
 import { selectToken } from "../auth/authSelectors";
 import type { CreateFeedingLogData, FeedingLog } from "./types";
 
 type ThunkConfig = { state: RootState; rejectValue: string };
-
-function errorMessage(error: unknown, fallback: string): string {
-  if (!axios.isAxiosError<{
-    message?: string;
-    error?: string;
-    errors?: { field: string; message: string }[];
-  }>(error)) return fallback;
-  const body = error.response?.data;
-  return body?.errors?.map((issue) => issue.message).join("; ") ||
-    body?.message || body?.error || error.message || fallback;
-}
 
 export const fetchFeedingLogsForStation = createAsyncThunk<FeedingLog[], string, ThunkConfig>(
   "feedingLogs/fetchForStation",
@@ -27,7 +16,7 @@ export const fetchFeedingLogsForStation = createAsyncThunk<FeedingLog[], string,
       );
       return data;
     } catch (error) {
-      return rejectWithValue(errorMessage(error, "Could not load feeding history."));
+      return rejectWithValue(localizeError(error, "feeding"));
     }
   },
   { condition: (stationId, { getState }) => !getState().feedingLogs.byStationId[stationId]?.loading }
@@ -41,7 +30,7 @@ export const createFeedingLog = createAsyncThunk<
   "feedingLogs/create",
   async ({ stationId, data }, { getState, rejectWithValue }) => {
     const token = selectToken(getState());
-    if (!token) return rejectWithValue("Please log in to record a feeding.");
+    if (!token) return rejectWithValue(localizeError("Please log in to record a feeding.", "feeding"));
     const { fedAt, period, food, water, note } = data;
     try {
       const response = await http.post<FeedingLog>(
@@ -51,7 +40,7 @@ export const createFeedingLog = createAsyncThunk<
       );
       return response.data;
     } catch (error) {
-      return rejectWithValue(errorMessage(error, "Could not save this feeding. Please try again."));
+      return rejectWithValue(localizeError(error, "feeding"));
     }
   },
   { condition: ({ stationId }, { getState }) => !getState().feedingLogs.byStationId[stationId]?.submitting }

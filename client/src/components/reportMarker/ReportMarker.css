@@ -3,6 +3,8 @@
   font: inherit;
   color: var(--text);
   max-width: 260px;
+  text-align: start;
+  overflow-wrap: anywhere;
 }
 
 /* header */
@@ -19,11 +21,13 @@
 .popup-description {
   margin: 6px 0 10px;
   color: var(--text);
+  text-align: start;
 }
 
 /* link chips (Waze / Google) */
 .popup-links {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
 }

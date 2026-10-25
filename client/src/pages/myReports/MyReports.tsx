@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useAppDispatch } from "../../app/hooks";
 import { selectAllReports } from "../../features/reports/reportsSelectors";
@@ -6,6 +6,8 @@ import { selectUserId, selectToken } from "../../features/auth/authSelectors";
 import { resolveReport } from "../../features/reports/reportsThunks";
 import ReportCard from "../../components/reportCard/ReportCard";
 import type { Report, ReportStatus } from "../../features/reports/reportsSlice";
+import { t } from "../../i18n";
+import { localizeError } from "../../i18n/errors";
 import "./MyReports.css";
 
 type MaybeId = string | { _id?: string; id?: string } | null | undefined;
@@ -18,6 +20,7 @@ export default function MyReports() {
   const reports = useSelector(selectAllReports) as Report[];
   const userId = useSelector(selectUserId);
   const token = useSelector(selectToken) ?? null;
+  const [actionError, setActionError] = useState("");
 
   const mine = useMemo<Report[]>(() => {
     const list = reports.filter((r) => getId(r.assignedTo) === userId);
@@ -28,25 +31,27 @@ export default function MyReports() {
     });
   }, [reports, userId]);
 
-  const handlePrimary = (id: string, status: ReportStatus) => {
+  const handlePrimary = async (id: string, status: ReportStatus) => {
     if (!token) return;
     if (status === "resolved") return;
 
     const r = reports.find((x) => x._id === id);
     if (!r || getId(r.assignedTo) !== userId) return;
 
-    dispatch(resolveReport({ reportId: id }));
+    setActionError("");
+    try { await dispatch(resolveReport({ reportId: id })).unwrap(); }
+    catch (error) { setActionError(localizeError(error, "report")); }
   };
 
   return (
     <div className="panel myreports">
       <div className="list-header">
-        <span>My reports</span>
-        <span className="hint">{mine.length} total</span>
+        <h1>{t("reports.assignedTitle")}</h1>
+        <span className="hint">{t("reports.assignedCount", { count: mine.length })}</span>
       </div>
 
       {mine.length === 0 ? (
-        <div className="empty">No claimed reports yet.</div>
+        <div className="empty">{t("reports.assignedEmpty")}</div>
       ) : (
         <div className="report-list">
           {mine.map((r) => (
@@ -54,6 +59,7 @@ export default function MyReports() {
           ))}
         </div>
       )}
+      {actionError && <p role="alert">{actionError}</p>}
     </div>
   );
 }

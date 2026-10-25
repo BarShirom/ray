@@ -9,7 +9,7 @@
 
 /* header above the panel */
 .report-header{ margin-bottom: 12px; }
-.report-title{ margin: 0; font-size: 20px; font-weight: 600; letter-spacing: .2px; }
+.report-title{ margin: 0 0 16px; font-size: 20px; font-weight: 600; letter-spacing: .2px; }
 .report-sub{ margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 
 /* panel is already styled globally via .panel; add local spacing if needed */

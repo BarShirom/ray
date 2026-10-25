@@ -24,12 +24,16 @@ import { selectAllReports } from "../../features/reports/reportsSelectors";
 import { selectToken } from "../../features/auth/authSelectors";
 import ReportMarker from "../../components/reportMarker/ReportMarker";
 import ReportCard from "../../components/reportCard/ReportCard";
+import LocalizedMapControls from "../../components/mapPreview/LocalizedMapControls";
 import Legend from "../../components/legend/Legend";
 import type {
   Report,
   ReportType as TypeKey,
   ReportStatus as StatusKey,
 } from "../../features/reports/reportsSlice";
+import { t } from "../../i18n";
+import { localizeError } from "../../i18n/errors";
+import { reportTypeLabel, statusLabel } from "../../i18n/formatters";
 import "./MapPage.css";
 
 type LegendKey = TypeKey | StatusKey;
@@ -74,6 +78,17 @@ export default function MapPage() {
   const [pickingLocation, setPickingLocation] = useState(false);
   const [creationLocation, setCreationLocation] = useState<FeedingStation["location"] | null>(null);
   const [createdStation, setCreatedStation] = useState<FeedingStation | null>(null);
+  const [reportsError, setReportsError] = useState("");
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [actionError, setActionError] = useState("");
+
+  const loadReports = useCallback(async () => {
+    setReportsError("");
+    setReportsLoading(true);
+    try { await dispatch(fetchReports()).unwrap(); }
+    catch (error) { setReportsError(localizeError(error, "report")); }
+    finally { setReportsLoading(false); }
+  }, [dispatch]);
 
   const cancelCreation = () => {
     setCreationMode(false);
@@ -91,8 +106,8 @@ export default function MapPage() {
 
   useEffect(() => {
     dispatch(fetchFeedingStations());
-    dispatch(fetchReports());
-  }, [dispatch]);
+    void loadReports();
+  }, [dispatch, loadReports]);
 
   const onTypeChange = useCallback(
     (t: TypeKey) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,33 +159,33 @@ export default function MapPage() {
       ? centerSource[centerSource.length - 1].location
       : defaultCenter);
 
-  const onPrimary = (id: string, status: StatusKey) => {
+  const onPrimary = async (id: string, status: StatusKey) => {
     if (!token) return;
-    if (status === "new") {
-      dispatch(claimReport({ reportId: id }));
-    } else if (status === "in-progress") {
-      dispatch(resolveReport({ reportId: id }));
-    }
+    setActionError("");
+    try {
+      if (status === "new") await dispatch(claimReport({ reportId: id })).unwrap();
+      else if (status === "in-progress") await dispatch(resolveReport({ reportId: id })).unwrap();
+    } catch (error) { setActionError(localizeError(error, "report")); }
   };
 
   return (
     <div className="map-layout">
       <aside className="panel side-left">
         <div className="feeding-stations-summary">
-          <div className="section-title">Feeding stations</div>
-          <p>Purple cat markers show community-cat feeding stations.</p>
-          {stationsLoading && <p role="status">Loading feeding stations...</p>}
+          <div className="section-title">{t("map.stations")}</div>
+          <p>{t("map.stationMarkers")}</p>
+          {stationsLoading && <p role="status">{t("map.loadingStations")}</p>}
           {stationsError && (
             <div role="alert">
-              <p>Could not load feeding stations: {stationsError}</p>
-              <button type="button" onClick={() => dispatch(fetchFeedingStations())}>Retry</button>
+              <p>{localizeError(stationsError, "station")}</p>
+              <button type="button" onClick={() => dispatch(fetchFeedingStations())}>{t("map.retry")}</button>
             </div>
           )}
           {!stationsLoading && !stationsError && (
-            <p role="status">{stations.length ? `${stations.length} feeding stations on the map` : "No feeding stations yet."}</p>
+            <p role="status">{t("map.stationCount", { count: stations.length })}</p>
           )}
         </div>
-        <div className="section-title">Report filters</div>
+        <div className="section-title">{t("map.reportFilters")}</div>
 
         <div className="filters" style={{ marginBottom: 10 }}>
           <label>
@@ -179,7 +194,7 @@ export default function MapPage() {
               checked={activeTypes.has("emergency")}
               onChange={onTypeChange("emergency")}
             />{" "}
-            Emergency
+            {reportTypeLabel("emergency")}
           </label>
           <label>
             <input
@@ -187,7 +202,7 @@ export default function MapPage() {
               checked={activeTypes.has("food")}
               onChange={onTypeChange("food")}
             />{" "}
-            Food
+            {reportTypeLabel("food")}
           </label>
           <label>
             <input
@@ -195,12 +210,12 @@ export default function MapPage() {
               checked={activeTypes.has("general")}
               onChange={onTypeChange("general")}
             />{" "}
-            General
+            {reportTypeLabel("general")}
           </label>
         </div>
 
         <div className="legend-title" style={{ marginTop: 6 }}>
-          Status
+          {t("map.status")}
         </div>
         <div className="filters">
           <label>
@@ -209,7 +224,7 @@ export default function MapPage() {
               checked={activeStatuses.has("new")}
               onChange={onStatusChange("new")}
             />{" "}
-            New
+            {statusLabel("new")}
           </label>
           <label>
             <input
@@ -217,7 +232,7 @@ export default function MapPage() {
               checked={activeStatuses.has("in-progress")}
               onChange={onStatusChange("in-progress")}
             />{" "}
-            In progress
+            {statusLabel("in-progress")}
           </label>
           <label>
             <input
@@ -225,7 +240,7 @@ export default function MapPage() {
               checked={activeStatuses.has("resolved")}
               onChange={onStatusChange("resolved")}
             />{" "}
-            Resolved
+            {statusLabel("resolved")}
           </label>
         </div>
 
@@ -237,21 +252,22 @@ export default function MapPage() {
       <section className="panel map-center">
         <div className="station-map-toolbar">
           {creationMode && token ? (
-            <><p role="status">{pickingLocation ? "Click or tap a point on the map for your station." : "Station location selected."}</p>
-              <button className="btn" type="button" onClick={cancelCreation}>Cancel station creation</button></>
+            <><p role="status">{t(pickingLocation ? "map.chooseStationLocation" : "map.stationLocationSelected")}</p>
+              <button className="btn" type="button" onClick={cancelCreation}>{t("map.cancelCreation")}</button></>
           ) : token ? (
             <button className="btn btn-brand" type="button" onClick={() => {
               dispatch(clearStationCreateError());
               setCreatedStation(null);
               setCreationMode(true);
               setPickingLocation(true);
-            }}>Add Feeding Station</button>
-          ) : <p><Link to="/login">Log in</Link> or <Link to="/register">sign up</Link> to add a feeding station.</p>}
-          {createdStation && <p role="status">Created {createdStation.name}. <button className="btn" type="button" onClick={() => setSelectedStation(createdStation)}>View station</button></p>}
+            }}>{t("map.addStation")}</button>
+          ) : <div><p>{t("map.stationSignInRequired")}</p><div className="station-auth-links"><Link to="/login">{t("map.login")}</Link><Link to="/register">{t("map.register")}</Link></div></div>}
+          {createdStation && <p role="status">{t("map.createdStation")} <bdi>{createdStation.name}</bdi> <button className="btn" type="button" onClick={() => setSelectedStation(createdStation)}>{t("map.viewStation")}</button></p>}
         </div>
         <MapContainer
           center={[center.lat, center.lng]}
           zoom={13}
+          zoomControl={false}
           scrollWheelZoom
           className="leaflet-root"
         >
@@ -260,6 +276,7 @@ export default function MapPage() {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <StationViewport stations={stations} />
+          <LocalizedMapControls />
           {creationMode && token && <StationLocationPicker enabled={pickingLocation} location={creationLocation} onSelect={(location) => {
             setCreationLocation(location);
             setPickingLocation(false);
@@ -275,8 +292,12 @@ export default function MapPage() {
 
       <aside className="panel side-right">
         <div className="list-header">
-          <span>Nearby reports</span>
+          <span>{t("map.reports")}</span>
         </div>
+        {reportsLoading && <p role="status">{t("map.loadingReports")}</p>}
+        {reportsError && <div role="alert"><p>{reportsError}</p><button type="button" onClick={() => void loadReports()}>{t("map.retry")}</button></div>}
+        {actionError && <p role="alert">{actionError}</p>}
+        {!reportsLoading && !reportsError && !filteredReports.length && <p>{t("map.noReports")}</p>}
         <div className="report-list">
           {filteredReports.map((r) => (
             <ReportCard key={r._id} report={r} onPrimary={onPrimary} />

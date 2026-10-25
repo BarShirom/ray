@@ -55,6 +55,7 @@ textarea.control{ min-height: 120px; resize: vertical; }
   background: color-mix(in oklab, var(--brand) 10%, transparent);
   border-color: color-mix(in oklab, var(--brand) 40%, var(--border));
 }
+.chip:focus-within{ outline:2px solid var(--brand); outline-offset:3px; }
 /* Visually hidden but accessible radios */
 .sr-only{
   position:absolute !important;
@@ -65,7 +66,7 @@ textarea.control{ min-height: 120px; resize: vertical; }
 
 /* Media */
 .media-summary{
-  display:flex; align-items:center; justify-content:space-between;
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
   gap: 8px; margin-top: 6px;
 }
 .media-grid{

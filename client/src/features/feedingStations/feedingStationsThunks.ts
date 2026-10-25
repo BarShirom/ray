@@ -1,5 +1,5 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
-import axios from "axios";
+import { localizeError } from "../../i18n/errors";
 import { http } from "../../api/http";
 import type { RootState } from "../../app/store";
 import type { CreateFeedingStationData, FeedingStation } from "./types";
@@ -17,10 +17,7 @@ export const fetchFeedingStations = createAsyncThunk<
       const { data } = await http.get<FeedingStation[]>("/api/feeding-stations");
       return data;
     } catch (error) {
-      const message = axios.isAxiosError<{ message?: string }>(error)
-        ? error.response?.data?.message ?? error.message
-        : "Failed to load feeding stations";
-      return rejectWithValue(message);
+      return rejectWithValue(localizeError(error, "station"));
     }
   },
   { condition: (_, { getState }) => !getState().feedingStations.loading }
@@ -34,9 +31,9 @@ export const createFeedingStation = createAsyncThunk<
   "feedingStations/create",
   async (data, { getState, rejectWithValue }) => {
     const token = selectToken(getState());
-    if (!token) return rejectWithValue("Please log in to add a feeding station.");
+    if (!token) return rejectWithValue(localizeError("Please log in to add a feeding station.", "station"));
     const validationError = validateStationCreation(data);
-    if (validationError) return rejectWithValue(validationError);
+    if (validationError) return rejectWithValue(localizeError(validationError, "station"));
     const { name, location, estimatedCats, estimatedKittens, image, notes, imageAssetId } = data;
     try {
       const response = await http.post<FeedingStation>("/api/feeding-stations", {
@@ -47,12 +44,7 @@ export const createFeedingStation = createAsyncThunk<
       }, { headers: { Authorization: `Bearer ${token}` } });
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError<{ message?: string; error?: string; errors?: { field: string; message: string }[] }>(error)) {
-        const body = error.response?.data;
-        return rejectWithValue(body?.errors?.map((issue) => `${issue.field}: ${issue.message}`).join("; ") ||
-          body?.message || body?.error || error.message);
-      }
-      return rejectWithValue("Could not create the station. Please try again.");
+      return rejectWithValue(localizeError(error, "station"));
     }
   },
   { condition: (_, { getState }) => !getState().feedingStations.creating }

@@ -2,8 +2,6 @@
 
 /* Vendor CSS */
 @import 'leaflet/dist/leaflet.css';
-/* Font (same feel as the screenshot) */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
 /* ---------- Design tokens ---------- */
 :root{
@@ -26,8 +24,21 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  font-family: system-ui, -apple-system, "Segoe UI", Arial, "Noto Sans Hebrew", sans-serif;
+  line-height: 1.55;
+  text-align: start;
 }
+
+*, *::before, *::after { box-sizing: border-box; }
+input, textarea, button, select { font: inherit; }
+input, textarea, select { min-width: 0; max-width: 100%; }
+button, a, input, textarea, select { scroll-margin-block: 1rem; }
+:focus-visible { outline: 3px solid var(--brand-900); outline-offset: 3px; }
+bdi { overflow-wrap: anywhere; }
+.leaflet-container { font-family: inherit; }
+.leaflet-popup-content { text-align: start; overflow-wrap: anywhere; }
+.leaflet-popup-content-wrapper { direction: inherit; }
+.leaflet-control-zoom { direction: ltr; }
 
 /* IMPORTANT: don’t constrain the whole app */
 #root {

@@ -8,14 +8,22 @@ require.extensions['.ts'] = (module, filename) => {
   module._compile(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText,filename);
 };
 const { uploadImages, validateImages, mediaEnabled }=require('../src/api/media.ts');
+const { t: translate }=require('../src/i18n/index.ts');
+const { localizeError }=require('../src/i18n/errors.ts');
 const file=()=>new File(['SYNTHETIC image bytes; validation occurs on server'],'synthetic.png',{type:'image/png'});
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
 const permission=id=>({assetId:id,url:'https://synthetic-s3.invalid/'+id,headers:{'content-type':'image/png','if-none-match':'*','x-amz-checksum-sha256':'synthetic'},uploadExpiresAt:new Date(Date.now()+300000).toISOString()});
 test('image limits and signed-in requirement reject before requests',async t=>{
   t.mock.method(global,'fetch',()=>assert.fail('No request allowed'));
   for(const f of [new File(['a'],'x.gif',{type:'image/gif'}),new File([],'x.png',{type:'image/png'}),new File([new Uint8Array(8388609)],'x.png',{type:'image/png'})])assert.throws(()=>validateImages([f],'report'));
+  assert.doesNotThrow(()=>validateImages([new File([new Uint8Array(8*1024*1024)],'exact-8-mib.png',{type:'image/png'})],'station'),'the existing 8 MiB boundary remains allowed');
+  assert.doesNotThrow(()=>validateImages([file(),file(),file()],'report'),'the existing three-image report limit remains allowed');
   assert.throws(()=>validateImages([file(),file()],'station'));assert.throws(()=>validateImages(Array.from({length:4},file),'report'));
-  await assert.rejects(uploadImages([file()],'report',null,new WeakMap(),()=>{}),/Sign in/);
+  await assert.rejects(uploadImages([file()],'report',null,new WeakMap(),()=>{}),error=>{
+    assert.match(error.message,/Sign in/);
+    assert.equal(localizeError(error,'upload'),translate('errors.uploadSignIn'));
+    return true;
+  });
 });
 test('capability fails closed for unavailable/disabled server',async t=>{
   let result=json({enabled:false});t.mock.method(global,'fetch',async()=>result);
@@ -30,7 +38,14 @@ test('raw File PUT has signed headers and no Ray token; IDs returned only after 
     if(url.startsWith('https://')){assert.equal(options.method,'PUT');assert.equal(options.body,selected);assert.equal(options.credentials,'omit');assert.equal(options.headers.Authorization,undefined);assert.equal(options.headers['content-length'],undefined);return new Response(null,{status:200});}
     return json({assetId:'synthetic-id',state:'ready'});
   });
-  assert.deepEqual(await uploadImages([selected],'station','synthetic-token',cache,s=>steps.push(s)),['synthetic-id']);assert.equal(calls.length,3);assert.ok(steps.some(s=>s.includes('Uploading')));assert.ok(steps.some(s=>s.includes('Verifying')));
+  assert.deepEqual(await uploadImages([selected],'station','synthetic-token',cache,s=>steps.push(s)),['synthetic-id']);assert.equal(calls.length,3);
+  assert.deepEqual(steps,[
+    translate('media.preparing',{current:'1',total:'1'}),
+    translate('media.uploading',{current:'1',total:'1'}),
+    translate('media.verifying',{current:'1',total:'1'}),
+    translate('media.saving'),
+  ]);
+  assert.ok(steps.every(step=>/[\u0590-\u05ff]/u.test(step)),'every visible progress message is Hebrew');
   await uploadImages([selected],'station','synthetic-token',cache,()=>{});assert.equal(calls.length,3,'retry parent submission reuses ready asset');
 });
 test('uncertain upload retry accepts 412 only after server validation; failed completion can retry',async t=>{
@@ -41,13 +56,25 @@ test('uncertain upload retry accepts 412 only after server validation; failed co
     completes++;return completes===1?json({message:'Retry verification'},503):json({state:'ready'});
   });
   await assert.rejects(uploadImages([selected],'station','token',cache,()=>{}),/transfer failed/);
-  await assert.rejects(uploadImages([selected],'station','token',cache,()=>{}),/Retry verification/);
+  await assert.rejects(uploadImages([selected],'station','token',cache,()=>{}),error=>{
+    assert.equal(error.response.status,503);
+    assert.equal(error.response.data.message,'Retry verification');
+    assert.doesNotMatch(error.message,/Retry verification/,'raw backend text is retained only as structured error data');
+    assert.equal(localizeError(error,'upload'),translate('errors.server'));
+    return true;
+  });
   assert.deepEqual(await uploadImages([selected],'station','token',cache,()=>{}),['id']);assert.equal(uploads,1);assert.equal(puts,2);assert.equal(completes,2);
 });
 test('report partial progress persists in memory and a changed account cannot reuse assets',async t=>{
   const selected=[file(),file()],cache=new WeakMap();let intents=0,completes=0,fail=true;
   t.mock.method(global,'fetch',async(url)=>{if(url.endsWith('/uploads'))return json(permission('id-'+(++intents)),201);if(url.startsWith('https://'))return new Response(null,{status:200});completes++;if(completes===2&&fail)return json({message:'Busy'},429);return json({state:'ready'});});
-  await assert.rejects(uploadImages(selected,'report','user-a',cache,()=>{}),/Busy/);fail=false;
+  await assert.rejects(uploadImages(selected,'report','user-a',cache,()=>{}),error=>{
+    assert.equal(error.response.status,429);
+    assert.equal(error.response.data.message,'Busy');
+    assert.doesNotMatch(error.message,/Busy/);
+    assert.equal(localizeError(error,'upload'),translate('errors.uploadBusy'));
+    return true;
+  });fail=false;
   assert.deepEqual(await uploadImages(selected,'report','user-a',cache,()=>{}),['id-1','id-2']);assert.equal(intents,2);assert.equal(completes,3);
   await uploadImages([selected[0]],'report','user-b',cache,()=>{});assert.equal(intents,3);
 });

@@ -1,4 +1,6 @@
 import "./Legend.css";
+import { t } from "../../i18n";
+import { formatNumber, reportTypeLabel, statusLabel } from "../../i18n/formatters";
 
 type LegendKey =
   | "emergency"
@@ -61,7 +63,7 @@ export default function Legend({
         <span className={`dot ${dot}`} />
         <span className="legend-label">{label}</span>
         {counts?.[keyName] != null && (
-          <span className="legend-count">{counts[keyName]}</span>
+          <span className="legend-count">{formatNumber(counts[keyName]!)}</span>
         )}
       </div>
     );
@@ -73,14 +75,14 @@ export default function Legend({
         row ? "legend--row" : ""
       }`}
     >
-      <div className="legend-title">Legend</div>
+      <div className="legend-title">{t("legend.title")}</div>
       <div className="legend-grid">
-        <Item keyName="emergency" dot="dot--red" label="Emergency" />
-        <Item keyName="food" dot="dot--green" label="Food" />
-        <Item keyName="general" dot="dot--yellow" label="General" />
+        <Item keyName="emergency" dot="dot--red" label={reportTypeLabel("emergency")} />
+        <Item keyName="food" dot="dot--green" label={reportTypeLabel("food")} />
+        <Item keyName="general" dot="dot--yellow" label={reportTypeLabel("general")} />
 
-        <Item keyName="in-progress" dot="dot--blue" label="In progress" />
-        <Item keyName="resolved" dot="dot--gray" label="Resolved" />
+        <Item keyName="in-progress" dot="dot--blue" label={statusLabel("in-progress")} />
+        <Item keyName="resolved" dot="dot--gray" label={statusLabel("resolved")} />
       </div>
     </div>
   );

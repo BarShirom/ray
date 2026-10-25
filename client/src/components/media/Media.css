@@ -1,0 +1,17 @@
+.media-file-preview {
+  margin: 12px 0;
+  min-width: 0;
+  max-width: 100%;
+}
+.media-file-preview figcaption {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: .875rem;
+}
+.media-file-preview video {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+}
+.media-unavailable { display: grid; gap: 8px; max-width: 100%; }
+.media-unavailable .btn { white-space: normal; overflow-wrap: anywhere; }

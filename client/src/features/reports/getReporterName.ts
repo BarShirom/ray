@@ -1,4 +1,5 @@
 import type { Report } from "./reportsSlice";
+import { t } from "../../i18n";
 
 type Opts = { currentUserId?: string; currentUserName?: string };
 
@@ -10,7 +11,7 @@ export function getReporterName(r: Report, opts?: Opts): string {
 
   if (createdById) {
     if (opts?.currentUserId && createdById === opts.currentUserId) {
-      return opts.currentUserName ?? "You";
+      return opts.currentUserName ?? t("reports.you");
     }
     if (typeof r.createdBy === "object" && r.createdBy) {
       if (r.createdBy.name) return r.createdBy.name;
@@ -21,5 +22,5 @@ export function getReporterName(r: Report, opts?: Opts): string {
     }
   }
 
-  return "Guest";
+  return t("reports.guest");
 }

@@ -1,7 +1,7 @@
 import { MediaImage } from "../media/Media";
 import { Marker, Popup } from "react-leaflet";
 import L from "leaflet";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { useAppDispatch } from "../../app/hooks";
 import type { Report } from "../../features/reports/reportsSlice";
@@ -12,6 +12,10 @@ import {
 import { selectToken, selectUserId } from "../../features/auth/authSelectors";
 import { getReporterName } from "../../features/reports/getReporterName";
 import { getAssigneeName } from "../../features/reports/getAssigneeName";
+import { t } from "../../i18n";
+import { formatDateTime, formatNumber, reportTypeLabel, statusLabel } from "../../i18n/formatters";
+import { localizeError } from "../../i18n/errors";
+import { localizePopupClose } from "../mapPreview/mapAccessibility";
 import "./ReportMarker.css";
 
 const emojiForType = (type: Report["type"]) =>
@@ -22,8 +26,6 @@ const emojiForType = (type: Report["type"]) =>
     : type === "general"
     ? "🐱"
     : "📍";
-
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 type Assigned = string | { _id?: string; id?: string } | null | undefined;
 const assignedToId = (assigned: Assigned) => {
@@ -79,6 +81,7 @@ export default function ReportMarker({ report }: { report: Report }) {
   const token = useSelector(selectToken);
   const userId = useSelector(selectUserId);
   const isLoggedIn = !!token;
+  const [actionError, setActionError] = useState("");
 
   const icon = useMemo(
     () => buildIcon(report.type, report.status),
@@ -90,12 +93,20 @@ export default function ReportMarker({ report }: { report: Report }) {
     report.status === "in-progress" &&
     assignedToId(report.assignedTo) === userId;
 
-  const handleClaim = () => {
-    if (isLoggedIn) dispatch(claimReport({ reportId: report._id }));
+  const handleClaim = async () => {
+    setActionError("");
+    if (isLoggedIn) {
+      try { await dispatch(claimReport({ reportId: report._id })).unwrap(); }
+      catch (error) { setActionError(localizeError(error, "report")); }
+    }
   };
 
-  const handleResolve = () => {
-    if (isLoggedIn) dispatch(resolveReport({ reportId: report._id }));
+  const handleResolve = async () => {
+    setActionError("");
+    if (isLoggedIn) {
+      try { await dispatch(resolveReport({ reportId: report._id })).unwrap(); }
+      catch (error) { setActionError(localizeError(error, "report")); }
+    }
   };
 
   const showClaim = isLoggedIn && report.status === "new";
@@ -105,19 +116,22 @@ export default function ReportMarker({ report }: { report: Report }) {
   const assigneeName = getAssigneeName(report);
 
   return (
-    <Marker position={[report.location.lat, report.location.lng]} icon={icon}>
+    <Marker position={[report.location.lat, report.location.lng]} icon={icon}
+      title={t("map.reportMarker", { type: reportTypeLabel(report.type) })}
+      alt={t("map.reportMarker", { type: reportTypeLabel(report.type) })}
+      eventHandlers={{ popupopen: (event) => localizePopupClose(event.popup) }}>
       <Popup>
         <div
           className="popup-content"
           role="dialog"
-          aria-label="Report details"
+          aria-label={t("reports.details")}
         >
           <div className="popup-header">
             <span className="popup-emoji">{emojiForType(report.type)}</span>
-            <strong className="popup-title">{capitalize(report.type)}</strong>
+            <strong className="popup-title">{reportTypeLabel(report.type)}</strong>
           </div>
 
-          <p className="popup-description">{report.description}</p>
+          <p className="popup-description" dir="auto">{report.description}</p>
 
           <div className="popup-links">
             <a
@@ -126,7 +140,7 @@ export default function ReportMarker({ report }: { report: Report }) {
               rel="noopener noreferrer"
               className="chip-link"
             >
-              📍 Waze
+              📍 {t("reports.waze")}
             </a>
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${report.location.lat},${report.location.lng}`}
@@ -134,25 +148,25 @@ export default function ReportMarker({ report }: { report: Report }) {
               rel="noopener noreferrer"
               className="chip-link"
             >
-              🗺️ Google Maps
+              🗺️ {t("reports.googleMaps")}
             </a>
           </div>
 
           <div className="popup-meta">
             <div>
-              <strong>Status:</strong> {capitalize(report.status)}
+              <strong>{t("reports.status")}</strong> {statusLabel(report.status)}
             </div>
             <div>
-              <strong>Time:</strong>{" "}
-              {new Date(report.createdAt).toLocaleString()}
+              <strong>{t("reports.time")}</strong>{" "}
+              <time dateTime={Number.isNaN(Date.parse(report.createdAt)) ? undefined : report.createdAt}>{formatDateTime(report.createdAt)}</time>
             </div>
             <div>
-              <strong>Reporter:</strong> {reporterName}
+              <strong>{t("reports.reporter")}</strong> <bdi>{reporterName}</bdi>
             </div>
             {(report.status === "in-progress" ||
               report.status === "resolved") && (
               <div>
-                <strong>Assigned to:</strong> {assigneeName}
+                <strong>{t("reports.assignee")}</strong> <bdi>{assigneeName}</bdi>
               </div>
             )}
           </div>
@@ -165,13 +179,13 @@ export default function ReportMarker({ report }: { report: Report }) {
                   <MediaImage
                     key={idx}
                     src={url}
-                    alt={`Report media ${idx + 1}`}
+                    alt={t("reports.mediaAlt", { number: formatNumber(idx + 1) })}
                     className="popup-image"
                   />
                 ) : (
                   <video key={idx} controls playsInline className="popup-video">
                     <source src={url} />
-                    Your browser does not support the video tag.
+                    {t("reports.videoUnsupported")}
                   </video>
                 );
               })}
@@ -182,16 +196,17 @@ export default function ReportMarker({ report }: { report: Report }) {
             <div className="popup-actions">
               {showClaim && (
                 <button className="btn btn-brand" onClick={handleClaim}>
-                  Claim
+                  {t("reports.claim")}
                 </button>
               )}
               {showResolve && (
                 <button className="btn btn-brand" onClick={handleResolve}>
-                  Mark as Resolved
+                  {t("reports.resolve")}
                 </button>
               )}
             </div>
           )}
+          {actionError && <p role="alert">{actionError}</p>}
         </div>
       </Popup>
     </Marker>

@@ -1,25 +1,22 @@
-import { useState } from "react";
+﻿import { useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import "./Register.css";
 import { useAppDispatch } from "../../app/hooks";
 import { registerUser } from "../../features/auth/authThunks";
+import { t } from "../../i18n";
+import { localizeError } from "../../i18n/errors";
+
+type FieldErrors = Partial<Record<"firstName" | "lastName" | "email" | "password", string>>;
 
 export default function Register() {
-  console.log("Register mounted");
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    password: "",
-    company: "",
-  });
-
+  const formRef = useRef<HTMLFormElement>(null);
+  const [formData, setFormData] = useState({ firstName: "", lastName: "", email: "", password: "", company: "" });
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((s) => ({ ...s, [e.target.name]: e.target.value }));
@@ -27,26 +24,27 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError(null);
-
-    if (formData.password.length < 6) {
-      setError("Password should be at least 6 characters.");
+    const emailInput = formRef.current?.elements.namedItem("email") as HTMLInputElement | null;
+    const errors: FieldErrors = {
+      firstName: !formData.firstName ? t("auth.firstNameRequired") : undefined,
+      lastName: !formData.lastName ? t("auth.lastNameRequired") : undefined,
+      email: !formData.email ? t("auth.emailRequired") : emailInput?.validity.typeMismatch ? t("auth.emailInvalid") : undefined,
+      password: !formData.password ? t("auth.passwordRequired") : formData.password.length < 6 ? t("auth.passwordTooShort") : undefined,
+    };
+    setFieldErrors(errors);
+    const firstInvalid = (Object.keys(errors) as (keyof FieldErrors)[]).find((key) => errors[key]);
+    if (firstInvalid) {
+      (formRef.current?.elements.namedItem(firstInvalid) as HTMLInputElement | null)?.focus();
       return;
     }
-
     setLoading(true);
     try {
-      // unwrap throws if rejected — simpler error handling
       await dispatch(registerUser(formData)).unwrap();
       navigate("/map-page");
     } catch (err: unknown) {
-     const message =
-       err instanceof Error
-         ? err.message
-         : typeof err === "string"
-         ? err
-         : "Registration failed. Please try again.";
-     setError(message);
+      setError(localizeError(err, "register"));
     } finally {
       setLoading(false);
     }
@@ -54,119 +52,111 @@ export default function Register() {
 
   return (
     <div className="auth-page">
- 
-
-      <section className="panel auth-panel">
-        {error && <div className="alert">{error}</div>}
-
-        <form className="auth-form" onSubmit={handleSubmit}>
+      <section className="panel auth-panel" aria-labelledby="register-title">
+        <h1 id="register-title" className="auth-title">{t("auth.register")}</h1>
+        {error && <div className="alert" role="alert">{error}</div>}
+        <form ref={formRef} className="auth-form" onSubmit={handleSubmit} noValidate>
           <div className="field">
-            <label htmlFor="firstName" className="label">
-              First name
-            </label>
+            <label htmlFor="firstName" className="label">{t("auth.firstName")}</label>
             <input
               id="firstName"
               name="firstName"
+              dir="auto"
               className="control"
               value={formData.firstName}
               onChange={handleChange}
               autoComplete="given-name"
+              aria-invalid={Boolean(fieldErrors.firstName)}
+              aria-describedby={fieldErrors.firstName ? "firstName-error" : undefined}
               required
             />
+            {fieldErrors.firstName && <p id="firstName-error" className="field-error" role="alert">{fieldErrors.firstName}</p>}
           </div>
-
           <div className="field">
-            <label htmlFor="lastName" className="label">
-              Last name
-            </label>
+            <label htmlFor="lastName" className="label">{t("auth.lastName")}</label>
             <input
               id="lastName"
               name="lastName"
+              dir="auto"
               className="control"
               value={formData.lastName}
               onChange={handleChange}
               autoComplete="family-name"
+              aria-invalid={Boolean(fieldErrors.lastName)}
+              aria-describedby={fieldErrors.lastName ? "lastName-error" : undefined}
               required
             />
+            {fieldErrors.lastName && <p id="lastName-error" className="field-error" role="alert">{fieldErrors.lastName}</p>}
           </div>
-
           <div className="field">
-            <label htmlFor="email" className="label">
-              Email
-            </label>
+            <label htmlFor="email" className="label">{t("auth.email")}</label>
             <input
               id="email"
               name="email"
               type="email"
+              dir="ltr"
               className="control"
               value={formData.email}
               onChange={handleChange}
               autoComplete="email"
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? "email-error" : undefined}
               required
             />
+            {fieldErrors.email && <p id="email-error" className="field-error" role="alert">{fieldErrors.email}</p>}
           </div>
-
           <div className="field">
-            <label htmlFor="password" className="label">
-              Password
-            </label>
+            <label htmlFor="password" className="label">{t("auth.password")}</label>
             <div className="input-with-button">
               <input
                 id="password"
                 name="password"
                 type={showPw ? "text" : "password"}
+                dir="auto"
                 className="control"
                 value={formData.password}
                 onChange={handleChange}
                 autoComplete="new-password"
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={fieldErrors.password ? "password-error password-hint" : "password-hint"}
                 required
               />
               <button
                 type="button"
                 className="reveal"
                 onClick={() => setShowPw((s) => !s)}
-                aria-label={showPw ? "Hide password" : "Show password"}
+                aria-label={showPw ? t("auth.hidePassword") : t("auth.showPassword")}
+                aria-pressed={showPw}
               >
-                {showPw ? "Hide" : "Show"}
+                {showPw ? t("auth.hide") : t("auth.show")}
               </button>
             </div>
-            <p className="hint">Minimum 6 characters.</p>
+            {fieldErrors.password && <p id="password-error" className="field-error" role="alert">{fieldErrors.password}</p>}
+            <p id="password-hint" className="hint">{t("auth.passwordHint")}</p>
           </div>
-
           <div className="field">
-            <label htmlFor="company" className="label">
-              Company (optional)
-            </label>
+            <label htmlFor="company" className="label">{t("auth.company")}</label>
             <input
               id="company"
               name="company"
+              dir="auto"
               className="control"
               value={formData.company}
               onChange={handleChange}
               autoComplete="organization"
             />
           </div>
-
           <div className="actions">
-       
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={loading}
-            >
-              {loading ? "Creating..." : "Create account"}
+            <button type="submit" className="btn btn-primary" disabled={loading}>
+              {loading ? t("auth.creatingAccount") : t("auth.createAccount")}
             </button>
           </div>
-
           <p className="hint">
-            Already have an account?{" "}
-            <Link to="/login" className="link">
-              Log in
-            </Link>
+            {t("auth.existingAccount")}{" "}
+            <Link to="/login" className="link">{t("auth.login")}</Link>
           </p>
         </form>
       </section>
     </div>
   );
 }
-

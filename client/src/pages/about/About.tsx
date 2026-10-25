@@ -1,8 +1,6 @@
 
-const About = () => {
-  return (
-    <div>About</div>
-  )
-}
+import { t } from "../../i18n";
 
-export default About
+const About = () => <h1>{t("about.title")}</h1>;
+
+export default About;

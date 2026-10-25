@@ -5,6 +5,8 @@ import { selectToken, selectUserId } from "../../features/auth/authSelectors";
 import type { Report } from "../../features/reports/reportsSlice";
 import { getReporterName } from "../../features/reports/getReporterName";
 import { getAssigneeName } from "../../features/reports/getAssigneeName";
+import { t } from "../../i18n";
+import { formatDateTime, formatNumber, reportTypeLabel, statusLabel } from "../../i18n/formatters";
 
 const assignedToId = (
   assigned: { _id?: string; id?: string } | string | null | undefined
@@ -41,10 +43,10 @@ export default function ReportCard({
 
   const primaryLabel =
     report.status === "new"
-      ? "Claim"
+      ? t("reports.claim")
       : report.status === "in-progress"
-      ? "Resolve"
-      : "View";
+      ? t("reports.resolve")
+      : t("reports.view");
 
   const showClaim = isLoggedIn && report.status === "new";
   const showResolve =
@@ -61,29 +63,29 @@ export default function ReportCard({
   return (
     <div className="card">
       <div className="card__meta">
-        <span className={typeClass}>{report.type}</span>
-        <span className={statusClass}>{report.status}</span>
+        <span className={typeClass}>{reportTypeLabel(report.type)}</span>
+        <span className={statusClass}>{statusLabel(report.status)}</span>
         <span className="card__spacer">
           {typeof report.distanceKm === "number"
-            ? `${report.distanceKm.toFixed(1)} km`
-            : ""}
-          {`  •  ${new Date(report.createdAt).toLocaleString()}`}
+            ? <span>{t("reports.distance", { distance: formatNumber(Math.round(report.distanceKm * 10) / 10) })} · </span>
+            : null}
+          <time dateTime={Number.isNaN(Date.parse(report.createdAt)) ? undefined : report.createdAt}>{formatDateTime(report.createdAt)}</time>
         </span>
       </div>
 
       <div className="card__row">
         <div>
-          <div className="card__title">{report.description}</div>
-          <div className="card__media">{report.media?.filter(url => typeof url === "string" && url.startsWith("http://127.0.0.1:4001/api/media/")).map((url, index) => <MediaImage key={url} src={url} alt={`Report image ${index + 1}`} />)}</div>
+          <div className="card__title" dir="auto">{report.description}</div>
+          <div className="card__media">{report.media?.filter(url => typeof url === "string" && url.startsWith("http://127.0.0.1:4001/api/media/")).map((url, index) => <MediaImage key={url} src={url} alt={t("reports.imageAlt", { number: formatNumber(index + 1) })} />)}</div>
 
           <div className="card__sub">
-            Reporter: <b>{reporterName}</b>
+            {t("reports.reporter")} <b><bdi>{reporterName}</bdi></b>
           </div>
 
           {(report.status === "in-progress" ||
             report.status === "resolved") && (
             <div className="card__sub">
-              Assigned to: <b>{assigneeName}</b>
+              {t("reports.assignee")} <b><bdi>{assigneeName}</bdi></b>
             </div>
           )}
         </div>

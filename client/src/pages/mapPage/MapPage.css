@@ -16,16 +16,20 @@
   display:flex; flex-direction:column;
 }
 .side-left, .side-right{
+  min-width: 0;
   height: var(--map-h);
   overflow: auto;
   overscroll-behavior: contain;     /* NEW: prevents bounce stealing scroll */
 }
+.side-left > * { flex-shrink: 0; }
 
 /* Map area */
-.map-center{ padding:12px; }
+.map-center{ padding:12px; min-width:0; }
 .station-map-toolbar { margin-bottom: 12px; }
 .station-map-toolbar p { margin: 6px 0; }
 .station-map-toolbar .btn { min-height: 44px; }
+.station-auth-links{ display:flex; flex-wrap:wrap; gap:16px; }
+.station-map-toolbar bdi{ overflow-wrap:anywhere; }
 .leaflet-root{ height: var(--map-h); width:100%; border-radius:12px; }
 .leaflet-container{ height:100%; width:100%; border-radius:12px; }
 

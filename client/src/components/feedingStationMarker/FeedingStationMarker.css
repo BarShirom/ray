@@ -13,6 +13,8 @@
 .feeding-station-popup {
   color: #1f2937;
   min-width: 160px;
+  text-align: start;
+  overflow-wrap: anywhere;
 }
 
 .feeding-station-popup small,
@@ -21,6 +23,6 @@
 }
 
 .feeding-station-popup strong {
-  margin-top: 4px;
+  margin-block-start: 4px;
   font-size: 16px;
 }

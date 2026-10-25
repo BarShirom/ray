@@ -4,6 +4,8 @@ import { validateImages } from "../../api/media";
 import { FilePreview } from "../media/Media";
 import type { ReportType } from "../../features/reports/reportsSlice";
 import MapPreview from "../mapPreview/MapPreview";
+import { t } from "../../i18n";
+import { localizeError } from "../../i18n/errors";
 import "./ReportForm.css";
 
 interface ReportFormProps {
@@ -44,7 +46,7 @@ export default function ReportForm({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
     if (isPostgresPreview) {
-      try { validateImages([...mediaFiles, ...picked], "report"); setMediaFiles([...mediaFiles, ...picked]); setFileError(""); } catch (error) { setFileError((error as Error).message); }
+      try { validateImages([...mediaFiles, ...picked], "report"); setMediaFiles([...mediaFiles, ...picked]); setFileError(""); } catch (error) { setFileError(localizeError(error, "upload")); }
       e.currentTarget.value = ""; return;
     }
     const accepted = picked.filter(
@@ -54,37 +56,33 @@ export default function ReportForm({
     );
     const merged = [...mediaFiles, ...accepted].slice(0, MAX_FILES);
     setMediaFiles(merged);
+    setFileError(accepted.length < picked.length ? t("reports.legacyMediaInvalid") : mediaFiles.length + accepted.length > MAX_FILES ? t("reports.legacyMediaCount") : "");
     e.currentTarget.value = "";
   };
 
-  const clearAllFiles = () => setMediaFiles([]);
+  const clearAllFiles = () => { setMediaFiles([]); setFileError(""); };
 
   return (
-    <form onSubmit={handleSubmit} className="report-form">
+    <form noValidate onSubmit={handleSubmit} className="report-form">
       <fieldset disabled={pending} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "grid", gap: 12 }}>
       {/* Type chips */}
       <div className="field">
-        <label className="label">Subject</label>
-        <div className="chip-group" role="radiogroup" aria-label="Report type">
-          {(["general", "food", "emergency"] as const).map((t) => (
+        <label className="label" id="report-type-label">{t("reports.subject")}</label>
+        <div className="chip-group" role="radiogroup" aria-labelledby="report-type-label">
+          {(["general", "food", "emergency"] as const).map((reportType) => (
             <label
-              key={t}
-              className={`chip ${type === t ? "is-selected" : ""}`}
-              aria-pressed={type === t}
+              key={reportType}
+              className={`chip ${type === reportType ? "is-selected" : ""}`}
             >
               <input
                 type="radio"
                 name="type"
-                value={t}
-                checked={type === t}
-                onChange={() => setType(t)}
+                value={reportType}
+                checked={type === reportType}
+                onChange={() => setType(reportType)}
                 className="sr-only"
               />
-              {t === "emergency"
-                ? "🚨 Emergency"
-                : t === "food"
-                ? "🍲 I gave food"
-                : "📍 General"}
+              {t(reportType === "emergency" ? "reports.emergencyChip" : reportType === "food" ? "reports.foodChip" : "reports.generalChip")}
             </label>
           ))}
         </div>
@@ -93,11 +91,12 @@ export default function ReportForm({
       {/* Description */}
       <div className="field">
         <label htmlFor="description" className="label">
-          Description
+          {t("reports.description")}
         </label>
         <textarea
           id="description"
-          placeholder="Describe what you saw..."
+          placeholder={t("reports.descriptionPlaceholder")}
+          dir="auto"
           rows={4}
           className="control"
           value={description}
@@ -107,29 +106,29 @@ export default function ReportForm({
 
       {/* Location */}
       <div className="field">
-        <label className="label">Location</label>
+        <label className="label">{t("reports.location")}</label>
         <div className="row">
           <button type="button" className="btn" onClick={useLocation}>
-            📍 {locationReady ? "Location Added ✅" : "Use Current Location"}
+            📍 {t(locationReady ? "reports.locationAdded" : "reports.useLocation")}
           </button>
           <span className="status">
             <span className={`status-dot ${locationReady ? "is-ready" : ""}`} />
-            {locationReady ? "Location ready" : "Location not set"}
+            {t(locationReady ? "reports.locationReady" : "reports.locationMissing")}
           </span>
         </div>
         <p className="hint-text">
-          (or click on the map to choose a different spot)
+          {t("reports.chooseLocationHint")}
         </p>
         <MapPreview selectedLocation={location} onSelect={setLocation} />
       </div>
 
       {/* Media */}
-      {isPostgresPreview && !mediaEnabled && <p>Uploads unavailable in local preview. Continue without media.</p>}
-      {isPostgresPreview && <p>Sign in to add images. Guests can submit reports without images.</p>}
+      {isPostgresPreview && !mediaEnabled && <p>{t("reports.uploadsDisabled")}</p>}
+      {isPostgresPreview && !signedIn && <p>{t("reports.signInForImages")}</p>}
       {fileError && <p role="alert">{fileError}</p>}
       <div className="field">
         <label htmlFor="media" className="label">
-          Media (optional)
+          {t(isPostgresPreview ? "reports.images" : "reports.media")}
         </label>
         <input
           disabled={pending || (isPostgresPreview && (!mediaEnabled || !signedIn))}
@@ -139,25 +138,24 @@ export default function ReportForm({
           multiple
           className="control"
           onChange={handleFileChange}
-          aria-label="Add images or videos"
+          aria-label={t(isPostgresPreview ? "reports.addImages" : "reports.addMedia")}
         />
         <p className="hint-text">
-          {isPostgresPreview ? "Up to 3 JPEG, PNG or WebP images, 8 MiB each. No animated images." : `Up to ${MAX_FILES} images or videos, ${Math.round(MAX_FILE_SIZE / (1024 * 1024))} MB each.`}
+          {isPostgresPreview ? t("reports.imageLimits") : t("reports.mediaLimits", { count: MAX_FILES, size: Math.round(MAX_FILE_SIZE / (1024 * 1024)) })}
         </p>
 
         {mediaFiles.length > 0 && (
           <>
             <div className="media-summary">
               <span>
-                {mediaFiles.length} file{mediaFiles.length > 1 ? "s" : ""}{" "}
-                selected
+                {t("reports.selectedFiles", { count: mediaFiles.length })}
               </span>
               <button
                 type="button"
                 className="btn btn-ghost"
                 onClick={clearAllFiles}
               >
-                Clear all
+                {t("reports.clearFiles")}
               </button>
             </div>
 
@@ -175,7 +173,7 @@ export default function ReportForm({
           className="btn btn-primary"
           disabled={!description.trim() || !locationReady}
         >
-          Submit report
+          {t("reports.submit")}
         </button>
       </div>
       </fieldset>

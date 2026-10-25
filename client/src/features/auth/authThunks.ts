@@ -1,6 +1,7 @@
 // features/auth/authThunks.ts
 import { createAsyncThunk } from "@reduxjs/toolkit";
-import type { AxiosError, AxiosResponse } from "axios";
+import type { AxiosResponse } from "axios";
+import { localizeError } from "../../i18n/errors";
 import { http } from "../../api/http";
 import { setAuth, logout } from "./authSlice";
 
@@ -58,20 +59,6 @@ function toSliceUser(apiUser: BackendUser, token: string): SliceUser {
   };
 }
 
-function getErrorMessage(err: unknown): string {
-  const ax = err as AxiosError<
-    { message?: string; error?: string; msg?: string },
-    unknown
-  >;
-  return (
-    ax?.response?.data?.message ??
-    ax?.response?.data?.error ??
-    ax?.response?.data?.msg ??
-    ax?.message ??
-    "Request failed"
-  );
-}
-
 /* ======
  * Thunks
  * ====== */
@@ -95,7 +82,7 @@ export const registerUser = createAsyncThunk<
     dispatch(setAuth(mapped));
     return { user: mapped };
   } catch (err) {
-    return rejectWithValue(getErrorMessage(err));
+    return rejectWithValue(localizeError(err, "register"));
   }
 });
 
@@ -118,7 +105,7 @@ export const loginUser = createAsyncThunk<
     dispatch(setAuth(mapped));
     return { user: mapped };
   } catch (err) {
-    return rejectWithValue(getErrorMessage(err));
+    return rejectWithValue(localizeError(err, "login"));
   }
 });
 

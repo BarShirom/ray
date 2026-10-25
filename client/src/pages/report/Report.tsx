@@ -9,15 +9,11 @@ import { isPostgresPreview } from "../../preview";
 import { uploadImages, type ImageUploads } from "../../api/media";
 import { useMediaCapability } from "../../components/media/Media";
 import { selectToken } from "../../features/auth/authSelectors";
+import { t } from "../../i18n";
+import { localizeError } from "../../i18n/errors";
 import "./Report.css";
 
 type LatLng = { lat: number; lng: number };
-
-function getErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "string") return err;
-  return "Failed to create report.";
-}
 
 const Report = () => {
   const navigate = useNavigate();
@@ -39,7 +35,7 @@ const Report = () => {
   const handleUseLocation = useCallback(() => {
     setError(null);
     if (!navigator.geolocation) {
-      setError("Geolocation is not supported by this browser.");
+      setError(t("reports.locationUnavailable"));
       return;
     }
     const id = navigator.geolocation.watchPosition(
@@ -49,7 +45,7 @@ const Report = () => {
       },
       (err) =>
         setError(
-          err.message || "Could not fetch location (permission denied?)"
+          t(err.code === 1 ? "reports.locationDenied" : "reports.locationFailed")
         ),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -67,11 +63,15 @@ const Report = () => {
     setError(null);
 
     if (!description.trim()) {
-      setError("Please describe the situation.");
+      setError(t("reports.descriptionRequired"));
       return;
     }
     if (!location) {
-      setError("Please add location before submitting.");
+      setError(t("reports.locationRequired"));
+      return;
+    }
+    if (isPostgresPreview && mediaFiles.length && !mediaEnabled) {
+      setError(t("reports.uploadsDisabled"));
       return;
     }
 
@@ -80,7 +80,6 @@ const Report = () => {
     try {
       let attachment: { media?: string[]; mediaAssetIds?: string[] } = {};
       if (isPostgresPreview) {
-        if (mediaFiles.length && !mediaEnabled) throw new Error("Image uploads are disabled in local preview.");
         attachment = { mediaAssetIds: mediaFiles.length ? await uploadImages(mediaFiles, "report", token, uploads.current, setProgress) : [] };
       } else {
         const { uploadMedia } = await import("../../api/upload");
@@ -91,7 +90,7 @@ const Report = () => {
       ).unwrap();
       navigate("/map-page");
     } catch (err: unknown) {
-      setError(getErrorMessage(err));
+      setError(localizeError(err, "report"));
     } finally {
       locked.current = false;
       setSubmitting(false);
@@ -106,6 +105,7 @@ const Report = () => {
   return (
     <div className="report-page">
       <section className="panel report-panel">
+        <h1 className="report-title">{t("reports.title")}</h1>
         <ReportForm
           pending={submitting}
           mediaEnabled={mediaEnabled}
@@ -123,8 +123,8 @@ const Report = () => {
           setMediaFiles={setMediaFiles}
         />
         <div className="report-status">
-          {submitting && <span className="status-text" role="status">{progress || "Saving report..."}</span>}
-          {error && <span className="status-text error">{error}</span>}
+          {submitting && <span className="status-text" role="status">{progress || t("reports.saving")}</span>}
+          {error && <span className="status-text error" role="alert">{error}</span>}
         </div>
       </section>
     </div>

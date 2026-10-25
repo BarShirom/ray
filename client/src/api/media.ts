@@ -1,4 +1,6 @@
 import { isPostgresPreview } from "../preview";
+import { t } from "../i18n";
+import { formatNumber } from "../i18n/formatters";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
 export const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -23,7 +25,13 @@ async function api(path: string, token: string, body: unknown) {
     response = await fetch(`${BASE}/api/media/${path}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) });
   } catch { throw new Error("Image service unavailable. Your form is preserved; retry when connected."); }
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message ?? "Image request failed. Please try again.");
+  if (!response.ok) {
+    // Keep structured status/field feedback for the presentation mapper without
+    // exposing an untrusted server message as an Error's public message.
+    const error = new Error("Image request failed. Please try again.") as Error & { response: { status: number; data: unknown } };
+    error.response = { status: response.status, data };
+    throw error;
+  }
   return data;
 }
 // Retry completion with the same intent after an uncertain PUT; never overwrite it.
@@ -37,7 +45,7 @@ export async function uploadImages(files: File[], purpose: "station" | "report",
     let item = cache.get(file);
     if (item?.token !== token) item = undefined;
     if (!item) {
-      progress(`Preparing image ${index + 1}/${files.length}...`);
+      progress(t("media.preparing", { current: formatNumber(index + 1), total: formatNumber(files.length) }));
       const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
       const checksum = btoa(Array.from(hash, b => String.fromCharCode(b)).join(""));
       const permission = await api("uploads", token, { purpose, contentType: file.type, byteLength: file.size, checksum }) as Permission;
@@ -45,7 +53,7 @@ export async function uploadImages(files: File[], purpose: "station" | "report",
     }
     if (!item.uploaded && !item.ready) {
       if (Date.parse(item.permission.uploadExpiresAt) <= Date.now()) { cache.delete(file); throw new Error("Upload permission expired. Retry to request a new one."); }
-      progress(`Uploading image ${index + 1}/${files.length}...`);
+      progress(t("media.uploading", { current: formatNumber(index + 1), total: formatNumber(files.length) }));
       let response: Response;
       try {
         // No Ray token, cookies, multipart encoding or manually set Content-Length.
@@ -57,13 +65,13 @@ export async function uploadImages(files: File[], purpose: "station" | "report",
       item.uploaded = true;
     }
     if (!item.ready) {
-      progress(`Verifying image ${index + 1}/${files.length}...`);
+      progress(t("media.verifying", { current: formatNumber(index + 1), total: formatNumber(files.length) }));
       const completed = await api(`${item.permission.assetId}/complete`, token, {});
       if (completed.state !== "ready") throw new Error("Image verification did not finish. Please retry.");
       item.ready = true;
     }
     ids.push(item.permission.assetId);
   }
-  progress("Saving...");
+  progress(t("media.saving"));
   return ids;
 }

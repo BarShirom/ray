@@ -103,13 +103,7 @@
   opacity: 0.9;
 }
 
-/* RTL support */
-html[dir="rtl"] .legend-item {
-  flex-direction: row-reverse;
-}
-html[dir="rtl"] .legend-label {
-  text-align: right;
-}
+.legend-label { text-align: start; }
 
 /* ---- Horizontal / single-line legend (row mode) ---- */
 .legend--row .legend-grid {

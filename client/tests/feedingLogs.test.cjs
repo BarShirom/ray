@@ -45,7 +45,7 @@ test("feeding log Redux flow", async (t) => {
     http.defaults.adapter = async (config) => { requests++; return response(config, newLog); };
     const result = await store.dispatch(createFeedingLog({ stationId: "station-a", data: {} }));
     assert.equal(result.type, createFeedingLog.rejected.type);
-    assert.match(result.payload, /log in/);
+    assert.equal(result.payload, require("../src/i18n/index.ts").t("errors.signIn"));
     assert.equal(requests, 0);
     assert.equal(select().submitting, false);
   });
@@ -113,7 +113,7 @@ test("feeding log Redux flow", async (t) => {
     assert.deepEqual(select().data, [newLog, oldLog]);
     http.defaults.adapter = async (config) => { throw new AxiosError("Offline", "ERR_NETWORK", config); };
     await store.dispatch(fetchFeedingLogsForStation("station-b"));
-    assert.equal(select("station-b").loadError, "Offline");
+    assert.equal(select("station-b").loadError, require("../src/i18n/index.ts").t("errors.network"));
     assert.equal(select().loadError, null);
     assert.equal(select("station-b").loading, false);
   });
@@ -124,7 +124,7 @@ test("feeding log Redux flow", async (t) => {
       });
     };
     await store.dispatch(createFeedingLog({ stationId: "station-a", data: {} }));
-    assert.equal(select().submitError, "Feeding station is inactive");
+    assert.equal(select().submitError, require("../src/i18n/index.ts").t("errors.stationInactive"));
     assert.equal(select().submitting, false);
     assert.deepEqual(select().data, [newLog, oldLog]);
   });
@@ -132,7 +132,7 @@ test("feeding log Redux flow", async (t) => {
     http.defaults.adapter = async (config) => response(config, []);
     await store.dispatch(fetchFeedingLogsForStation("station-b"));
     assert.equal(select("station-b").loadError, null);
-    assert.equal(select().submitError, "Feeding station is inactive");
+    assert.equal(select().submitError, require("../src/i18n/index.ts").t("errors.stationInactive"));
   });
   await t.test("successful submission retry uses refreshed token and clears submission error", async () => {
     store.dispatch(setAuth({ ...user, token: "refreshed-token" }));

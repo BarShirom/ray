@@ -42,7 +42,7 @@ test("station creation flow", async (t) => {
     let requests = 0;
     http.defaults.adapter = async (config) => { requests++; return response(config, station); };
     const result = await store.dispatch(createFeedingStation(payload));
-    assert.match(result.payload, /log in/);
+    assert.equal(result.payload, require("../src/i18n/index.ts").t("errors.signIn"));
     assert.equal(requests, 0);
     assert.equal(state().creating, false);
   });
@@ -108,7 +108,7 @@ test("station creation flow", async (t) => {
       ...response(config, { message: "Validation failed", errors: [{ field: "name", message: "Name is required" }] }), status: 400,
     }); };
     await store.dispatch(createFeedingStation(payload));
-    assert.equal(state().createError, "name: Name is required");
+    assert.equal(state().createError, require("../src/i18n/index.ts").t("errors.field", { field: require("../src/i18n/index.ts").t("errors.fields.name"), message: require("../src/i18n/index.ts").t("errors.stationName") }));
     assert.equal(state().error, null);
     assert.equal(state().creating, false);
   });

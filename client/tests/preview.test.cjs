@@ -14,6 +14,12 @@ test("preview upload helper refuses before sending any provider or API request",
   const axios = require("axios");
   const post = t.mock.method(axios, "post", () => { assert.fail("preview must not upload"); });
   const { uploadMedia } = require("../src/api/upload.ts");
-  await assert.rejects(uploadMedia([new File(["synthetic"], "demo.png", { type: "image/png" })]), /uploads unavailable in local preview/);
+  const { localizeError } = require("../src/i18n/errors.ts");
+  const { t: translate } = require("../src/i18n/index.ts");
+  await assert.rejects(uploadMedia([new File(["synthetic"], "demo.png", { type: "image/png" })]), error => {
+    assert.match(error.message, /uploads unavailable in local preview/);
+    assert.equal(localizeError(error, "upload"), translate("errors.uploadUnavailable"));
+    return true;
+  });
   assert.equal(post.mock.callCount(), 0);
 });

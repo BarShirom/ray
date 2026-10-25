@@ -2,6 +2,8 @@
 import { MapContainer, TileLayer, useMapEvents, Marker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import LocalizedMapControls from "./LocalizedMapControls";
+import { t } from "../../i18n";
 
 const markerIcon = new L.Icon({
   iconUrl: "/icons/marker-icon-blue.png",
@@ -38,6 +40,7 @@ const MapPreview = ({
     <MapContainer
       center={[center.lat, center.lng]}
       zoom={13}
+      zoomControl={false}
       style={{
         height: "200px",
         width: "100%",
@@ -45,13 +48,16 @@ const MapPreview = ({
         borderRadius: "8px",
       }}
     >
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <LocalizedMapControls />
       <LocationMarker onSelect={onSelect} />
       {selectedLocation && (
         <Marker
           position={[selectedLocation.lat, selectedLocation.lng]}
           icon={markerIcon}
           draggable={true}
+          title={t("map.locationMarker")}
+          alt={t("map.locationMarker")}
           eventHandlers={{
             dragend: (e) => {
               const marker = e.target;

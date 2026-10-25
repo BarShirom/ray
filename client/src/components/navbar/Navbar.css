@@ -1,44 +1,38 @@
-.nav {
+﻿.nav {
   display: flex;
   align-items: center;
   gap: 12px;
-  
+  min-width: 0;
 }
 
 .nav__brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  text-decoration: none;
+  min-width: 0;
   color: #5bc0de;
 }
 
 .nav__logo {
   height: 100px;
   width: auto;
+  max-width: 100%;
+  object-fit: contain;
 }
+
 .nav__title {
   font-size: 1.25rem;
   font-weight: 600;
+  line-height: 1.5;
 }
 
-/* Mobile: logo-only */
-@media (max-width: 640px) {
-  .nav__title {
-    display: none;
-  }
-  .nav__logo {
-    height: 100px;
-  }
-}
-
-.nav__spacer {
-  margin-left: auto;
-}
 .nav__items {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
+  margin-inline-start: auto;
 }
 
 .nav-item {
@@ -49,11 +43,22 @@
   background: var(--panel);
   padding: 8px 12px;
   border-radius: 12px;
+  font: inherit;
   font-size: 14px;
+  line-height: 1.5;
+  text-align: start;
+  overflow-wrap: anywhere;
 }
+
 .nav-item:hover {
   background: #f9fafb;
 }
+
+.nav-item:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+}
+
 .nav-item.is-active {
   box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand) 30%, transparent);
 }
@@ -63,6 +68,7 @@
   border-color: var(--brand);
   color: #fff;
 }
+
 .nav-item--primary:hover {
   background: var(--brand-900);
 }
@@ -70,6 +76,45 @@
 .nav-item.nav-item--ghost {
   background: var(--panel);
 }
-.nav button.nav-item {
-  border: 1px solid var(--border);
+
+.nav__toggle {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  .nav {
+    flex-wrap: wrap;
+  }
+
+  .nav__brand {
+    flex: 1;
+  }
+
+  .nav__logo {
+    height: 72px;
+  }
+
+  .nav__toggle {
+    display: block;
+    flex-shrink: 0;
+    margin-inline-start: auto;
+  }
+
+  .nav__items {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    margin-inline-start: 0;
+  }
+
+  .nav__items--open {
+    display: flex;
+  }
+}
+
+@media (max-width: 640px) {
+  .nav__title {
+    display: none;
+  }
 }
