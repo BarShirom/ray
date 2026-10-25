@@ -3,3 +3,5 @@
 .myreports h1{ font-size:20px; margin:0; }
 .myreports .hint{ color:var(--muted); font-size:12px; }
 .myreports .empty{ color:var(--muted); padding:24px; text-align:center; }
+.myreports [role="alert"], .myreports [role="status"]{ overflow-wrap:anywhere; }
+.myreports button{ min-height:44px; }

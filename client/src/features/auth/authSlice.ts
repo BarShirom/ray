@@ -26,6 +26,10 @@ const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
+    finishAuthRestoration: (state) => {
+      // A persisted in-flight login flag is transient; retain the restored identity/token.
+      state.loading = false;
+    },
     setAuth: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
       state.error = null;
@@ -66,5 +70,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { setAuth, logout } = authSlice.actions;
+export const { finishAuthRestoration, setAuth, logout } = authSlice.actions;
 export default authSlice.reducer;

@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import "./Register.css";
 import { useAppDispatch } from "../../app/hooks";
 import { registerUser } from "../../features/auth/authThunks";
+import { validateRegistrationPassword } from "../../features/auth/validateRegistrationPassword";
 import { t } from "../../i18n";
 import { localizeError } from "../../i18n/errors";
 
@@ -31,7 +32,7 @@ export default function Register() {
       firstName: !formData.firstName ? t("auth.firstNameRequired") : undefined,
       lastName: !formData.lastName ? t("auth.lastNameRequired") : undefined,
       email: !formData.email ? t("auth.emailRequired") : emailInput?.validity.typeMismatch ? t("auth.emailInvalid") : undefined,
-      password: !formData.password ? t("auth.passwordRequired") : formData.password.length < 6 ? t("auth.passwordTooShort") : undefined,
+      password: validateRegistrationPassword(formData.password),
     };
     setFieldErrors(errors);
     const firstInvalid = (Object.keys(errors) as (keyof FieldErrors)[]).find((key) => errors[key]);

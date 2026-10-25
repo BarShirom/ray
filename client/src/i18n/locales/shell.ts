@@ -16,6 +16,8 @@ export const shellHe = {
     login: "התחברות",
     register: "הרשמה",
     logout: "התנתקות",
+    restoring: "שחזור ההתחברות…",
+    checking: "בדיקת ההתחברות…",
     email: "כתובת דוא״ל",
     password: "סיסמה",
     firstName: "שם פרטי",

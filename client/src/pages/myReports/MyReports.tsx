@@ -1,65 +1,66 @@
-import { useMemo, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../app/hooks";
-import { selectAllReports } from "../../features/reports/reportsSelectors";
-import { selectUserId, selectToken } from "../../features/auth/authSelectors";
-import { resolveReport } from "../../features/reports/reportsThunks";
+import { selectAssignedReports, selectAssignedReportsState } from "../../features/reports/reportsSelectors";
+import { selectAuthLoading, selectUserId, selectToken } from "../../features/auth/authSelectors";
+import { logoutUser } from "../../features/auth/authThunks";
+import { fetchMyReports, resolveReport } from "../../features/reports/reportsThunks";
 import ReportCard from "../../components/reportCard/ReportCard";
-import type { Report, ReportStatus } from "../../features/reports/reportsSlice";
+import { reportAssigneeId, type ReportStatus } from "../../features/reports/reportsSlice";
 import { t } from "../../i18n";
 import { localizeError } from "../../i18n/errors";
 import "./MyReports.css";
 
-type MaybeId = string | { _id?: string; id?: string } | null | undefined;
-const getId = (v: MaybeId) =>
-  typeof v === "string" ? v : v?._id ?? v?.id ?? null;
-
 export default function MyReports() {
   const dispatch = useAppDispatch();
-
-  const reports = useSelector(selectAllReports) as Report[];
+  const navigate = useNavigate();
+  const mine = useSelector(selectAssignedReports);
+  const assigned = useSelector(selectAssignedReportsState);
   const userId = useSelector(selectUserId);
-  const token = useSelector(selectToken) ?? null;
-  const [actionError, setActionError] = useState("");
+  const token = useSelector(selectToken);
+  const authLoading = useSelector(selectAuthLoading);
+  const [actionError, setActionError] = useState<{ userId: string | null; token: string | null; message: string } | null>(null);
 
-  const mine = useMemo<Report[]>(() => {
-    const list = reports.filter((r) => getId(r.assignedTo) === userId);
-    return list.slice().sort((a, b) => {
-      const da = new Date(a.updatedAt ?? a.createdAt).getTime();
-      const db = new Date(b.updatedAt ?? b.createdAt).getTime();
-      return db - da;
-    });
-  }, [reports, userId]);
+  useEffect(() => {
+    if (userId && token && !authLoading) void dispatch(fetchMyReports());
+  }, [dispatch, userId, token, authLoading]);
 
-  const handlePrimary = async (id: string, status: ReportStatus) => {
-    if (!token) return;
-    if (status === "resolved") return;
-
-    const r = reports.find((x) => x._id === id);
-    if (!r || getId(r.assignedTo) !== userId) return;
-
-    setActionError("");
-    try { await dispatch(resolveReport({ reportId: id })).unwrap(); }
-    catch (error) { setActionError(localizeError(error, "report")); }
+  const reauthenticate = async () => {
+    await dispatch(logoutUser());
+    navigate("/login");
   };
 
-  return (
-    <div className="panel myreports">
-      <div className="list-header">
-        <h1>{t("reports.assignedTitle")}</h1>
-        <span className="hint">{t("reports.assignedCount", { count: mine.length })}</span>
-      </div>
+  const handlePrimary = async (id: string, status: ReportStatus) => {
+    if (!token || status === "resolved") return;
+    const report = mine.find((item) => item._id === id);
+    if (!report || reportAssigneeId(report.assignedTo) !== userId) return;
+    setActionError(null);
+    try { await dispatch(resolveReport({ reportId: id })).unwrap(); }
+    catch (error) { setActionError({ userId, token, message: localizeError(error, "report") }); }
+  };
 
-      {mine.length === 0 ? (
+  const authenticated = !!userId && !!token && !authLoading;
+  const loaded = authenticated && assigned.status === "succeeded";
+
+  return (
+    <div className="panel myreports" aria-labelledby="assigned-reports-title">
+      <div className="list-header">
+        <h1 id="assigned-reports-title">{t("reports.assignedTitle")}</h1>
+        {loaded && <span className="hint">{t("reports.assignedCount", { count: mine.length })}</span>}
+      </div>
+      {authLoading ? <p role="status">{t("reports.authRestoring")}</p> : !authenticated ? (
+        <div role="alert"><p>{t("reports.assignedSignIn")}</p><button className="btn" type="button" onClick={() => void reauthenticate()}>{t("reports.signInAgain")}</button></div>
+      ) : assigned.status === "unauthorized" ? (
+        <div role="alert"><p>{t("reports.assignedExpired")}</p><button className="btn" type="button" onClick={() => void reauthenticate()}>{t("reports.signInAgain")}</button></div>
+      ) : assigned.status === "failed" ? (
+        <div role="alert"><p>{assigned.error || t("reports.assignedFailed")}</p><button className="btn" type="button" onClick={() => void dispatch(fetchMyReports())}>{t("reports.retryAssigned")}</button></div>
+      ) : !loaded ? <p role="status">{t("reports.loadingAssigned")}</p> : mine.length === 0 ? (
         <div className="empty">{t("reports.assignedEmpty")}</div>
       ) : (
-        <div className="report-list">
-          {mine.map((r) => (
-            <ReportCard key={r._id} report={r} onPrimary={handlePrimary} />
-          ))}
-        </div>
+        <div className="report-list">{mine.map((report) => <ReportCard key={report._id} report={report} onPrimary={handlePrimary} />)}</div>
       )}
-      {actionError && <p role="alert">{actionError}</p>}
+      {loaded && actionError && actionError.userId === userId && actionError.token === token && <p role="alert">{actionError.message}</p>}
     </div>
   );
 }

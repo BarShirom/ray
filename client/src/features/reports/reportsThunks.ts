@@ -1,4 +1,5 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
+import { isAxiosError } from "axios";
 import { localizeError } from "../../i18n/errors";
 import { http } from "../../api/http";
 import type { RootState } from "../../app/store";
@@ -11,8 +12,17 @@ const authHeader = (token: string | null) =>
 // Preserve structured API errors until the localized frontend presentation boundary.
 async function reportRequest<T>(request: () => Promise<T>): Promise<T> {
   try { return await request(); }
-  catch (error) { throw new Error(localizeError(error, "report")); }
+  catch (error) {
+    const localized = new Error(localizeError(error, "report")) as Error & { code?: string };
+    if (isAxiosError(error) && error.response?.status === 401) localized.code = "HTTP_401";
+    throw localized;
+  }
 }
+
+type ReportMutationConfig = { state: RootState; pendingMeta: { userId: string | null; token: string | null } };
+const mutationOptions = {
+  getPendingMeta: (_arg: unknown, { getState }: { getState: () => RootState }) => ({ userId: selectUserId(getState()), token: selectToken(getState()) }),
+};
 
 export const fetchReports = createAsyncThunk<Report[]>(
   "reports/fetchAll",
@@ -45,7 +55,7 @@ export const createReport = createAsyncThunk<
 export const claimReport = createAsyncThunk<
   Report,
   { reportId: string },
-  { state: RootState }
+  ReportMutationConfig
 >("reports/claim", async ({ reportId }, { getState }) => {
   const state = getState();
   const token = selectToken(state);
@@ -75,12 +85,12 @@ export const claimReport = createAsyncThunk<
     assignedTo,
     assignedToName: data.assignedToName ?? meName ?? undefined,
   };
-});
+}, mutationOptions);
 
 export const resolveReport = createAsyncThunk<
   Report,
   { reportId: string },
-  { state: RootState }
+  ReportMutationConfig
 >("reports/resolve", async ({ reportId }, { getState }) => {
   const token = selectToken(getState());
   const { data } = await reportRequest(() => http.patch<Report>(
@@ -91,7 +101,7 @@ export const resolveReport = createAsyncThunk<
     }
   ));
   return data;
-});
+}, mutationOptions);
 
 export const fetchUserStats = createAsyncThunk<
   { total: number; resolved: number; inProgress: number },
@@ -108,13 +118,24 @@ export const fetchUserStats = createAsyncThunk<
 export const fetchMyReports = createAsyncThunk<
   Report[],
   void,
-  { state: RootState }
->("reports/fetchMyReports", async (_void, { getState }) => {
+  { state: RootState; rejectValue: { message: string; status?: number }; pendingMeta: { userId: string | null; token: string | null } }
+>("reports/fetchMyReports", async (_void, { getState, rejectWithValue }) => {
   const token = selectToken(getState());
-  const { data } = await reportRequest(() => http.get<Report[]>("/api/reports/me", {
-    headers: authHeader(token),
-  }));
-  return data;
+  try {
+    const { data } = await http.get<Report[]>("/api/reports/me", { headers: authHeader(token) });
+    return data;
+  } catch (error) {
+    const status = isAxiosError(error) ? error.response?.status : undefined;
+    return rejectWithValue({ message: localizeError(error, "report"), ...(status === undefined ? {} : { status }) });
+  }
+}, {
+  condition: (_void, { getState }) => {
+    const state = getState();
+    const userId = selectUserId(state);
+    const token = selectToken(state);
+    return !!userId && !!token && !state.auth.loading && !(state.reports.assigned.status === "loading" && state.reports.assigned.userId === userId && state.reports.assigned.token === token);
+  },
+  getPendingMeta: (_arg, { getState }) => ({ userId: selectUserId(getState()), token: selectToken(getState()) }),
 });
 
 export const fetchGlobalStats = createAsyncThunk<

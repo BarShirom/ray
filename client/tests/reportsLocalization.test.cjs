@@ -45,17 +45,17 @@ test("report workflows preserve backend enums, coordinates and mixed-language us
   await store.dispatch(createReport(payload)).unwrap();
   assert.deepEqual(JSON.parse(request.data), payload);
   assert.equal(request.headers.get("Authorization"), "Bearer synthetic-token");
-  assert.equal(store.getState().reports[0].description, names);
+  assert.equal(store.getState().reports.items[0].description, names);
 
   http.defaults.adapter = async (config) => { request = config; return response(config, { ...report, status: "in-progress", assignedTo: "synthetic-user" }); };
   await store.dispatch(claimReport({ reportId: report._id })).unwrap();
   assert.equal(request.url, "/api/reports/synthetic-report/claim");
   assert.deepEqual(JSON.parse(request.data), {});
-  assert.equal(store.getState().reports[0].status, "in-progress");
+  assert.equal(store.getState().reports.items[0].status, "in-progress");
   http.defaults.adapter = async (config) => { request = config; return response(config, { ...report, status: "resolved" }); };
   await store.dispatch(resolveReport({ reportId: report._id })).unwrap();
   assert.equal(request.url, "/api/reports/synthetic-report/resolve");
-  assert.equal(store.getState().reports[0].status, "resolved");
+  assert.equal(store.getState().reports.items[0].status, "resolved");
 });
 
 test("report cards render Hebrew labels and exact timestamps while isolating user content", () => {
