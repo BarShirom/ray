@@ -7,17 +7,20 @@ import { authMiddleware } from "../middleware/authMiddleware.js";
 import { optionalAuthMiddleware } from "../middleware/optionalAuthMiddleware.js";
 import { validateBody } from "../middleware/validateBody.js";
 import { createReportSchema } from "../validation/reportSchemas.js";
+import { createAbuseProtection, type AbuseProtection } from "../security/abuseProtection.js";
 
-export function createReportRouter(reports: ReportStore, authenticate: RequestHandler, optionalAuthenticate: RequestHandler, creationSchema: ZodType = createReportSchema) {
+export function createReportRouter(reports: ReportStore, authenticate: RequestHandler, optionalAuthenticate: RequestHandler, creationSchema: ZodType = createReportSchema, abuse: AbuseProtection = createAbuseProtection()) {
   const { getAllReports, getMyReports, createReport, claimReport, resolveReport, getGlobalStats, getUserStats } = createReportHandlers(reports);
   const router = express.Router();
-  router.get("/", getAllReports);
-  router.post("/", optionalAuthenticate, validateBody(creationSchema), createReport);
-  router.get("/me", authenticate, getMyReports);
-  router.patch("/:id/claim", authenticate, claimReport);
-  router.patch("/:id/resolve", authenticate, resolveReport);
-  router.get("/stats", authenticate, getGlobalStats);
-  router.get("/stats/me", authenticate, getUserStats);
+  const creationLimit: RequestHandler = (req, res, next) =>
+    (req.user ? abuse.accountWrite : abuse.guestWrite)(req, res, next);
+  router.get("/", abuse.publicRead, getAllReports);
+  router.post("/", optionalAuthenticate, creationLimit, validateBody(creationSchema), createReport);
+  router.get("/me", abuse.publicRead, authenticate, getMyReports);
+  router.patch("/:id/claim", authenticate, abuse.accountWrite, claimReport);
+  router.patch("/:id/resolve", authenticate, abuse.accountWrite, resolveReport);
+  router.get("/stats", abuse.publicRead, authenticate, getGlobalStats);
+  router.get("/stats/me", abuse.publicRead, authenticate, getUserStats);
   return router;
 }
 

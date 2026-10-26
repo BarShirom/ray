@@ -1,17 +1,26 @@
 import express, { type Router } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import authRoutes from "./routes/authRoutes.js";
-import reportRoutes from "./routes/reportRoutes.js";
-import feedingStationRoutes from "./routes/feedingStationRoutes.js";
+import { createAuthRouter } from "./routes/authRoutes.js";
+import { createReportRouter } from "./routes/reportRoutes.js";
+import { createFeedingStationRouter } from "./routes/feedingStationRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import { requestParsers, requestErrorHandler } from "./middleware/requestParsing.js";
+import { createAbuseProtection, type AbuseOptions } from "./security/abuseProtection.js";
+import { mongoUserStore } from "./users/mongoUserStore.js";
+import { mongoReportStore } from "./reports/mongoReportStore.js";
+import { mongoFeedingStationStore } from "./feedingStations/mongoFeedingStationStore.js";
+import { mongoFeedingLogStore } from "./feedingLogs/mongoFeedingLogStore.js";
+import { authMiddleware } from "./middleware/authMiddleware.js";
+import { optionalAuthMiddleware } from "./middleware/optionalAuthMiddleware.js";
 
-export function createLegacyApp() {
+export function createLegacyApp(abuseOptions?: AbuseOptions) {
   const app = express();
+  const abuse = createAbuseProtection(abuseOptions);
 
-  // Behind Railway proxy (needed if you set Secure cookies)
-  app.set("trust proxy", 1);
+  // A future deployment must explicitly review its proxy topology. Client
+  // identity for abuse limits always comes from the direct socket peer.
+  app.set("trust proxy", false);
 
   // --- simple logger ---
   app.use((req, _res, next) => {
@@ -53,6 +62,7 @@ export function createLegacyApp() {
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["Retry-After"],
   };
 
   app.use(cors(corsOptions));
@@ -67,18 +77,17 @@ export function createLegacyApp() {
 
   // Retired before any body parsing or storage-provider access.
   app.use("/api/upload", uploadRoutes);
+  // Cheap liveness bypasses body parsing. All remaining paths share admission,
+  // so an unknown URL cannot bypass the parser's ingress budget.
+  app.get("/healthz", (_req, res) => { res.status(200).send("ok"); });
+  app.use(abuse.ingress);
   app.use(requestParsers());
 
   // --- routes ---
-  // If TS still whines (e.g., if routes are JS), cast as Router at mount:
-  app.use("/api/auth", authRoutes as Router);
-  app.use("/api/reports", reportRoutes as Router);
-  app.use("/api/feeding-stations", feedingStationRoutes);
+  app.use("/api/auth", createAuthRouter(mongoUserStore, undefined, abuse) as Router);
+  app.use("/api/reports", createReportRouter(mongoReportStore, authMiddleware, optionalAuthMiddleware, undefined, abuse) as Router);
+  app.use("/api/feeding-stations", createFeedingStationRouter(mongoFeedingStationStore, mongoFeedingLogStore, authMiddleware, undefined, abuse));
 
-  // health
-  app.get("/healthz", (_req, res) => {
-    res.status(200).send("ok");
-  });
   app.get("/", (_req, res) => {
     res.send("Ray backend is running!");
   });

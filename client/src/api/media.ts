@@ -1,6 +1,7 @@
 import { isPostgresPreview } from "../preview";
 import { t } from "../i18n";
 import { formatNumber } from "../i18n/formatters";
+import { retryAfterSeconds } from "./retryAfter";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
 export const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -28,8 +29,9 @@ async function api(path: string, token: string, body: unknown) {
   if (!response.ok) {
     // Keep structured status/field feedback for the presentation mapper without
     // exposing an untrusted server message as an Error's public message.
-    const error = new Error("Image request failed. Please try again.") as Error & { response: { status: number; data: unknown } };
-    error.response = { status: response.status, data };
+    const error = new Error("Image request failed. Please try again.") as Error & { response: { status: number; data: unknown; headers?: Record<string, string> } };
+    const retryAfter = retryAfterSeconds(response.headers);
+    error.response = { status: response.status, data, ...(retryAfter === undefined ? {} : { headers: { "retry-after": String(retryAfter) } }) };
     throw error;
   }
   return data;

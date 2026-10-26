@@ -11,7 +11,7 @@ const { uploadImages, validateImages, mediaEnabled }=require('../src/api/media.t
 const { t: translate }=require('../src/i18n/index.ts');
 const { localizeError }=require('../src/i18n/errors.ts');
 const file=()=>new File(['SYNTHETIC image bytes; validation occurs on server'],'synthetic.png',{type:'image/png'});
-const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
+const json=(body,status=200,headers={})=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json',...headers}});
 const permission=id=>({assetId:id,url:'https://synthetic-s3.invalid/'+id,headers:{'content-type':'image/png','if-none-match':'*','x-amz-checksum-sha256':'synthetic'},uploadExpiresAt:new Date(Date.now()+300000).toISOString()});
 test('image limits and signed-in requirement reject before requests',async t=>{
   t.mock.method(global,'fetch',()=>assert.fail('No request allowed'));
@@ -66,17 +66,43 @@ test('uncertain upload retry accepts 412 only after server validation; failed co
   assert.deepEqual(await uploadImages([selected],'station','token',cache,()=>{}),['id']);assert.equal(uploads,1);assert.equal(puts,2);assert.equal(completes,2);
 });
 test('report partial progress persists in memory and a changed account cannot reuse assets',async t=>{
-  const selected=[file(),file()],cache=new WeakMap();let intents=0,completes=0,fail=true;
-  t.mock.method(global,'fetch',async(url)=>{if(url.endsWith('/uploads'))return json(permission('id-'+(++intents)),201);if(url.startsWith('https://'))return new Response(null,{status:200});completes++;if(completes===2&&fail)return json({message:'Busy'},429);return json({state:'ready'});});
+  const selected=[file(),file()],cache=new WeakMap();let intents=0,puts=0,completes=0,fail=true;
+  t.mock.method(global,'fetch',async(url)=>{if(url.endsWith('/uploads'))return json(permission('id-'+(++intents)),201);if(url.startsWith('https://')){puts++;return new Response(null,{status:200});}completes++;if(completes===2&&fail)return json({message:'Busy'},429,{'Retry-After':'60'});return json({state:'ready'});});
   await assert.rejects(uploadImages(selected,'report','user-a',cache,()=>{}),error=>{
     assert.equal(error.response.status,429);
     assert.equal(error.response.data.message,'Busy');
     assert.doesNotMatch(error.message,/Busy/);
-    assert.equal(localizeError(error,'upload'),translate('errors.uploadBusy'));
+    assert.deepEqual(error.response.headers,{'retry-after':'60'});
+    assert.equal(localizeError(error,'upload'),translate('errors.rateLimitedWait',{count:60}));
     return true;
-  });fail=false;
-  assert.deepEqual(await uploadImages(selected,'report','user-a',cache,()=>{}),['id-1','id-2']);assert.equal(intents,2);assert.equal(completes,3);
+  });
+  await Promise.resolve();
+  assert.equal(intents,2);assert.equal(puts,2);assert.equal(completes,2,'no automatic completion retry after 429');
+  assert.equal(cache.get(selected[0]).ready,true);assert.equal(cache.get(selected[1]).uploaded,true);assert.equal(cache.get(selected[1]).ready,false);
+  fail=false;
+  assert.deepEqual(await uploadImages(selected,'report','user-a',cache,()=>{}),['id-1','id-2']);assert.equal(intents,2);assert.equal(puts,2,'explicit completion retry reuses uploaded bytes');assert.equal(completes,3);
   await uploadImages([selected[0]],'report','user-b',cache,()=>{});assert.equal(intents,3);
+});
+
+test('throttled image intent preserves selected file and only an explicit retry requests another intent',async t=>{
+  const selected=file(),cache=new WeakMap();let intents=0,puts=0,completes=0,limited=true;
+  t.mock.method(global,'fetch',async(url)=>{
+    if(url.endsWith('/uploads')){intents++;return limited?json({msg:'User already exists'},429,{'Retry-After':'2','X-Synthetic-Internal':'never-forward'}):json(permission('id'),201);}
+    if(url.startsWith('https://')){puts++;return new Response(null,{status:200});}
+    completes++;return json({state:'ready'});
+  });
+  await assert.rejects(uploadImages([selected],'station','token',cache,()=>{}),error=>{
+    assert.equal(error.response.status,429);
+    assert.deepEqual(error.response.headers,{'retry-after':'2'},'only safe wait metadata is retained');
+    assert.equal(localizeError(error,'upload'),translate('errors.rateLimitedWait',{count:2}));
+    return true;
+  });
+  await Promise.resolve();
+  assert.equal(intents,1);assert.equal(puts,0);assert.equal(completes,0);assert.equal(cache.has(selected),false);
+  assert.equal(selected.name,'synthetic.png');assert.equal(selected.size>0,true);
+  limited=false;
+  assert.deepEqual(await uploadImages([selected],'station','token',cache,()=>{}),['id']);
+  assert.equal(intents,2);assert.equal(puts,1);assert.equal(completes,1);
 });
 test('expired permission produces no PUT and permits an explicit fresh retry',async t=>{
   let attempts=0;const selected=file(),cache=new WeakMap();

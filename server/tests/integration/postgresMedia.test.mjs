@@ -119,6 +119,7 @@ test('S3 media HTTP/service integration with real disposable PostgreSQL and stor
   await t.test('per-owner outstanding quota is race-safe and failed issuance rate remains bounded',async()=>{
     checkTransactions=false;
     const u=await user();const outcomes=await Promise.all(Array.from({length:9},()=>req('POST','/api/media/uploads',intent,u.token)));assert.equal(outcomes.filter(r=>r.status===201).length,6);assert.equal(outcomes.filter(r=>r.status===429).length,3);
+    for(const rejected of outcomes.filter(r=>r.status===429)) assert.ok(Number(rejected.headers.get('retry-after'))>0);
     const v=await user();failSign=true;try{for(let i=0;i<10;i++)assert.equal((await req('POST','/api/media/uploads',intent,v.token)).status,503);assert.equal((await req('POST','/api/media/uploads',intent,v.token)).status,429);}finally{failSign=false;checkTransactions=true;}
   });
   await t.test('processing concurrency, leases and completion rate limits reject excess work',async()=>{

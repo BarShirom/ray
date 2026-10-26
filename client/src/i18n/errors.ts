@@ -1,5 +1,6 @@
 import { t } from "./index";
 import { he } from "./locales/he";
+import { retryAfterSeconds } from "../api/retryAfter";
 
 type Context = "generic" | "login" | "register" | "station" | "feeding" | "report" | "upload";
 type ErrorKey = Exclude<keyof typeof he.errors, "fields" | "field">;
@@ -20,6 +21,7 @@ const known: Record<string, ErrorKey> = {
   "Request body is too large": "requestSize",
   "Too many form fields": "requestStructure",
   "Unsupported request encoding": "requestFormat",
+  "Too many requests. Please try again later.": "rateLimited",
   "Invalid email or password": "invalidLogin", "User already exists": "userExists",
   "Authorization token required": "signIn", "Invalid or expired token": "expiredAuth", "User not found": "expiredAuth",
   "Please log in to add a feeding station.": "signIn", "Please log in to record a feeding.": "signIn",
@@ -78,8 +80,13 @@ function strings(value: unknown): string[] {
   return Object.values(object(value)).flatMap(strings);
 }
 const safeText = new Set(strings(he));
-// Only locally generated field feedback is cached, never untrusted server text.
+// Only locally generated feedback is cached, never untrusted server text.
 const fieldFeedback = new Set<string>();
+function retainFeedback(text: string): string {
+  if (fieldFeedback.size >= 256) fieldFeedback.clear();
+  fieldFeedback.add(text);
+  return text;
+}
 function fieldError(issue: unknown): string | null {
   const data = object(issue);
   const path = Array.isArray(data.path) ? data.path.join(".") : data.field;
@@ -89,9 +96,7 @@ function fieldError(issue: unknown): string | null {
   const label = t(`errors.fields.${field as keyof typeof he.errors.fields}`);
   const key = typeof data.message === "string" ? known[data.message] : undefined;
   const text = t("errors.field", { field: label, message: t(`errors.${key ?? "invalidValue"}`) });
-  if (fieldFeedback.size >= 256) fieldFeedback.clear();
-  fieldFeedback.add(text);
-  return text;
+  return retainFeedback(text);
 }
 
 export function localizeError(error: unknown, context: Context = "generic"): string {
@@ -99,13 +104,18 @@ export function localizeError(error: unknown, context: Context = "generic"): str
   const response = object(outer.response);
   const data = object(response.data ?? outer.data);
   const status = response.status ?? outer.status;
+  // A throttled attempt says nothing about credentials, membership or field
+  // validity. Status takes precedence over all response text and issue details.
+  if (status === 429) {
+    const seconds = retryAfterSeconds(response.headers);
+    return seconds === undefined ? t("errors.rateLimited") : retainFeedback(t("errors.rateLimitedWait", { count: seconds }));
+  }
   const issues = data.errors ?? data.issues;
   if (Array.isArray(issues)) {
     const feedback = issues.map(fieldError).filter((item): item is string => item !== null);
     if (feedback.length) {
       const text = feedback.join("; ");
-      fieldFeedback.add(text);
-      return text;
+      return retainFeedback(text);
     }
   }
   const message = typeof error === "string" ? error : data.message ?? data.error ?? data.msg ?? outer.message;
@@ -124,7 +134,6 @@ export function localizeError(error: unknown, context: Context = "generic"): str
   if (status === 404 && (context === "station" || context === "feeding")) return t("errors.stationMissing");
   if (status === 404 && context === "report") return t("errors.reportMissing");
   if (status === 409 && context === "feeding") return t("errors.stationInactive");
-  if (status === 429 && context === "upload") return t("errors.uploadBusy");
   if (status === 422 && context === "upload") return t("errors.uploadVerification");
   if (typeof status === "number" && status >= 500) return t("errors.server");
   return t(context === "upload" ? "errors.upload" : "errors.generic");

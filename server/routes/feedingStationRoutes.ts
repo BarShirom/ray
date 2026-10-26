@@ -10,16 +10,17 @@ import type { FeedingStationStore } from "../feedingStations/feedingStationStore
 import type { FeedingLogStore } from "../feedingLogs/feedingLogStore.js";
 import { mongoFeedingStationStore } from "../feedingStations/mongoFeedingStationStore.js";
 import { mongoFeedingLogStore } from "../feedingLogs/mongoFeedingLogStore.js";
+import { createAbuseProtection, type AbuseProtection } from "../security/abuseProtection.js";
 
-export function createFeedingStationRouter(stations: FeedingStationStore, logs: FeedingLogStore, authenticate: RequestHandler, creationSchema: ZodType = createFeedingStationSchema) {
+export function createFeedingStationRouter(stations: FeedingStationStore, logs: FeedingLogStore, authenticate: RequestHandler, creationSchema: ZodType = createFeedingStationSchema, abuse: AbuseProtection = createAbuseProtection()) {
   const { createFeedingStation, getAllFeedingStations, getFeedingStationById } = createFeedingStationHandlers(stations);
   const { createFeedingLog, getLogsForStation } = createFeedingLogHandlers(stations, logs);
   const router = express.Router();
-  router.post("/", authenticate, validateBody(creationSchema), createFeedingStation);
-  router.get("/", getAllFeedingStations);
-  router.post("/:stationId/feedings", authenticate, validateBody(createFeedingLogSchema), createFeedingLog);
-  router.get("/:stationId/feedings", getLogsForStation);
-  router.get("/:id", getFeedingStationById);
+  router.post("/", authenticate, abuse.accountWrite, validateBody(creationSchema), createFeedingStation);
+  router.get("/", abuse.publicRead, getAllFeedingStations);
+  router.post("/:stationId/feedings", authenticate, abuse.accountWrite, validateBody(createFeedingLogSchema), createFeedingLog);
+  router.get("/:stationId/feedings", abuse.publicRead, getLogsForStation);
+  router.get("/:id", abuse.publicRead, getFeedingStationById);
   return router;
 }
 

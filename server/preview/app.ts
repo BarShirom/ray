@@ -17,9 +17,10 @@ import { createMediaRouter } from "../media/routes.js";
 import { MediaError, type MediaStorage } from "../media/types.js";
 import { mediaStationSchema, mediaReportSchema } from "../media/validation.js";
 import { requestParsers, requestErrorHandler } from "../middleware/requestParsing.js";
+import { createAbuseProtection, type AbuseOptions } from "../security/abuseProtection.js";
 
 // Pure composition: no dotenv, startup, upload provider or connection side effects.
-export function createPreviewApp(connection: ReturnType<typeof createPostgres>, secret: string, storage?: MediaStorage, mediaPrefix = "dev/") {
+export function createPreviewApp(connection: ReturnType<typeof createPostgres>, secret: string, storage?: MediaStorage, mediaPrefix = "dev/", abuseOptions?: AbuseOptions) {
   const media = storage ? createMediaService(connection.db, storage, mediaPrefix) : undefined;
   const users = createPostgresUserStore(connection.db);
   const stations = media?.stations ?? createPostgresFeedingStationStore(connection.db);
@@ -28,6 +29,8 @@ export function createPreviewApp(connection: ReturnType<typeof createPostgres>, 
   const getSecret = () => secret;
   const auth = createAuthMiddleware(users, getSecret);
   const app = express();
+  app.set("trust proxy", false);
+  const abuse = createAbuseProtection(abuseOptions);
   app.use(cors({
     origin(origin, callback) {
       if (!origin || origin === "http://127.0.0.1:5175") callback(null, true);
@@ -36,21 +39,24 @@ export function createPreviewApp(connection: ReturnType<typeof createPostgres>, 
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["Retry-After"],
   }));
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   // Refuse before parsing multipart bodies; this composition never imports uploads.
   app.use("/api/upload", (_req, res) => {
     res.status(503).json({ message: "uploads unavailable in local preview" });
   });
-  app.use(requestParsers());
-  app.get("/api/media/capabilities", (_req, res) => { res.set("Cache-Control", "no-store").json({ enabled: !!media, maxBytes: 8388608, stationImages: 1, reportImages: 3 }); });
-  if (media) app.use("/api/media", createMediaRouter(media, auth));
-  else app.use("/api/media", (_req, res) => { res.status(503).json({ message: "Image uploads are disabled in local preview" }); });
-  app.use("/api/auth", createAuthRouter(users, getSecret));
-  app.use("/api/feeding-stations", createFeedingStationRouter(stations, logs, auth, media ? mediaStationSchema : undefined));
-  app.use("/api/reports", createReportRouter(reports, auth, createOptionalAuthMiddleware(users, getSecret), media ? mediaReportSchema : undefined));
   app.get("/healthz", (_req, res) => { res.send("ok"); });
-  app.get("/readyz", async (_req, res) => {
+  // Include unknown paths and readiness before parsing, not only /api routes.
+  app.use(abuse.ingress);
+  app.use(requestParsers());
+  app.get("/api/media/capabilities", abuse.publicRead, (_req, res) => { res.set("Cache-Control", "no-store").json({ enabled: !!media, maxBytes: 8388608, stationImages: 1, reportImages: 3 }); });
+  if (media) app.use("/api/media", createMediaRouter(media, auth, abuse));
+  else app.use("/api/media", (_req, res) => { res.status(503).json({ message: "Image uploads are disabled in local preview" }); });
+  app.use("/api/auth", createAuthRouter(users, getSecret, abuse));
+  app.use("/api/feeding-stations", createFeedingStationRouter(stations, logs, auth, media ? mediaStationSchema : undefined, abuse));
+  app.use("/api/reports", createReportRouter(reports, auth, createOptionalAuthMiddleware(users, getSecret), media ? mediaReportSchema : undefined, abuse));
+  app.get("/readyz", abuse.publicRead, async (_req, res) => {
     try {
       await connection.pool.query("SELECT 1");
       res.json({ ready: true });
@@ -60,7 +66,10 @@ export function createPreviewApp(connection: ReturnType<typeof createPostgres>, 
   });
   app.get("/", (_req, res) => { res.send("Ray local PostgreSQL preview (synthetic data)"); });
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
-    if (err instanceof MediaError) { res.status(err.status).json({ message: err.message }); return; }
+    if (err instanceof MediaError) {
+      if (err.status === 429) res.set("Retry-After", String(err.retryAfter ?? 60));
+      res.status(err.status).json({ message: err.message }); return;
+    }
     requestErrorHandler(err, _req, res, _next);
   };
   app.use(errorHandler);

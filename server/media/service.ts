@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { createPostgres } from "../db/connection.js";
 import { mediaAssets as assets, users, feedingStations, reports } from "../db/schema.js";
-import { MediaError, UPLOAD_SECONDS, type Intent, type MediaStorage, type Purpose } from "./types.js";
+import { MediaError, UPLOAD_SECONDS, MEDIA_DAILY_INTENTS, MEDIA_DAILY_BYTES, type Intent, type MediaStorage, type Purpose } from "./types.js";
 import { normalizeImage } from "./image.js";
 import { intentSchema, assetIdSchema } from "./validation.js";
 import { createPostgresFeedingStationStore } from "../feedingStations/postgresFeedingStationStore.js";
@@ -23,16 +23,16 @@ const safe = async <T>(fn: () => Promise<T>): Promise<T> => {
 };
 const publicAsset = (row: Asset) => ({ assetId: row.id, state: row.state, expiresAt: row.expiresAt.toISOString() });
 
-export function createMediaService(db: Database, storage: MediaStorage, prefix = "dev/") {
+export function createMediaService(db: Database, storage: MediaStorage, prefix = "dev/", completionClock: () => number = Date.now) {
   if (!/^dev\/(test-runs\/[0-9a-f-]{36}\/)?$/.test(prefix)) throw new Error("Invalid media prefix");
   let active = 0;
   const activeUsers = new Set<string>();
   const completionRates = new Map<string, { until: number; count: number }>();
   const rate = (owner: string) => {
-    const now = Date.now();
+    const now = completionClock();
     for (const [id, item] of completionRates) if (item.until <= now) completionRates.delete(id);
     const item = completionRates.get(owner);
-    if (item && item.count >= 10 || !item && completionRates.size >= 1024) throw new MediaError(429, "Too many image completion attempts; try again in a minute");
+    if (item && item.count >= 10 || !item && completionRates.size >= 1024) throw new MediaError(429, "Too many image completion attempts; try again in a minute", item ? (item.until - now) / 1000 : 60);
     completionRates.set(owner, item ? { ...item, count: item.count + 1 } : { until: now + 60_000, count: 1 });
   };
   async function ownerId(conn: Pick<Database, "select">, publicId: string) {
@@ -96,12 +96,34 @@ export function createMediaService(db: Database, storage: MediaStorage, prefix =
         const uuid = await ownerId(tx, owner);
         // Serialize per-user issuance to enforce quotas even across processes.
         await tx.select({ id: users.id }).from(users).where(eq(users.id, uuid)).for("update");
-        const [counts] = await tx.select({ outstanding: sql<number>`count(*) filter (where ${unattached} AND ${assets.expiresAt} > now() AND ${assets.state} IN ('pending','processing','ready'))::integer`,
-          recent: sql<number>`count(*) filter (where ${assets.createdAt} > now() - interval '1 minute')::integer` }).from(assets).where(eq(assets.ownerId, uuid));
-        if (counts.outstanding >= 6 || counts.recent >= 10) throw new MediaError(429, "Image upload quota reached; finish existing uploads or wait before trying again");
+        const [clock] = await tx.select({ now: sql<Date>`clock_timestamp()` }).from(users).where(eq(users.id, uuid));
+        const now = new Date(clock.now).getTime();
+        const minuteStart = new Date(now - 60_000), dayStart = new Date(now - 86_400_000);
+        const pending = and(unattached, gt(assets.expiresAt, new Date(now)), sql`${assets.state} IN ('pending','processing','ready')`);
+        const recent = gt(assets.createdAt, minuteStart), daily = gt(assets.createdAt, dayStart);
+        const [counts] = await tx.select({
+          outstanding: sql<number>`count(*) filter (where ${pending})::integer`,
+          outstandingExpiry: sql<Date | null>`min(${assets.expiresAt}) filter (where ${pending})`,
+          recent: sql<number>`count(*) filter (where ${recent})::integer`,
+          recentStart: sql<Date | null>`min(${assets.createdAt}) filter (where ${recent})`,
+          daily: sql<number>`count(*) filter (where ${daily})::integer`,
+          dailyBytes: sql<number>`coalesce(sum(${assets.byteLength}) filter (where ${daily}), 0)::double precision`,
+          dailyStart: sql<Date | null>`min(${assets.createdAt}) filter (where ${daily})`,
+        }).from(assets).where(eq(assets.ownerId, uuid));
+        // All states count toward the rolling budgets: attachment, expiry,
+        // signing failure and cleanup must not refund issuance capacity.
+        const quota = (until: Date | null, window = 0) => new MediaError(429,
+          "Image upload quota reached; finish existing uploads or wait before trying again",
+          until ? (new Date(until).getTime() + window - now) / 1000 : 60);
+        if (counts.outstanding >= 6) throw quota(counts.outstandingExpiry);
+        if (counts.recent >= 10) throw quota(counts.recentStart, 60_000);
+        if (counts.daily >= MEDIA_DAILY_INTENTS || counts.dailyBytes + intent.byteLength > MEDIA_DAILY_BYTES) throw quota(counts.dailyStart, 86_400_000);
         const id = randomUUID();
         const [created] = await tx.insert(assets).values({ id, ownerId: uuid, ...intent,
           sourceKey: `${prefix}incoming/${id}`, outputKey: `${prefix}ready/${id}.webp`,
+          // The transaction may have waited for this owner's lock. Reserve at
+          // admission time, not PostgreSQL now()'s older transaction timestamp.
+          createdAt: sql`clock_timestamp()`,
           uploadExpiresAt: sql`clock_timestamp() + interval '5 minutes'`, expiresAt: sql`clock_timestamp() + interval '1 hour'` }).returning();
         return created;
       });
@@ -117,8 +139,9 @@ export function createMediaService(db: Database, storage: MediaStorage, prefix =
       }
     }),
     complete: (owner: string, id: string) => safe(async () => {
+      owner = owner.toLowerCase();
       rate(owner);
-      if (active >= 2 || activeUsers.has(owner)) throw new MediaError(429, "Image processing busy; try again shortly");
+      if (active >= 2 || activeUsers.has(owner)) throw new MediaError(429, "Image processing busy; try again shortly", 1);
       active++; activeUsers.add(owner);
       let row: Asset | undefined;
       try {
@@ -131,7 +154,8 @@ export function createMediaService(db: Database, storage: MediaStorage, prefix =
           if (found.state === "ready") return found;
           if (["failed", "deleting", "deleted"].includes(found.state)) throw new MediaError(409, "Image cannot be completed; select it again");
           if (found.processingUntil && found.processingUntil.getTime() > now) throw new MediaError(409, "Image verification already in progress");
-          if (found.attempts >= 5 || found.lastAttemptAt && now - found.lastAttemptAt.getTime() < 2000) throw new MediaError(429, "Image completion limit reached; wait or select it again");
+          if (found.attempts >= 5 || found.lastAttemptAt && now - found.lastAttemptAt.getTime() < 2000) throw new MediaError(429, "Image completion limit reached; wait or select it again",
+            found.attempts >= 5 ? (found.expiresAt.getTime() - now) / 1000 : (found.lastAttemptAt!.getTime() + 2000 - now) / 1000);
           const [claimed] = await tx.update(assets).set({ state: "processing", lease: randomUUID(), processingUntil: sql`clock_timestamp() + interval '1 minute'`, attempts: found.attempts + 1, lastAttemptAt: sql`clock_timestamp()` }).where(eq(assets.id, id)).returning();
           return claimed;
         });
