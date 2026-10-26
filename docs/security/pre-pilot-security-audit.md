@@ -2,6 +2,8 @@
 
 Date: **2026-10-25**. Branch: **`ray-2-postgres`**. Audited commit: **`945ab79523a511bafdfd34f27ad72004a0b935b3`** (UX.2).
 
+**Remediation follow-up, 2026-10-26:** [SEC.1B-1](sec-1b-1-remediation.md) implements and locally verifies fixes for **SEC-001**, **SEC-004** and the anonymous legacy-upload exposure in **SEC-002**, plus the shared parser/error-handler portion of **SEC-013**. Evidence: 207 backend, 122 disposable PostgreSQL and 77 frontend tests passed, including isolated actual-app parser-survival regressions. Both frontend builds and targeted lint passed. These statuses describe the uncommitted review working tree based on `44839a29e1b1854c76821a5957c8db0c3943c707`; the original findings and historical verification below remain the SEC.1A baseline. Public-pilot clearance remains withheld; other findings and release gates are open.
+
 **Decision: not ready for a real public pilot.** No Critical application exploit was established. High-priority findings are a reproduced unauthenticated parser process crash, anonymous Cloudinary consumption in the legacy application, missing API abuse controls, and reachable validation amplification. Reviewed PostgreSQL ownership and attachment checks held in the existing tests. Intentional public reads are distinguished below from excessive disclosure and undecided privacy policy.
 
 This assessment changes only this document. No remediation, package upgrade, staging, commit, push, deployment, AWS request, credential renewal, persistent-preview reset or deletion was performed. Defensive evidence summaries omit payloads, passwords, tokens, object identifiers and signed URLs. Passing local tests is not deployment approval.

@@ -103,6 +103,7 @@ test("known validation, auth, station, claim and upload errors are useful and sa
     ["Report is already claimed or resolved", "report", he.errors.alreadyClaimed],
     ["Feeding station is inactive", "feeding", he.errors.stationInactive],
     ["uploads unavailable in local preview", "upload", he.errors.uploadUnavailable],
+    ["Legacy media uploads are retired", "upload", he.errors.uploadUnavailable],
     ["Station name is required.", "station", he.errors.stationName],
     ["Choose one station image or up to three report images.", "upload", he.errors.uploadCount],
   ]) assert.equal(localizeError(message, context), expected);
@@ -118,4 +119,26 @@ test("known validation, auth, station, claim and upload errors are useful and sa
   }
   const badField = localizeError({ response: { data: { errors: [{ field: "email", message: "SQL secret=synthetic" }] } } });
   assert.equal(badField, `דוא״ל: ${he.errors.invalidValue}`);
+});
+
+test("new request and field bounds receive predictable Hebrew feedback", () => {
+  for (const [message, key] of [
+    ["Text exceeds allowed length", "textLength"],
+    ["Too many items", "collectionLength"],
+    ["Request structure exceeds allowed limits", "requestStructure"],
+    ["Request structure exceeds supported limits", "requestStructure"],
+    ["Malformed request body", "requestStructure"],
+    ["Request body is too large", "requestSize"],
+    ["Too many form fields", "requestStructure"],
+    ["Unsupported request encoding", "requestFormat"],
+  ]) {
+    const plain = localizeError({ response: { status: 400, data: { message } } });
+    assert.equal(plain, he.errors[key]);
+    assert.match(plain, /[\u0590-\u05FF]/);
+    const field = localizeError({ response: { status: 400, data: { errors: [{ field: "description", message }] } } }, "report");
+    assert.equal(field, `${he.errors.fields.description}: ${he.errors[key]}`);
+    assert.equal(localizeError(field), field);
+  }
+  const bodyError = localizeError({ response: { status: 400, data: { message: "Validation failed", errors: [{ field: "body", message: "Request structure exceeds allowed limits" }] } } });
+  assert.equal(bodyError, `${he.errors.fields.body}: ${he.errors.requestStructure}`);
 });

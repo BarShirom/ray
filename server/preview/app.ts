@@ -16,6 +16,7 @@ import { createMediaService } from "../media/service.js";
 import { createMediaRouter } from "../media/routes.js";
 import { MediaError, type MediaStorage } from "../media/types.js";
 import { mediaStationSchema, mediaReportSchema } from "../media/validation.js";
+import { requestParsers, requestErrorHandler } from "../middleware/requestParsing.js";
 
 // Pure composition: no dotenv, startup, upload provider or connection side effects.
 export function createPreviewApp(connection: ReturnType<typeof createPostgres>, secret: string, storage?: MediaStorage, mediaPrefix = "dev/") {
@@ -41,8 +42,7 @@ export function createPreviewApp(connection: ReturnType<typeof createPostgres>, 
   app.use("/api/upload", (_req, res) => {
     res.status(503).json({ message: "uploads unavailable in local preview" });
   });
-  app.use(express.json({ limit: "10mb" }));
-  app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+  app.use(requestParsers());
   app.get("/api/media/capabilities", (_req, res) => { res.set("Cache-Control", "no-store").json({ enabled: !!media, maxBytes: 8388608, stationImages: 1, reportImages: 3 }); });
   if (media) app.use("/api/media", createMediaRouter(media, auth));
   else app.use("/api/media", (_req, res) => { res.status(503).json({ message: "Image uploads are disabled in local preview" }); });
@@ -61,9 +61,7 @@ export function createPreviewApp(connection: ReturnType<typeof createPostgres>, 
   app.get("/", (_req, res) => { res.send("Ray local PostgreSQL preview (synthetic data)"); });
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     if (err instanceof MediaError) { res.status(err.status).json({ message: err.message }); return; }
-    // Domain adapters already supply safe errors; never log raw SQL/request detail.
-    console.error("Local preview request failed");
-    res.status(500).json({ error: err?.name || "ServerError", message: err?.message || "Internal Server Error" });
+    requestErrorHandler(err, _req, res, _next);
   };
   app.use(errorHandler);
   return app;

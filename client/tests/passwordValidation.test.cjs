@@ -8,6 +8,10 @@ const ts = require("typescript");
 for (const extension of [".ts", ".tsx"]) {
   require.extensions[extension] = (module, filename) => {
     const source = fs.readFileSync(filename, "utf8")
+      // Server source uses NodeNext .js specifiers; resolve its TypeScript
+      // companions while exercising the real source schema in this CJS loader.
+      .replace(/(from\s+["'])(\.[^"']+)\.js(["'])/g, (match, prefix, relative, suffix) =>
+        fs.existsSync(path.resolve(path.dirname(filename), relative + ".ts")) ? prefix + relative + ".ts" + suffix : match)
       .replaceAll("import.meta.env.VITE_API_URL", JSON.stringify("http://fixture.invalid"))
       .replaceAll("import.meta.env.MODE", JSON.stringify("development"));
     module._compile(ts.transpileModule(source, {
