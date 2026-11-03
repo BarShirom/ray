@@ -8,11 +8,10 @@ export interface StationDiscovery {
   location: { lat: number; lng: number };
   estimatedCats: number;
   estimatedKittens: number;
-  visibility: "sensitive" | "regular";
+  active: boolean;
   permissions: { canManage: boolean; canFeed: boolean };
 }
 export interface StationDetail extends StationDiscovery {
-  active: boolean;
   notes?: string | null;
   image?: string;
 }
@@ -37,7 +36,7 @@ export interface StationPage<T> { items: T[]; nextCursor?: string }
 export interface StationPrivacyStore {
   list(identity: AuthIdentity, page: StationPageOptions): Promise<StationPage<StationDiscovery>>;
   detail(identity: AuthIdentity, stationId: string): Promise<StationDetail | null>;
-  create(identity: AuthIdentity, input: Omit<CreateFeedingStation, "createdBy">): Promise<StationDetail>;
+  create(identity: AuthIdentity, input: Omit<CreateFeedingStation, "createdBy" | "visibility" | "image">): Promise<StationDetail>;
   ownLogs(identity: AuthIdentity, stationId: string, page: StationPageOptions): Promise<StationPage<OwnFeedingLog>>;
   summary(identity: AuthIdentity, stationId: string): Promise<FeedingSummary>;
   createFeeding(identity: AuthIdentity, stationId: string, input: Omit<CreateFeedingLog, "stationId" | "userId">): Promise<OwnFeedingLog>;

@@ -93,14 +93,11 @@ for (const [action, lock] of [["view", "share"], ["manage", "update"]]) {
     assert.match(queries[2].sql, new RegExp(`^select "id" from "feeding_stations".*for ${lock}$`));
     assert.deepEqual(queries[2].params, [stationPublicId, 1]);
     assert.doesNotMatch(queries[2].sql, /visibility|station_access_grants|created_by/);
-    assert.match(queries[3].sql, /"visibility" in \('sensitive', 'regular'\)/);
     assert.match(queries[3].sql, /select 1 from "users"/);
     assert.doesNotMatch(queries[3].sql, /"location"|"name"|"notes"|"image"|"email"|"password_hash"/);
-    if (action === "view") {
-      assert.match(queries[3].sql, /"station_access_grants"\."granted_by" = "feeding_stations"\."created_by"/);
-      assert.match(queries[3].sql, /"station_access_grants"\."revoked_at" is null/);
-    } else {
-      assert.doesNotMatch(queries[3].sql, /station_access_grants|= 'regular'/);
+    assert.doesNotMatch(queries[3].sql, /visibility|station_access_grants|"active"/);
+    if (action === "manage") {
+      assert.match(queries[3].sql, /where .*"created_by" = \$\d+/s);
     }
   });
 }
@@ -113,4 +110,13 @@ test("missing and policy-denied parents both return null; malformed targets do n
     assert.equal(queries.length, 2);
     assert.equal(await lockAndAuthorizeStation(tx, principal, stationPublicId), null);
   }
+});
+
+test("beta view SQL admits only the live account without dormant classification, grants or activity policy", async () => {
+  const { tx } = fixture([isolation(), [{ id: actorId }]]);
+  const principal = await resolveStationPrincipalFromVerifiedIdentity(tx, { _id: actorPublicId });
+  const query = dialect.sqlToQuery(stationViewPredicate(tx, principal));
+  assert.match(query.sql, /exists \(\s*select 1 from "users" where "users"\."id" = \$1\s*\)/);
+  assert.deepEqual(query.params, [actorId]);
+  assert.doesNotMatch(query.sql, /feeding_stations|visibility|station_access_grants|created_by|active/);
 });

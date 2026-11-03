@@ -92,9 +92,12 @@ test("actual preview composition on disposable PostgreSQL", async (t) => {
     assert.equal((await request("POST", "/api/feeding-stations", {})).status, 401);
     await insertSyntheticSeed(connection);
     assert.equal((await request("GET", "/api/feeding-stations")).status, 401);
-    assert.equal((await request("GET", "/api/feeding-stations", undefined, token)).body.length, 1);
-    // Existing seeded stations remain sensitive and preserved; this newly
-    // registered account owns only its own station.
+    const allStations = (await request("GET", "/api/feeding-stations", undefined, token)).body;
+    assert.equal(allStations.length, 4);
+    assert.ok(allStations.every(row => !Object.hasOwn(row, "visibility")));
+    // Stored classifications remain preserved but do not restrict this newly
+    // registered account's beta audience or confer management authority.
+    assert.equal(allStations.filter(row => row.permissions.canManage).length, 1);
     assert.equal((await connection.pool.query("SELECT count(*) FROM feeding_stations")).rows[0].count, '4');
     assert.equal((await connection.pool.query("SELECT count(*) FROM users")).rows[0].count, '3');
   });

@@ -73,7 +73,7 @@ function stores() {
   };
   const logs = { async create(input) { calls.feeding++; return { ...input, publicId: "400000000000000000000001" }; }, async listForStation() { calls.read++; return []; } };
   const privacy = {
-    async create(identity, input) { calls.station++; return { ...stationRecord, ...input, _id: stationId, visibility: input.visibility ?? "sensitive" }; },
+    async create(identity, input) { calls.station++; return { ...stationRecord, ...input, _id: stationId }; },
     async createFeeding(identity, id, input) { calls.feeding++; return { ...input, _id: "400000000000000000000001", stationId: id }; },
     async list() { calls.read++; return { items: [] }; },
     async detail() { calls.read++; return null; },

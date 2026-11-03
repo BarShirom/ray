@@ -1,16 +1,18 @@
 # Ray release readiness
 
-Current assessment: **2026-11-03, Asia/Jerusalem**, SEC.1B-3C.0 documentation-only
-policy revision. Branch `ray-2-postgres`, HEAD
-`ea63a0ddf02cb3cb2f146ddd65685a4279ba953b`; SEC.1B-3B.2 is committed. Preflight
-working tree and index clean; locally recorded tracking **0 ahead / 0 behind**
-without fetch. No application, schema, tests, dependencies or cloud/data change.
+Current assessment: **2026-11-03, Asia/Jerusalem**, SEC.1B-3C.1 backend beta-policy
+implementation, uncommitted. Branch `ray-2-postgres`, baseline/current HEAD
+`6b0e9550735c5945c9187023ac4791f4bb5ab996`; approved SEC.1B-3C.0 policy and
+SEC.1B-3B.2 are committed. Preflight working tree and index clean; locally recorded
+tracking **0 ahead / 0 behind** without fetch. The
+[implementation report](security/sec-1b-3c-1-beta-access.md) records current local
+evidence, compatibility gaps and the required subsequent independent review.
 
 Historical QG.1/SEC.1B-2 assessment, **2026-10-26, Asia/Jerusalem**: branch **`ray-2-postgres`**, baseline **`ad724dcd7f7a9d60be747eaf191f74210f7de70d`** (QG.1), with SEC.1B-2 implementation then uncommitted. Its preflight tree was clean and local upstream 0/0 without fetch. Its dated evidence below remains historical.
 
 **Decision: NOT ready for a closed pilot with real users or public production.** Applicable BLOCKER items below require resolution and evidence before launch. Local development and guarded synthetic demonstrations have useful evidence; they do not establish readiness for real identities, animal locations or images.
 
-**First-beta policy APPROVED; NOT IMPLEMENTED:** the product owner now authorizes
+**First-beta policy APPROVED; backend VERIFIED locally; frontend incomplete:** the product owner authorizes
 every current authenticated account to discover/view all stations and their precise
 locations, shared summaries and attached images, and record feedings at active
 stations. Guests remain denied; creator-only management and author-only history,
@@ -20,13 +22,16 @@ The hybrid audience/default/publication and invitation/grant roadmap are
 [design's authoritative section 17](security/station-visibility-design.md#17-sec1b-3c0-approved-first-beta-policy-and-implementation-plan).
 ALL includes inactive discovery/viewing; inactive feeding remains denied.
 
-The committed backend still enforces the hybrid policy, and the old station client
-still needs integration. The recommended implementation retains migration 0007,
-its default/classification/grant metadata and all records unchanged, while removing
-their role in beta access. No migration/backfill/drop is needed; dormant `sensitive`
-must not appear as an API/UI privacy promise. JSON, feeding and both media issuers
-must adopt the same policy together. Existing provider signing/attachment/owner
-protections and legacy station/feed refusal remain mandatory.
+The uncommitted backend implements that audience through the shared current-account
+predicate, including both media issuers. Collection/detail/create DTOs omit
+`visibility`; discovery includes `active`. Explicit creation `visibility` receives
+400 in plain and media-enabled PostgreSQL compositions. Migration 0007, defaults,
+constraints, classifications and grant records remain unchanged as dormant
+metadata; no schema migration/backfill/drop or persistent preview operation occurred.
+Creator authority, author-only logs, minimized summaries, provider signing/attachment/
+owner protections and legacy station/feed refusal remain intact in local regressions.
+The old station client still needs integration. **Do not deploy this backend with
+an unadapted client or mix JSON and media policies across backend instances.**
 
 Registration establishes an account, **not trust**: malicious self-registration
 would disclose all precise locations, including formerly sensitive stations.
@@ -45,6 +50,18 @@ Session/password policy, client isolation, actual authenticated-image browser
 verification, remaining S3 checks, distributed abuse, accessibility/welfare,
 dependencies, production configuration, backup/restore/monitoring and all applicable
 real-data blockers remain open. No deployment readiness is granted.
+
+**SEC.1B-3C.1 current verification, 2026-11-03:** backend build and **252/252**
+ordinary tests, full guarded disposable PostgreSQL **172/172**, frontend **94/94**,
+normal and PostgreSQL frontend builds, targeted lint/syntax and documentation checks
+passed. Real PostgreSQL evidence covers identical authenticated station audiences,
+inactive discovery/feeding rejection, dormant metadata, creator authority, private
+feeding projections, media parent rechecks and independent-session lock waits.
+Storage/signing used doubles; no browser or live-provider evidence was added.
+Both frontend builds retain the existing >500-kB chunk warning. No client,
+dependency or schema files changed. The disposable test service was stopped;
+persistent dev/preview services remained stopped. **The separate post-implementation
+independent critical read-only review is pending; no Git write is authorized.**
 
 **SEC.1B-3B.1 local follow-up, 2026-11-03:** the
 [station privacy foundation](security/sec-1b-3b-1-foundation.md) adds migration
@@ -125,7 +142,7 @@ Status describes the evidence for the **actual result**, not an overall pass: `V
 | Distributed abuse/resource bounds before exposed pilot APIs | [SEC-003/007](security/pre-pilot-security-audit.md#findings--missing-protections-with-demonstrated-risk) and [SEC.1B-2 limitations](security/sec-1b-2-abuse-protection.md#remaining-release-gates-and-follow-up) | VERIFIED | Local API limits and durable owner issuance controls improve the system, but shared API enforcement, reviewed proxy attribution, pagination, global/cross-account retained-byte budgets and distributed completion capacity remain open. | BLOCKER for intended exposed APIs/paid media | Define enrollment/moderation, shared atomic quotas/edge enforcement, retention/output/global budgets and production identity; enforce and verify across processes; Product, Engineering, Operations. |
 | Password, session and remaining error boundaries before real accounts | [SEC-006/011/013](security/pre-pilot-security-audit.md), SEC.1B-1 remaining scope | VERIFIED | Bcrypt truncates beyond 72 UTF-8 bytes; copied seven-day bearer tokens survive local logout. Controller-specific errors/logs still need review. | BLOCKER for real-account policy and safe handling | Decide compatible enrollment/session/recovery policies; fix/test remaining unsafe paths; Product, Security, Engineering. |
 | Legacy claim integrity if Mongo remains exposed | Adapter probe and PG comparison; [SEC-005](security/pre-pilot-security-audit.md#sec-005--legacy-claim-race-can-overwrite-the-winning-assignee) | VERIFIED | Legacy claim race remains; PG locking tests passed. | BLOCKER if legacy serves pilot reports | Exclude legacy from pilot routing or fix and verify race; Engineering, Operations. |
-| Explicit identity/location/routine/image audience before real data | [SEC.1B-3B.2](security/sec-1b-3b-2-endpoint-privacy.md) historical hybrid endpoint evidence; [approved beta plan](security/station-visibility-design.md#17-sec1b-3c0-approved-first-beta-policy-and-implementation-plan); [SEC-008/009](security/pre-pilot-security-audit.md#findings--privacy-and-product-decisions) | VERIFIED source: hybrid currently implemented; beta audience enforcement NOT_IMPLEMENTED / NOT_TESTED | All-registered precise station access is now APPROVED for beta, superseding the hybrid audience. Shared summaries/own history and original-parent media checks remain. Malicious enrollment, old clients/session/map isolation, public Report data, copies and real-data notice/operations remain risks; professional/assignee claims create no private-case tier. | BLOCKER for real data | Implement/test the consistent beta JSON/media policy and client isolation, then establish enrollment/abuse/notices/operating readiness; Product/privacy, Engineering, Security, Operations. |
+| Explicit identity/location/routine/image audience before real data | [SEC.1B-3C.1](security/sec-1b-3c-1-beta-access.md) current source/offline/disposable-PG evidence; [approved beta plan](security/station-visibility-design.md#17-sec1b-3c0-approved-first-beta-policy-and-implementation-plan); [SEC-008/009](security/pre-pilot-security-audit.md#findings--privacy-and-product-decisions) | VERIFIED local backend beta enforcement; frontend/browser acceptance NOT_TESTED | All-current-account station JSON/feed/media audience implemented without a schema change; shared summaries, own-author history and original-parent media checks retained. Malicious enrollment, old clients/session/map isolation, public Report data, copies and real-data notice/operations remain risks; professional/assignee claims create no private-case tier. | BLOCKER for real data | Obtain separate independent implementation review; complete client isolation and browser acceptance, then establish enrollment/abuse/notices/operating readiness; Product/privacy, Engineering, Security, Operations. |
 | Retention, deletion/takedown and external-media policy | Lifecycle/source review; [SEC-010/012](security/pre-pilot-security-audit.md); [station external-image suppression](security/sec-1b-3b-2-endpoint-privacy.md#json-projections-and-compatibility) | VERIFIED for recorded scope | Attached originals/outputs retained without app removal. PG station external URLs are rejected on new writes and suppressed on protected reads without rewriting old strings; Report external-image policy remains separate and open. | BLOCKER before real images/data under the chosen mode | Decide original necessity, periods, removal/request handling and Report/host policy; implement retry-safe lifecycle; Product/privacy, Engineering, Operations. |
 | Remaining dependency risk disposition | Prior SEC.1B-1 audit JSON comparison and [dependency report](security/sec-1b-1-remediation.md#dependency-changes) | VERIFIED | Prior snapshot: server **12** affected packages (4 moderate/7 high/1 critical), client **21** (2 low/4 moderate/14 high/1 critical); body-parser/qs/Zod findings removed. SEC.1B-2 changes no dependencies/lockfiles and does not rerun the registry audit. Historical audit exits were 0 despite findings. | BLOCKER for unresolved reachable runtime risk; tooling assessed separately | Refresh audit/reachability review for the relevant release or dependency work; remove retired dependencies or apply scoped fixes; Security, Engineering. |
 | Complete media security acceptance before S3 activation | [S3 ledger and named gaps](migrations/s3-media.md#remaining-release-gates), [SEC-017](security/pre-pilot-security-audit.md#sec-017--full-s3-acceptance-remains-incomplete) | NOT_TESTED | Browser wire/preflight and token/cookie inspection; same-length payload checksum mismatch; corrupt live completion; ready-unattached/cross-owner-ready and broader parent visibility; controlled expiry/interruption/retry; invalid files/counts; S3-specific guest/disabled no-image flows; live ready-completion idempotency remain open. | BLOCKER for media activation | Approve applicable bounded follow-up using retained ledger; preserve signing/size/ownership controls and evidence tiers; Security, Engineering. No cloud action authorized here. |
@@ -144,6 +161,7 @@ Closing a finding requires evidence for the intended mode/environment, not a cha
 
 ## Historical-document interpretation
 
+- SEC.1B-3C.0 design statements such as NOT_IMPLEMENTED and its `ea63a0dd...` preflight describe the approved documentation-only stage. SEC.1B-3C.1's linked report establishes the current uncommitted backend evidence; the client and browser gates remain open. Sections 1-16 retain superseded hybrid decisions. The S3 runbook's opening hybrid audience/source notice describes SEC.1B-3B.2; its classification/grant branch is superseded for beta by the current shared account policy, while its operational procedures and unresolved media gates remain applicable.
 - The audit's follow-up and SEC.1B-1 report describe an uncommitted review tree at `44839a29...`; that implementation is now committed at `ffb020fc...`. Their test evidence remains attributed to that stage.
 - The S3 runbook's old HEAD/uncommitted/staging statements and early blocked-browser result are historical. S3.1 is committed in ancestor `a0dccb8733229fbca47c700bdacb67657ce6c9f2`; its September 24 closeout supersedes the earlier functional blocker, while named acceptance gaps remain open. Historical dependency counts are superseded by SEC.1B-1, not silently rewritten.
 - The original preview runbook's preserved legacy-upload behavior, six-migration description and separate-future-S3 wording describe its original milestone. Current legacy uploads are retired; migration 0006 and opt-in media are documented by S3.1. No historical import/Cloudinary transfer is required for Ray's fresh stores.

@@ -88,7 +88,7 @@ export function stubReportDocument(t, doc, users = [populatedUser]) {
 // in integration/postgresStationPrivacy.test.mjs, not in this stub.
 export function privacyFixture() {
   const state = { calls: [], detail: { _id: ids.station, name: "Garden cats", location,
-    estimatedCats: 0, estimatedKittens: 0, visibility: "sensitive",
+    estimatedCats: 0, estimatedKittens: 0,
     permissions: { canManage: true, canFeed: true }, active: true }, logs: [], failure: null };
   const call = (operation, identity, ...args) => {
     state.calls.push({ operation, identity, args });
@@ -99,7 +99,7 @@ export function privacyFixture() {
     async detail(identity, id) { call("detail", identity, id); return state.detail; },
     async create(identity, input) {
       call("create", identity, input);
-      return { ...state.detail, ...input, _id: ids.station, visibility: input.visibility ?? "sensitive" };
+      return { ...state.detail, ...input, _id: ids.station };
     },
     async ownLogs(identity, id, paging) {
       call("ownLogs", identity, id, paging);

@@ -14,5 +14,7 @@ export const createFeedingStationSchema = z.object({
   image: z.never().optional(),
   imageAssetId: z.string().uuid().optional(),
   notes: z.string().max(INPUT_LIMITS.description, TEXT_LIMIT_MESSAGE).optional(),
-  visibility: z.enum(["sensitive", "regular"]).default("sensitive"),
+  // Classification is dormant metadata for beta. Never accept an input that
+  // could falsely promise restriction to a subset of authenticated accounts.
+  visibility: z.never().optional(),
 });

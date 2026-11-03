@@ -2,16 +2,21 @@
 
 **Station-contract supersession, 2026-11-03 (source review):** the S3.1 status,
 HEAD, public station-image behavior and verification results below describe the
-dated historical checkpoint. The current contract is the
-[station privacy design](../security/station-visibility-design.md), with
+dated historical checkpoint. The current beta contract is
+[station privacy design section 17](../security/station-visibility-design.md#17-sec1b-3c0-approved-first-beta-policy-and-implementation-plan), with
 implementation and evidence recorded in
-[SEC.1B-3B.2](../security/sec-1b-3b-2-endpoint-privacy.md).
+[SEC.1B-3C.1](../security/sec-1b-3c-1-beta-access.md).
+[SEC.1B-3B.2](../security/sec-1b-3b-2-endpoint-privacy.md) records the former hybrid
+regular/sensitive and creator-or-grant audience, now superseded for beta.
 
-The current PostgreSQL implementation requires authenticated authorization to the
-image's authoritative station parent: regular stations permit authenticated
-viewers; sensitive stations require creator ownership or an active explicit grant
-issued by that creator. Both stable content GET/HEAD and station read-URL issuance
-enforce that policy before signing and recheck it before releasing the capability.
+Guests cannot read station images. Every current authenticated stored account may
+read ready, attached station images, including those of inactive stations,
+regardless of dormant visibility/grant metadata. Authorization remains server-side
+against the image's authoritative PostgreSQL station parent. Both stable content
+GET/HEAD and station read-URL issuance enforce that policy before signing and
+recheck account, parent and attachment before releasing the capability. Private S3
+and existing short-lived signing, attachment and upload-ownership protections
+remain enforced; there is no public image fallback.
 The legacy Mongo composition refuses `/api/feeding-stations` (including feeding
 children) and `/api/station-access` with 503 before parsing, authentication or
 storage access; an earlier CORS preflight may return 204. There is no public

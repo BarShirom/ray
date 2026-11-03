@@ -67,47 +67,50 @@ test("internal PostgreSQL station policy is principal/transaction scoped and dis
   await make.grant(sensitive, revoked, owner, true);
   await make.grant(sensitive, professional, unrelated); // structurally valid FK, invalid owner attribution
 
-  await t.test("guest, creator, regular viewer, active/revoked/invalid grantees and owner-only management", async () => {
+  await t.test("every current account views active/inactive stations regardless of dormant grants; management stays owner-only", async () => {
     for (const station of [sensitive, regular, inactive]) {
       assert.equal(await authorization(connection.db, null, station), null);
       allowed(await authorization(connection.db, owner, station), station, true);
       allowed(await authorization(connection.db, owner, station, "manage"), station, true);
     }
     for (const user of [grantee, unrelated, revoked, professional]) {
-      allowed(await authorization(connection.db, user, regular), regular, false);
-      assert.equal(await authorization(connection.db, user, regular, "manage"), null);
-      assert.equal(await authorization(connection.db, user, sensitive, "manage"), null);
+      for (const station of [sensitive, regular, inactive]) {
+        allowed(await authorization(connection.db, user, station), station, false);
+        assert.equal(await authorization(connection.db, user, station, "manage"), null);
+      }
     }
-    allowed(await authorization(connection.db, grantee, sensitive), sensitive, false);
-    allowed(await authorization(connection.db, grantee, inactive), inactive, false);
-    for (const user of [unrelated, revoked, professional]) assert.equal(await authorization(connection.db, user, sensitive), null);
     assert.equal(await authorization(connection.db, owner, { public_id: publicId() }), null);
     assert.equal(await authorization(connection.db, owner, { public_id: "malformed" }), null);
     allowed(await authorization(connection.db, owner, { ...sensitive, public_id: sensitive.public_id.toUpperCase() }), sensitive, true);
   });
 
-  await t.test("authorship, report assignment and future professional input create no station authority", async () => {
+  await t.test("authorship, report assignment and future professional input create no management authority", async () => {
     await connection.pool.query(`INSERT INTO feeding_logs(public_id,station_id,user_id)
       VALUES($1,$2,$3)`, [publicId(), sensitive.id, unrelated.id]);
     await connection.pool.query(`INSERT INTO reports(public_id,description,type,location,assigned_to)
       VALUES($1,'Synthetic independent assignment','general',ST_SetSRID(ST_MakePoint(34.7,32.1),4326),$2)`,
     [publicId(), unrelated.id]);
-    assert.equal(await authorization(connection.db, unrelated, sensitive), null);
+    allowed(await authorization(connection.db, unrelated, sensitive), sensitive, false);
+    assert.equal(await authorization(connection.db, unrelated, sensitive, "manage"), null);
     await connection.db.transaction(async (tx) => {
       const principal = await resolveStationPrincipalFromVerifiedIdentity(tx, {
         ...verifiedIdentityFixture(professional), role: "municipal", company: "Synthetic organization", ownerId: owner.public_id,
       });
-      assert.equal(await lockAndAuthorizeStation(tx, principal, sensitive.public_id), null);
+      allowed(await lockAndAuthorizeStation(tx, principal, sensitive.public_id), sensitive, false);
+      assert.equal(await lockAndAuthorizeStation(tx, principal, sensitive.public_id, "manage"), null);
     });
   });
 
-  await t.test("actor predicate filters in SQL before order/limit, without returning station content", async () => {
+  await t.test("account predicate includes dormant classifications before order/limit, without returning station content", async () => {
     await connection.pool.query("UPDATE feeding_stations SET created_at='2099-01-01Z' WHERE id=$1", [sensitive.id]);
     await connection.db.transaction(async (tx) => {
       const principal = await resolveStationPrincipalFromVerifiedIdentity(tx, verifiedIdentityFixture(unrelated));
       const visible = await tx.select({ publicId: feedingStations.publicId }).from(feedingStations)
         .where(stationViewPredicate(tx, principal)).orderBy(desc(feedingStations.createdAt), desc(feedingStations.id)).limit(1);
-      assert.deepEqual(visible, [{ publicId: regular.public_id }]);
+      assert.deepEqual(visible, [{ publicId: sensitive.public_id }]);
+      const all = await tx.select({ publicId: feedingStations.publicId }).from(feedingStations)
+        .where(stationViewPredicate(tx, principal));
+      assert.deepEqual(new Set(all.map(row => row.publicId)), new Set([sensitive.public_id, regular.public_id, inactive.public_id]));
       const guest = await tx.select({ publicId: feedingStations.publicId }).from(feedingStations)
         .where(stationViewPredicate(tx, null));
       assert.deepEqual(guest, []);
@@ -141,18 +144,21 @@ test("internal PostgreSQL station policy is principal/transaction scoped and dis
     });
   });
 
-  await t.test("invalid stored classification denies owner and grantee, with test-only corruption rolled back", async () => {
+  await t.test("dormant invalid/null classification cannot alter beta access or creator management; test-only corruption rolls back", async () => {
     const rollback = new Error("Synthetic invalid-classification fixture rollback");
     await assert.rejects(connection.db.transaction(async (tx) => {
       await tx.execute(sql`ALTER TABLE feeding_stations DROP CONSTRAINT feeding_stations_visibility_allowed`);
       await tx.execute(sql`ALTER TABLE feeding_stations ALTER COLUMN visibility DROP NOT NULL`);
       for (const value of ["unclassified", null]) {
         await tx.execute(sql`UPDATE feeding_stations SET visibility=${value} WHERE id=${sensitive.id}`);
-        for (const user of [owner, grantee]) {
+        for (const user of [owner, grantee, unrelated]) {
           const principal = await resolveStationPrincipalFromVerifiedIdentity(tx, verifiedIdentityFixture(user));
-          assert.equal(await lockAndAuthorizeStation(tx, principal, sensitive.public_id), null);
-          assert.equal(await lockAndAuthorizeStation(tx, principal, sensitive.public_id, "manage"), null);
+          allowed(await lockAndAuthorizeStation(tx, principal, sensitive.public_id), sensitive, user === owner);
+          const management = await lockAndAuthorizeStation(tx, principal, sensitive.public_id, "manage");
+          if (user === owner) allowed(management, sensitive, true);
+          else assert.equal(management, null);
         }
+        assert.equal(await lockAndAuthorizeStation(tx, null, sensitive.public_id), null);
       }
       throw rollback;
     }), (error) => error === rollback);
@@ -170,10 +176,10 @@ test("internal PostgreSQL station policy is principal/transaction scoped and dis
       }, { isolationLevel }), unsafeTransaction);
     }
   });
-  t.diagnostic("All decisions are internal helper evidence only. Existing station JSON/media routes remain outside this batch's authorization coverage.");
+  t.diagnostic("These are internal helper assertions. Separate HTTP/PG suites verify station JSON, feeding and media boundaries.");
 });
 
-test("station-first internal authorization observes real independent-pool lock ordering and fresh grant state", async (t) => {
+test("station-first internal authorization preserves real independent-pool lock ordering with dormant grant/classification changes", async (t) => {
   const owned = await openTestDatabase(t);
   await applyLocalMigrations(owned, "test", owned.url);
   const make = await fixtures(owned);
@@ -202,7 +208,7 @@ test("station-first internal authorization observes real independent-pool lock o
   const pidOf = async (tx) => (await tx.execute(sql`SELECT pg_backend_pid() AS pid`)).rows[0].pid;
 
   for (const mode of ["revoke-commit", "restrict-commit", "revoke-rollback"]) {
-    await t.test(`${mode}: waiting view authorizes only after the station lock, using committed policy`, async (t) => {
+    await t.test(`${mode}: waiting view retains account access after dormant metadata commit or rollback`, async (t) => {
       const station = await make.station(owner, mode === "restrict-commit" ? "regular" : "sensitive");
       if (mode !== "restrict-commit") await make.grant(station, grantee, owner);
       const writer = await actor(t, `${mode}-writer`), reader = await actor(t, `${mode}-reader`);
@@ -230,8 +236,13 @@ test("station-first internal authorization observes real independent-pool lock o
         if (mode === "revoke-rollback") await assert.rejects(mutation, (error) => error === rollback);
         else await mutation;
         const result = await read;
-        if (mode === "revoke-rollback") allowed(result, station, false);
-        else assert.equal(result, null);
+        allowed(result, station, false);
+        if (mode === "restrict-commit") {
+          assert.equal((await owned.pool.query("SELECT visibility FROM feeding_stations WHERE id=$1", [station.id])).rows[0].visibility, "sensitive");
+        } else {
+          const grant = (await owned.pool.query("SELECT revoked_at FROM station_access_grants WHERE station_id=$1 AND user_id=$2", [station.id, grantee.id])).rows[0];
+          assert.equal(grant.revoked_at === null, mode === "revoke-rollback");
+        }
       } finally {
         release.resolve();
         await Promise.allSettled([mutation, ...(read ? [read] : [])]);
@@ -239,7 +250,7 @@ test("station-first internal authorization observes real independent-pool lock o
     });
   }
 
-  await t.test("view-first holds a shared station lock, so owner revoke is ordered after the admitted view", async (t) => {
+  await t.test("view-first shared station lock orders dormant grant writes without changing subsequent beta access", async (t) => {
     const station = await make.station(owner);
     await make.grant(station, grantee, owner);
     const reader = await actor(t, "view-first"), writer = await actor(t, "revoke-second");
@@ -268,7 +279,7 @@ test("station-first internal authorization observes real independent-pool lock o
       release.resolve();
       allowed(await read, station, false);
       await revoke;
-      assert.equal(await authorization(reader.db, grantee, station), null);
+      allowed(await authorization(reader.db, grantee, station), station, false);
     } finally {
       release.resolve();
       await Promise.allSettled([read, ...(revoke ? [revoke] : [])]);
@@ -296,6 +307,7 @@ test("station-first internal authorization observes real independent-pool lock o
       try { await client.query("ROLLBACK"); } finally { client.release(true); }
     }
     allowed(await authorization(next.db, grantee, station), station, false);
+    assert.equal((await owned.pool.query("SELECT revoked_at FROM station_access_grants WHERE station_id=$1 AND user_id=$2", [station.id, grantee.id])).rows[0].revoked_at, null);
   });
-  t.diagnostic("Observed station lock edges establish internal transaction ordering only; no feed/media/grant-management route is claimed protected.");
+  t.diagnostic("Observed station lock edges establish internal transaction ordering only. Grant-management routes remain unavailable.");
 });

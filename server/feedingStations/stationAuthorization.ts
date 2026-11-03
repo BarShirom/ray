@@ -1,7 +1,7 @@
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import { NodePgTransaction } from "drizzle-orm/node-postgres";
 import type { createPostgres } from "../db/connection.js";
-import { feedingStations as stations, stationAccessGrants as grants, users } from "../db/schema.js";
+import { feedingStations as stations, users } from "../db/schema.js";
 import type { AuthIdentity } from "../users/userStore.js";
 import { isPublicId } from "../utils/publicId.js";
 
@@ -69,41 +69,32 @@ function principalState(tx: StationPolicyTransaction, principal: StationPrincipa
   return state?.tx === tx ? state : undefined;
 }
 
-const validVisibility = () => sql<boolean>`${stations.visibility} in ('sensitive', 'regular')`;
 const currentAccount = (userId: string) => sql<boolean>`exists (
   select 1 from ${users} where ${users.id} = ${userId}
 )`;
 const isCreator = (userId: string) => sql<boolean>`${stations.createdBy} = ${userId}`;
 
-/** SQL policy for future actor-scoped queries; this does not protect any route. */
+/** Beta view policy: every current account can view every station. Stored
+ * visibility and grants remain dormant metadata, never access predicates. */
 export function stationViewPredicate(
   tx: StationPolicyTransaction,
   principal: StationPrincipal | null,
 ): SQL<boolean> {
   const state = principalState(tx, principal);
   if (!state) return sql<boolean>`false`;
-  return sql<boolean>`${validVisibility()} and ${currentAccount(state.userId)} and (
-    ${stations.visibility} = 'regular' or ${isCreator(state.userId)} or exists (
-      select 1 from ${grants}
-      where ${grants.stationId} = ${stations.id}
-        and ${grants.userId} = ${state.userId}
-        and ${grants.grantedBy} = ${stations.createdBy}
-        and ${grants.userId} <> ${grants.grantedBy}
-        and ${grants.revokedAt} is null
-    )
-  )`;
+  return currentAccount(state.userId);
 }
 
 /**
  * Caller owns a short READ COMMITTED transaction and all subsequent protected
  * reads/writes on that same client. Never retain this decision after commit or
- * perform external work while holding its lock. All future policy writers must
- * lock the station FOR UPDATE before touching grant state.
+ * perform external work while holding its lock. Station state writers must lock
+ * the station FOR UPDATE before related state changes.
  *
  * Lock only the station ID first, without a pre-wait policy predicate. The second
- * statement sees revocation/classification committed while the lock was waiting.
+ * statement rechecks the current account/owner after any lock wait.
  * Missing and denied stations both return null, without private station fields.
- * Activity/feed admission is deliberately left to the later feeding integration.
+ * Activity/feed admission remains the protected feeding store's responsibility.
  */
 export async function lockAndAuthorizeStation(
   tx: StationPolicyTransaction,
@@ -122,7 +113,7 @@ export async function lockAndAuthorizeStation(
     .for(action === "manage" ? "update" : "share");
   if (!locked) return null;
   const policy = action === "manage"
-    ? sql<boolean>`${validVisibility()} and ${currentAccount(state.userId)} and ${isCreator(state.userId)}`
+    ? sql<boolean>`${currentAccount(state.userId)} and ${isCreator(state.userId)}`
     : stationViewPredicate(tx, principal);
   const [authorized] = await tx.select({ stationId: stations.id, canManage: isCreator(state.userId) })
     .from(stations).where(and(eq(stations.id, locked.id), policy)).limit(1);

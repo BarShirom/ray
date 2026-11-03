@@ -6,9 +6,9 @@ export function createFeedingStationHandlers(stations: StationPrivacyStore) {
   const createFeedingStation: RequestHandler = async (req, res, next) => {
     if (!noQueryOrReject(req, res)) return;
     try {
-      const { name, location, estimatedCats, estimatedKittens, notes, visibility, imageAssetId } = req.body;
+      const { name, location, estimatedCats, estimatedKittens, notes, imageAssetId } = req.body;
       const station = await stations.create(req.user, {
-        name, location, estimatedCats, estimatedKittens, notes, visibility,
+        name, location, estimatedCats, estimatedKittens, notes,
         ...(imageAssetId === undefined ? {} : { imageAssetId }),
       });
       res.status(201).json(station);

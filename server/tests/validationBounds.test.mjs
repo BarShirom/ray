@@ -83,6 +83,20 @@ test("both station modes reject all legacy image strings while retaining bounded
   }
 });
 
+test("plain and media station creation reject explicit visibility without injecting a beta privacy promise", () => {
+  for (const schema of [createFeedingStationSchema, mediaStationSchema]) {
+    const accepted = invoke(schema, station);
+    assert.equal(accepted.continued, true);
+    assert.equal(Object.hasOwn(accepted.body, "visibility"), false);
+    for (const visibility of ["sensitive", "regular", "public", "", null, true, 0, [], {}]) {
+      const rejected = invoke(schema, { ...station, visibility });
+      assert.equal(rejected.status, 400, JSON.stringify(visibility));
+      assert.equal(rejected.continued, false);
+      assert.ok(rejected.response.errors.some(issue => issue.field === "visibility"));
+    }
+  }
+});
+
 test("array limits stop before item validation, including each alternate S3 field", () => {
   let parsedItems = 0;
   const countedItem = z.preprocess(value => { parsedItems++; return value; }, z.string());

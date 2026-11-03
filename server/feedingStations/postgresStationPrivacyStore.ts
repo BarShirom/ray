@@ -17,7 +17,7 @@ export type CreateStationInTransaction = (tx: StationPolicyTransaction, input: C
 const discoveryColumns = {
   publicId: stations.publicId, name: stations.name, location: stations.location,
   estimatedCats: stations.estimatedCats, estimatedKittens: stations.estimatedKittens,
-  visibility: stations.visibility, createdBy: stations.createdBy, active: stations.active,
+  createdBy: stations.createdBy, active: stations.active,
 };
 type DiscoveryRow = Pick<typeof stations.$inferSelect, keyof typeof discoveryColumns>;
 const ownLogColumns = {
@@ -33,7 +33,7 @@ function discovery(row: DiscoveryRow, actorId: string): StationDiscovery {
     _id: row.publicId, name: row.name,
     location: { lat: row.location.y, lng: row.location.x },
     estimatedCats: row.estimatedCats, estimatedKittens: row.estimatedKittens,
-    visibility: row.visibility,
+    active: row.active,
     permissions: { canManage: row.createdBy === actorId, canFeed: row.active },
   };
 }
@@ -96,7 +96,7 @@ async function detailProjection(tx: StationPolicyTransaction, stationId: string,
       eq(mediaAssets.state, "ready"), isNull(mediaAssets.reportId),
     )).where(eq(stations.id, stationId)).limit(1);
   if (!row) throw new FeedingStationMissingError();
-  return { ...discovery(row, actorId), active: row.active,
+  return { ...discovery(row, actorId),
     ...(row.notesPresent ? { notes: row.notes } : {}),
     ...(row.imageAssetId ? { image: mediaContentUrl(row.imageAssetId) } : {}),
   };
@@ -112,7 +112,7 @@ export function createPostgresStationPrivacyStore(db: Database, createInTransact
   return {
     list: (identity, page) => safe(() => db.transaction(async tx => {
       const { principal, userId } = await actor(tx, identity);
-      const scope = and(eq(stations.active, true), stationViewPredicate(tx, principal));
+      const scope = stationViewPredicate(tx, principal);
       let cursor: SQL | undefined;
       if (page.after) {
         // Keep PostgreSQL's full timestamp precision. Passing through a JS Date
@@ -122,8 +122,8 @@ export function createPostgresStationPrivacyStore(db: Database, createInTransact
         if (!anchor) throw new StationCursorError();
         cursor = sql`(${stations.createdAt}, ${stations.id}) < (${anchor.createdAt}::timestamptz, ${anchor.id}::uuid)`;
       }
-      // Hidden rows are excluded in SQL before ordering and limit. No count,
-      // hidden-anchor lookup, application filtering or N+1 policy queries.
+      // All stations, including inactive ones, share the authenticated scope.
+      // Keep bounded SQL paging without counts or N+1 policy queries.
       const rows = await tx.select(discoveryColumns).from(stations)
         .where(and(scope, cursor)).orderBy(desc(stations.createdAt), desc(stations.id)).limit(page.limit + 1);
       return pageOf(rows.map(row => discovery(row, userId)), page.limit);

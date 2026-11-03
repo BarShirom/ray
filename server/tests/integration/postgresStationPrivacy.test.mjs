@@ -13,7 +13,7 @@ import { localConfig, assertDatabaseIdentity } from "../../dist/db/local-config.
 const id = () => randomBytes(12).toString("hex");
 const secret = "synthetic-station-privacy-endpoint-secret";
 const base = "/api/feeding-stations";
-const discoveryKeys = ["_id", "name", "location", "estimatedCats", "estimatedKittens", "visibility", "permissions"];
+const discoveryKeys = ["_id", "name", "location", "estimatedCats", "estimatedKittens", "active", "permissions"];
 const ownKeys = ["_id", "stationId", "fedAt", "food", "water", "createdAt", "updatedAt"];
 const hidden = { status: 404, body: { message: "Feeding station not found" } };
 const keys = (value, expected) => assert.deepEqual(Object.keys(value).sort(), [...expected].sort());
@@ -45,9 +45,12 @@ async function fixtures(connection, request) {
   const revoked = await user("revoked"), wrongGrantor = await user("wrong grantor");
   const station = async (visibility, extra = {}) => {
     const made = await request("POST", base, { name: "Synthetic protected station", location: { lat: 32.1, lng: 34.8 },
-      notes: "Synthetic private location note", ...(visibility === undefined ? {} : { visibility }), ...extra }, owner.token);
+      notes: "Synthetic private location note", ...extra }, owner.token);
     assert.equal(made.status, 201, JSON.stringify(made.body));
     const row = (await connection.pool.query("SELECT id,public_id FROM feeding_stations WHERE public_id=$1", [made.body._id])).rows[0];
+    // Fixture-only SQL represents preserved historical metadata. New HTTP input
+    // deliberately cannot ask for a classification or promise a smaller audience.
+    if (visibility !== undefined) await connection.pool.query("UPDATE feeding_stations SET visibility=$1 WHERE id=$2", [visibility, row.id]);
     return { ...row, dto: made.body };
   };
   const grant = (parent, recipient, grantor = owner, revoke = false) => connection.pool.query(`
@@ -90,37 +93,41 @@ test("actual PostgreSQL preview routes enforce station/feed audiences, minimized
     }
   });
 
-  await t.test("regular authenticated access/feed; sensitive owner/grantee only; no professional or wrong-grantor bypass", async () => {
-    assert.equal(sensitive.dto.visibility, "sensitive");
+  await t.test("all accounts see identical active/inactive audiences; active feed access ignores dormant classifications/grants", async () => {
+    keys(sensitive.dto, [...discoveryKeys, "notes"]);
+    assert.equal(Object.hasOwn(sensitive.dto, "visibility"), false);
     for (const actor of [f.owner, f.grantee, f.outsider, f.revoked, f.wrongGrantor]) {
-      const allowedSensitive = [f.owner, f.grantee].includes(actor);
       const list = await request("GET", base, undefined, actor.token);
       assert.equal(list.status, 200); privateHeaders(list);
-      assert.deepEqual(new Set(list.body.map(s => s._id)), new Set([regular.public_id, ...(allowedSensitive ? [sensitive.public_id] : [])]));
+      assert.deepEqual(new Set(list.body.map(s => s._id)), new Set([regular.public_id, sensitive.public_id, inactive.public_id]));
       assert.equal(list.headers.get("x-total-count"), null);
-      list.body.forEach(row => { keys(row, discoveryKeys); keys(row.location, ["lat", "lng"]); keys(row.permissions, ["canFeed", "canManage"]); });
-      for (const parent of [regular, sensitive]) {
+      list.body.forEach(row => {
+        keys(row, discoveryKeys); keys(row.location, ["lat", "lng"]); keys(row.permissions, ["canFeed", "canManage"]);
+        assert.equal(row.active, row._id !== inactive.public_id);
+        assert.equal(row.permissions.canFeed, row.active);
+        assert.equal(row.permissions.canManage, actor === f.owner);
+      });
+      for (const parent of [regular, sensitive, inactive]) {
         const detail = await request("GET", `${base}/${parent.public_id}`, undefined, actor.token);
         const feed = await request("POST", `${base}/${parent.public_id}/feedings`, { water: true, note: `own ${actor.public_id}` }, actor.token);
-        if (parent === sensitive && !allowedSensitive) {
-          assert.deepEqual(shape(detail), hidden); assert.deepEqual(shape(feed), hidden);
-        } else {
-          assert.equal(detail.status, 200); assert.equal(feed.status, 201);
-          keys(detail.body, [...discoveryKeys, "active", "notes"]);
-          assert.equal(detail.body.permissions.canManage, actor === f.owner);
-          assert.equal(detail.body.permissions.canFeed, true);
-          keys(feed.body, [...ownKeys, "note"]);
-        }
+        assert.equal(detail.status, 200);
+        keys(detail.body, [...discoveryKeys, "notes"]);
+        assert.equal(detail.body.permissions.canManage, actor === f.owner);
+        assert.equal(detail.body.active, parent !== inactive);
+        assert.equal(detail.body.permissions.canFeed, parent !== inactive);
+        assert.equal(feed.status, parent === inactive ? 409 : 201);
+        if (parent !== inactive) keys(feed.body, [...ownKeys, "note"]);
         privateHeaders(detail); privateHeaders(feed);
       }
     }
+    assert.equal((await connection.pool.query("SELECT count(*)::int AS n FROM feeding_logs WHERE station_id=$1", [inactive.id])).rows[0].n, 0);
   });
 
-  await t.test("inaccessible, revoked and nonexistent IDs are indistinguishable across detail/history/summary/write", async () => {
+  await t.test("unknown IDs consistently return 404 across detail/history/summary/write; inactive reads remain available", async () => {
     const missing = id();
-    for (const actor of [f.outsider, f.revoked, f.wrongGrantor]) for (const parent of [sensitive.public_id, missing]) {
+    for (const actor of [f.owner, f.outsider, f.revoked, f.wrongGrantor]) {
       for (const [method, tail, body] of [["GET", ""], ["GET", "/feedings"], ["GET", "/feeding-summary"], ["POST", "/feedings", {}]]) {
-        assert.deepEqual(shape(await request(method, `${base}/${parent}${tail}`, body, actor.token)), hidden);
+        assert.deepEqual(shape(await request(method, `${base}/${missing}${tail}`, body, actor.token)), hidden);
       }
     }
     assert.equal((await request("POST", `${base}/${inactive.public_id}/feedings`, {}, f.owner.token)).status, 409);
@@ -141,7 +148,7 @@ test("actual PostgreSQL preview routes enforce station/feed audiences, minimized
     assert.doesNotMatch(JSON.stringify(summary.body), /stationId|userId|note|fedAt|createdAt|updatedAt|count|asOf|_id|Synthetic/);
   });
 
-  await t.test("revocation removes station-scoped own-history access while preserving rows", async () => {
+  await t.test("dormant grant revocation preserves beta own-history access and stored records", async () => {
     const before = (await connection.pool.query("SELECT * FROM feeding_logs WHERE station_id=$1 AND user_id=$2 ORDER BY id", [sensitive.id, f.grantee.id])).rows;
     assert.equal(before.length, 1);
     const client = await connection.pool.connect();
@@ -152,8 +159,23 @@ test("actual PostgreSQL preview routes enforce station/feed audiences, minimized
       await client.query("COMMIT");
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
-    assert.deepEqual(shape(await request("GET", `${base}/${sensitive.public_id}/feedings`, undefined, f.grantee.token)), hidden);
+    const own = await request("GET", `${base}/${sensitive.public_id}/feedings`, undefined, f.grantee.token);
+    assert.equal(own.status, 200);
+    assert.equal(own.body.length, 1);
+    assert.equal(own.body[0].note, `own ${f.grantee.public_id}`);
     assert.deepEqual((await connection.pool.query("SELECT * FROM feeding_logs WHERE station_id=$1 AND user_id=$2 ORDER BY id", [sensitive.id, f.grantee.id])).rows, before);
+  });
+
+  await t.test("explicit visibility input is rejected without writes; existing classifications/grants remain stored and dormant", async () => {
+    const rowsBefore = (await connection.pool.query("SELECT id,visibility FROM feeding_stations ORDER BY id")).rows;
+    const grantsBefore = (await connection.pool.query("SELECT * FROM station_access_grants ORDER BY station_id,user_id")).rows;
+    for (const visibility of ["sensitive", "regular", null, "unsupported"]) {
+      assert.equal((await request("POST", base, { name: "Synthetic unsupported visibility", location: { lat: 32, lng: 34 }, visibility }, f.owner.token)).status, 400);
+    }
+    assert.deepEqual((await connection.pool.query("SELECT id,visibility FROM feeding_stations ORDER BY id")).rows, rowsBefore);
+    assert.deepEqual((await connection.pool.query("SELECT * FROM station_access_grants ORDER BY station_id,user_id")).rows, grantsBefore);
+    assert.equal(rowsBefore.find(row => row.id === sensitive.id).visibility, "sensitive", "omitted HTTP classification keeps database default metadata");
+    assert.equal(rowsBefore.find(row => row.id === regular.id).visibility, "regular", "historical regular metadata is not relabeled");
   });
 
   await t.test("authorized HEAD has no body/ETag/304; unexpected methods cannot disclose or mutate", async () => {
@@ -178,10 +200,11 @@ test("actual PostgreSQL preview routes enforce station/feed audiences, minimized
     assert.equal((await connection.pool.query("SELECT image FROM feeding_stations WHERE id=$1", [sensitive.id])).rows[0].image, url);
   });
 
-  await t.test("SQL-filtered pagination has no hidden totals or cursor anchors; unsupported search/filter inputs fail safely", async () => {
-    const expected = [regular.public_id];
+  await t.test("pagination includes dormant sensitive and inactive rows without totals; unsupported search/filter inputs fail safely", async () => {
+    const expected = [regular.public_id, sensitive.public_id, inactive.public_id];
     const paginationRows = [];
     await connection.pool.query("UPDATE feeding_stations SET created_at='2020-01-01Z' WHERE id=$1", [regular.id]);
+    await connection.pool.query("UPDATE feeding_stations SET created_at='2019-01-01Z' WHERE id=$1", [inactive.id]);
     for (let n = 0; n < 4; n++) {
       const parent = await f.station("regular");
       expected.push(parent.public_id);
@@ -200,8 +223,8 @@ test("actual PostgreSQL preview routes enforce station/feed audiences, minimized
         n < 3 ? "2030-01-01T00:00:00.123000Z" : "2030-01-01T00:00:00.124000Z"])));
     const tiedOrder = paginationRows.slice(0, 3).sort((a, b) => a.id < b.id ? 1 : a.id > b.id ? -1 : 0)
       .map(row => row.public_id);
-    // Put hidden records ahead of visible rows. Pagination must scope before
-    // LIMIT and must not issue hidden-inclusive totals or a hidden cursor.
+    // Dormant sensitive metadata cannot hide a newer row or make its cursor
+    // invalid. Inactive rows also remain in the same account-wide ordering.
     await connection.pool.query("UPDATE feeding_stations SET created_at='2099-01-01Z' WHERE id=$1", [sensitive.id]);
     const seen = [];
     let after;
@@ -217,9 +240,14 @@ test("actual PostgreSQL preview routes enforce station/feed audiences, minimized
     } while (after);
     assert.deepEqual(new Set(seen), new Set(expected));
     assert.equal(seen.length, expected.length);
-    assert.deepEqual(seen, [paginationRows[3].public_id, ...tiedOrder, regular.public_id]);
-    const badCursor = await request("GET", `${base}?after=${sensitive.public_id}`, undefined, f.outsider.token);
-    assert.deepEqual(shape(badCursor), shape(await request("GET", `${base}?after=${id()}`, undefined, f.outsider.token)));
+    assert.deepEqual(seen, [sensitive.public_id, paginationRows[3].public_id, ...tiedOrder, regular.public_id, inactive.public_id]);
+    const sensitiveCursor = await request("GET", `${base}?limit=1&after=${sensitive.public_id}`, undefined, f.outsider.token);
+    assert.equal(sensitiveCursor.status, 200);
+    assert.equal(sensitiveCursor.body[0]._id, paginationRows[3].public_id);
+    const inactiveCursor = await request("GET", `${base}?limit=1&after=${inactive.public_id}`, undefined, f.outsider.token);
+    assert.equal(inactiveCursor.status, 200);
+    assert.deepEqual(inactiveCursor.body, []);
+    const badCursor = await request("GET", `${base}?after=${id()}`, undefined, f.outsider.token);
     assert.equal(badCursor.status, 400);
     for (const query of ["limit=0", "limit=201", "limit=1.5", "limit=01", "limit=1&limit=2", "after=invalid", "search=Synthetic", "active=false", "createdBy=" + f.owner.public_id]) {
       assert.equal((await request("GET", `${base}?${query}`, undefined, f.outsider.token)).status, 400);
@@ -299,15 +327,19 @@ test("actual PostgreSQL preview routes enforce station/feed audiences, minimized
     assert.ok(own.body.some(row => Date.parse(row.fedAt) > Date.now()), "future own receipts must remain available");
   });
 
-  await t.test("unknown stored visibility fails closed even for creator; synthetic corruption is restored", async () => {
+  await t.test("unknown dormant stored visibility cannot restrict beta reads/feedings or appear in DTOs; synthetic corruption is restored", async () => {
     const parent = await f.station();
     await connection.pool.query("ALTER TABLE feeding_stations DROP CONSTRAINT feeding_stations_visibility_allowed");
     try {
       await connection.pool.query("UPDATE feeding_stations SET visibility='unclassified-synthetic' WHERE id=$1", [parent.id]);
       for (const actor of [f.owner, f.outsider]) {
-        assert.deepEqual(shape(await request("GET", `${base}/${parent.public_id}`, undefined, actor.token)), hidden);
-        assert.deepEqual(shape(await request("POST", `${base}/${parent.public_id}/feedings`, {}, actor.token)), hidden);
-        assert.equal((await request("GET", base, undefined, actor.token)).body.some(row => row._id === parent.public_id), false);
+        const detail = await request("GET", `${base}/${parent.public_id}`, undefined, actor.token);
+        assert.equal(detail.status, 200);
+        assert.equal(Object.hasOwn(detail.body, "visibility"), false);
+        assert.equal((await request("POST", `${base}/${parent.public_id}/feedings`, {}, actor.token)).status, 201);
+        const listed = (await request("GET", base, undefined, actor.token)).body.find(row => row._id === parent.public_id);
+        assert.ok(listed);
+        assert.equal(Object.hasOwn(listed, "visibility"), false);
       }
     } finally {
       await connection.pool.query("UPDATE feeding_stations SET visibility='sensitive' WHERE id=$1", [parent.id]);
@@ -330,7 +362,7 @@ test("actual PostgreSQL preview routes enforce station/feed audiences, minimized
   });
 });
 
-test("actual station/feed endpoints serialize against revoke/classification writers on independent PostgreSQL sessions", async t => {
+test("actual station/feed endpoints serialize dormant metadata and active-state writers on independent PostgreSQL sessions", async t => {
   const owned = await openTestDatabase(t);
   await applyLocalMigrations(owned, "test", owned.url);
   const request = await serve(t, owned), f = await fixtures(owned, request);
@@ -353,11 +385,12 @@ test("actual station/feed endpoints serialize against revoke/classification writ
     throw new Error(`Expected actual endpoint lock edge was not observed: ${queryPart}`);
   };
 
-  for (const mode of ["revoke-commit", "revoke-rollback", "restrict-commit", "restrict-rollback"]) {
-    await t.test(`${mode}: waiting production request rechecks committed authorization after lock`, async t => {
+  for (const mode of ["revoke-commit", "revoke-rollback", "restrict-commit", "restrict-rollback", "inactive-commit", "inactive-rollback"]) {
+    await t.test(`${mode}: waiting request rechecks fresh account/feed admission after station lock`, async t => {
       const restricting = mode.startsWith("restrict");
+      const inactivating = mode.startsWith("inactive");
       const parent = await f.station(restricting ? "regular" : "sensitive");
-      if (!restricting) await f.grant(parent, f.grantee);
+      if (!restricting && !inactivating) await f.grant(parent, f.grantee);
       const mutation = await actor(t, `${mode}-writer`), api = await actor(t, `${mode}-api`);
       const send = await serve(t, api), client = await mutation.pool.connect();
       const pid = (await client.query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
@@ -366,6 +399,7 @@ test("actual station/feed endpoints serialize against revoke/classification writ
         await client.query("BEGIN");
         await client.query("SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE", [parent.id]);
         if (restricting) await client.query("UPDATE feeding_stations SET visibility='sensitive' WHERE id=$1", [parent.id]);
+        else if (inactivating) await client.query("UPDATE feeding_stations SET active=false WHERE id=$1", [parent.id]);
         else await client.query("UPDATE station_access_grants SET revoked_at=clock_timestamp() WHERE station_id=$1 AND user_id=$2", [parent.id, f.grantee.id]);
         pending = restricting
           ? send("GET", `${base}/${parent.public_id}`, undefined, f.outsider.token)
@@ -375,15 +409,29 @@ test("actual station/feed endpoints serialize against revoke/classification writ
         assert.notEqual(waitingPid, pid);
         await client.query(mode.endsWith("rollback") ? "ROLLBACK" : "COMMIT");
         const response = await pending;
-        if (mode.endsWith("commit")) assert.deepEqual(shape(response), hidden);
-        else assert.equal(response.status, restricting ? 200 : 201);
-        const stored = (await owned.pool.query("SELECT count(*)::int AS n FROM feeding_logs WHERE station_id=$1", [parent.id])).rows[0].n;
-        assert.equal(stored, mode === "revoke-rollback" ? 1 : 0);
-        if (mode === "revoke-commit") {
-          // A later attempt cannot reuse the prior auth boundary's principal.
-          assert.deepEqual(shape(await send("POST", `${base}/${parent.public_id}/feedings`, {}, f.grantee.token)), hidden);
+        const deniedInactive = mode === "inactive-commit";
+        assert.equal(response.status, deniedInactive ? 409 : restricting ? 200 : 201);
+        if (restricting) {
+          assert.equal((await owned.pool.query("SELECT visibility FROM feeding_stations WHERE id=$1", [parent.id])).rows[0].visibility,
+            mode.endsWith("commit") ? "sensitive" : "regular");
+        } else if (inactivating) {
+          assert.equal((await owned.pool.query("SELECT active FROM feeding_stations WHERE id=$1", [parent.id])).rows[0].active, mode.endsWith("rollback"));
+        } else {
+          const grant = (await owned.pool.query("SELECT revoked_at FROM station_access_grants WHERE station_id=$1 AND user_id=$2", [parent.id, f.grantee.id])).rows[0];
+          assert.equal(grant.revoked_at === null, mode.endsWith("rollback"));
         }
-        t.diagnostic(`${mode}: observed distinct backend PIDs ${pid}/${waitingPid}; station FOR SHARE waited on policy writer, then production endpoint used the post-lock policy.`);
+        const stored = (await owned.pool.query("SELECT count(*)::int AS n FROM feeding_logs WHERE station_id=$1", [parent.id])).rows[0].n;
+        assert.equal(stored, restricting || deniedInactive ? 0 : 1);
+        if (mode === "revoke-commit") {
+          // A fresh request remains admitted: revoked grants are dormant beta metadata.
+          assert.equal((await send("POST", `${base}/${parent.public_id}/feedings`, {}, f.grantee.token)).status, 201);
+        }
+        if (deniedInactive) {
+          assert.equal((await send("GET", `${base}/${parent.public_id}`, undefined, f.grantee.token)).status, 200);
+          assert.equal((await send("POST", `${base}/${parent.public_id}/feedings`, {}, f.grantee.token)).status, 409);
+          assert.equal((await owned.pool.query("SELECT count(*)::int AS n FROM feeding_logs WHERE station_id=$1", [parent.id])).rows[0].n, 0);
+        }
+        t.diagnostic(`${mode}: observed distinct backend PIDs ${pid}/${waitingPid}; production FOR SHARE waited, dormant metadata had no audience effect, and fresh activity controlled feeding admission.`);
       } finally {
         try { await client.query("ROLLBACK"); }
         finally { client.release(); if (pending) await Promise.allSettled([pending]); }
@@ -391,13 +439,12 @@ test("actual station/feed endpoints serialize against revoke/classification writ
     });
   }
 
-  await t.test("admitted feeding retains its shared station lock through INSERT; owner revoke waits and later feed is denied", async t => {
+  await t.test("admitted feeding retains its shared station lock through INSERT; owner inactivation waits and later feed receives 409", async t => {
     const parent = await f.station();
-    await f.grant(parent, f.grantee);
-    const tableGate = await actor(t, "feed-gate"), api = await actor(t, "feed-first"), mutation = await actor(t, "revoke-second");
+    const tableGate = await actor(t, "feed-gate"), api = await actor(t, "feed-first"), mutation = await actor(t, "inactive-second");
     const send = await serve(t, api), gate = await tableGate.pool.connect(), writer = await mutation.pool.connect();
     const gatePid = (await gate.query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
-    let feeding, revoke;
+    let feeding, inactivation;
     try {
       await gate.query("BEGIN");
       await gate.query("LOCK TABLE feeding_logs IN SHARE MODE");
@@ -405,26 +452,27 @@ test("actual station/feed endpoints serialize against revoke/classification writ
       feeding.catch(() => {});
       const feedingPid = await waitForBlock(api.name, gatePid, "insert into");
       await writer.query("BEGIN");
-      revoke = writer.query("SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE", [parent.id]);
-      revoke.catch(() => {});
+      inactivation = writer.query("SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE", [parent.id]);
+      inactivation.catch(() => {});
       const writerPid = await waitForBlock(mutation.name, feedingPid, "for update");
       assert.notEqual(writerPid, feedingPid);
       await gate.query("COMMIT");
       assert.equal((await feeding).status, 201);
-      await revoke;
+      await inactivation;
       const observed = (await writer.query("SELECT count(*)::int AS n FROM feeding_logs WHERE station_id=$1", [parent.id])).rows[0].n;
       assert.equal(observed, 1);
-      await writer.query("UPDATE station_access_grants SET revoked_at=clock_timestamp() WHERE station_id=$1 AND user_id=$2", [parent.id, f.grantee.id]);
+      await writer.query("UPDATE feeding_stations SET active=false WHERE id=$1", [parent.id]);
       await writer.query("COMMIT");
-      assert.deepEqual(shape(await send("POST", `${base}/${parent.public_id}/feedings`, {}, f.grantee.token)), hidden);
+      assert.equal((await send("POST", `${base}/${parent.public_id}/feedings`, {}, f.grantee.token)).status, 409);
+      assert.equal((await send("GET", `${base}/${parent.public_id}`, undefined, f.grantee.token)).status, 200);
       assert.equal((await owned.pool.query("SELECT count(*)::int AS n FROM feeding_logs WHERE station_id=$1", [parent.id])).rows[0].n, 1);
-      t.diagnostic(`feed-first: INSERT at PID ${feedingPid} waited on gate ${gatePid}; revoke PID ${writerPid} waited on station lock, observed exactly one committed feeding, then blocked all later feed attempts.`);
+      t.diagnostic(`feed-first: INSERT at PID ${feedingPid} waited on gate ${gatePid}; inactivation PID ${writerPid} waited on station lock, observed exactly one committed feeding, then rejected later feed attempts without hiding the station.`);
     } finally {
       try { await gate.query("ROLLBACK"); }
       finally {
         gate.release();
         if (feeding) await Promise.allSettled([feeding]);
-        if (revoke) await Promise.allSettled([revoke]);
+        if (inactivation) await Promise.allSettled([inactivation]);
         try { await writer.query("ROLLBACK"); } finally { writer.release(); }
       }
     }

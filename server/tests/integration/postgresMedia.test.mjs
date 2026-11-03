@@ -105,16 +105,15 @@ test('S3 media HTTP/service integration with real disposable PostgreSQL and stor
     const hidden=await req('GET',`/api/media/${attached}/content`);
     const missing=await req('GET',`/api/media/${randomUUID()}/content`);
     assert.equal(hidden.status,404);assert.deepEqual(hidden.body,missing.body);
-    assert.equal((await req('GET',`/api/media/${attached}/content`,undefined,b.token)).status,404);
     const guestHead=await req('HEAD',`/api/media/${attached}/content`);
     assert.equal(guestHead.status,404);assert.equal(guestHead.body,'');assert.equal(guestHead.headers.get('location'),null);
     assert.equal((await req('POST',`/api/media/${attached}/read-url`,{})).status,401);
     assert.equal((await req('GET',`/api/media/${attached}/content`,undefined,'invalid')).status,401);
     assert.equal(readCalls,before,'denied initial access never calls signer');
-    const head=await req('HEAD',`/api/media/${attached}/content`,undefined,a.token);
+    const head=await req('HEAD',`/api/media/${attached}/content`,undefined,b.token);
     assert.equal(head.status,302);assert.equal(head.body,'');assert.match(head.headers.get('location'),/ready/);
     assert.equal(head.headers.get('cache-control'),'private, no-store');assert.equal(head.headers.get('etag'),null);
-    assert.equal(readCalls,before+1,'authorized attached HEAD signs once');
+    assert.equal(readCalls,before+1,'unrelated authenticated account can read an inactive parent image with one signature');
     const permitted=await req('POST',`/api/media/${attached}/read-url`,{},a.token);
     assert.equal(permitted.status,200);assert.deepEqual(Object.keys(permitted.body).sort(),['expiresIn','url']);
     assert.equal(permitted.body.expiresIn,60);assert.match(permitted.body.url,/^https:\/\/synthetic\.invalid\//);
@@ -133,7 +132,7 @@ test('S3 media HTTP/service integration with real disposable PostgreSQL and stor
     const conditional=await fetch(base+`/api/media/${attached}/content`,{redirect:'manual',headers:{Authorization:'Bearer '+a.token,'If-None-Match':'*','If-Modified-Since':new Date().toUTCString()}});
     assert.equal(conditional.status,302);assert.equal(conditional.headers.get('etag'),null);
   });
-  await t.test('regular viewers and explicit sensitive grantees can read; copies and revocations never bypass the authoritative parent',async()=>{
+  await t.test('dormant grants and classifications never restrict authenticated media; copied references do not bypass guest denial',async()=>{
     const parent=(await connection.pool.query('SELECT id,created_by FROM feeding_stations WHERE id=(SELECT station_id FROM media_assets WHERE id=$1)',[attached])).rows[0];
     const recipient=(await connection.pool.query('SELECT id FROM users WHERE public_id=$1',[b.id])).rows[0].id;
     await connection.pool.query('INSERT INTO station_access_grants(station_id,user_id,granted_by,granted_at) VALUES($1,$2,$3,clock_timestamp())',[parent.id,recipient,parent.created_by]);
@@ -145,25 +144,26 @@ test('S3 media HTTP/service integration with real disposable PostgreSQL and stor
     // This fixture update uses one atomic station-first SQL statement; later
     // management endpoints must use the same station-lock order in a live tx.
     await connection.pool.query('WITH locked AS (SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE) UPDATE station_access_grants SET revoked_at=GREATEST(granted_at,clock_timestamp()) WHERE station_id IN(SELECT id FROM locked) AND user_id=$2',[parent.id,recipient]);
-    const before=readCalls;assert.equal((await req('POST',`/api/media/${attached}/read-url`,{},b.token)).status,404);assert.equal(readCalls,before);
-    assert.match(issued.body.url,/read=/,'revocation does not purport to recall an already issued mock capability');
+    const before=readCalls;assert.equal((await req('POST',`/api/media/${attached}/read-url`,{},b.token)).status,200);assert.equal(readCalls,before+1);
+    assert.match(issued.body.url,/read=/,'a dormant grant change does not purport to recall an already issued mock capability');
     await connection.pool.query("UPDATE feeding_stations SET visibility='regular' WHERE id=$1",[parent.id]);
     assert.equal((await req('POST',`/api/media/${attached}/read-url`,{},b.token)).status,200);
-    assert.equal((await req('GET',`/api/media/${attached}/content`)).status,404,'regular is authenticated, not public');
+    assert.equal((await req('GET',`/api/media/${attached}/content`)).status,404,'stored regular classification never makes a station image public');
     await connection.pool.query("UPDATE feeding_stations SET visibility='sensitive' WHERE id=$1",[parent.id]);
+    assert.equal((await req('GET',`/api/media/${attached}/content`,undefined,b.token)).status,302);
   });
-  await t.test('paused signing and a real final shared-lock wait observe a committed revocation before URL release',async()=>{
+  await t.test('paused signing and a real final shared-lock wait observe committed account loss before URL release',async()=>{
     const parent=(await connection.pool.query('SELECT id,created_by FROM feeding_stations WHERE id=(SELECT station_id FROM media_assets WHERE id=$1)',[attached])).rows[0];
-    const recipient=(await connection.pool.query('SELECT id FROM users WHERE public_id=$1',[b.id])).rows[0].id;
-    await connection.pool.query('UPDATE station_access_grants SET granted_at=clock_timestamp(),revoked_at=NULL WHERE station_id=$1 AND user_id=$2',[parent.id,recipient]);
+    const viewer=await user();
     let releaseSign;pauseRead=new Promise(resolve=>{releaseSign=resolve;});const entered=new Promise(resolve=>{readEntered=resolve;});
-    const before=readCalls,pending=req('POST',`/api/media/${attached}/read-url`,{},b.token);
+    const before=readCalls,pending=req('POST',`/api/media/${attached}/read-url`,{},viewer.token);
     await entered;
     const blocker=await connection.pool.connect();checkTransactions=false;
     try {
       await blocker.query('BEGIN');const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
       await blocker.query('SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE',[parent.id]);
-      await blocker.query('UPDATE station_access_grants SET revoked_at=GREATEST(granted_at,clock_timestamp()) WHERE station_id=$1 AND user_id=$2',[parent.id,recipient]);
+      const deleted=await blocker.query('DELETE FROM users WHERE public_id=$1 RETURNING id',[viewer.id]);
+      assert.equal(deleted.rowCount,1,'the viewer has no retained rows and is actually removed in this disposable fixture');
       releaseSign();pauseRead=undefined;readEntered=undefined;
       const deadline=Date.now()+8000;let observed=false;
       do {
@@ -177,13 +177,32 @@ test('S3 media HTTP/service integration with real disposable PostgreSQL and stor
       assert.equal(rejected.headers.get('location'),null);
     }finally{releaseSign();pauseRead=undefined;readEntered=undefined;await blocker.query('ROLLBACK');blocker.release();checkTransactions=true;}
   });
-  await t.test('visibility change during signing and expired signing receipts discard the result without extending TTL',async()=>{
+  await t.test('dormant visibility changes during signing permit reads without extending the nominal TTL',async()=>{
     const parent=(await connection.pool.query('SELECT station_id FROM media_assets WHERE id=$1',[attached])).rows[0].station_id;
     await connection.pool.query("UPDATE feeding_stations SET visibility='regular' WHERE id=$1",[parent]);
     let releaseSign;pauseRead=new Promise(resolve=>{releaseSign=resolve;});const entered=new Promise(resolve=>{readEntered=resolve;});
     const pending=req('POST',`/api/media/${attached}/read-url`,{},b.token);await entered;
     await connection.pool.query("UPDATE feeding_stations SET visibility='sensitive' WHERE id=$1",[parent]);releaseSign();pauseRead=undefined;readEntered=undefined;
-    const denied=await pending;assert.equal(denied.status,404);assert.equal(denied.body.url,undefined);
+    const permitted=await pending;assert.equal(permitted.status,200);assert.equal(permitted.body.expiresIn,60);assert.match(permitted.body.url,/read=/);
+  });
+  await t.test('attachment changes during signing discard both content and read-url capabilities',async()=>{
+    const parent=(await connection.pool.query('SELECT station_id FROM media_assets WHERE id=$1',[attached])).rows[0].station_id;
+    for(const method of ['GET','POST']) {
+      let releaseSign;pauseRead=new Promise(resolve=>{releaseSign=resolve;});const entered=new Promise(resolve=>{readEntered=resolve;});
+      const before=readCalls,pending=req(method,`/api/media/${attached}/${method==='POST'?'read-url':'content'}`,method==='POST'?{}:undefined,b.token);
+      try {
+        await entered;
+        await connection.pool.query('WITH locked AS(SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE) UPDATE media_assets SET station_id=NULL WHERE id=$2 AND station_id IN(SELECT id FROM locked)',[parent,attached]);
+        releaseSign();pauseRead=undefined;readEntered=undefined;
+        const denied=await pending;assert.equal(denied.status,404);assert.deepEqual(denied.body,{message:'Image not found'});assert.equal(denied.headers.get('location'),null);
+        assert.equal(readCalls,before+1,'the stale result is discarded without issuing a second signature');
+      }finally{
+        releaseSign();pauseRead=undefined;readEntered=undefined;
+        await connection.pool.query('WITH locked AS(SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE) UPDATE media_assets SET station_id=(SELECT id FROM locked) WHERE id=$2',[parent,attached]);
+      }
+    }
+  });
+  await t.test('expired signing receipts discard the result without extending TTL',async()=>{
     let now=100000;const expiring=createMediaService(connection.db,{...storage,async signRead(){now+=60000;return 'https://synthetic.invalid/expired';}},'dev/',Date.now,()=>now);
     await assert.rejects(expiring.readUrl(attached,{_id:a.id}),error=>error instanceof MediaError&&error.status===409&&!error.message.includes('https://'));
   });
@@ -191,27 +210,45 @@ test('S3 media HTTP/service integration with real disposable PostgreSQL and stor
     const owner=await user(),grantee=await user(),unrelated=await user(),wrongGrantor=await user();
     const image=await issue(owner);await complete(owner,image);
     const sensitive=await req('POST','/api/feeding-stations',{...station,imageAssetId:image},owner.token);
-    const regular=await req('POST','/api/feeding-stations',{...station,visibility:'regular'},owner.token);
-    assert.equal(sensitive.status,201);assert.equal(regular.status,201);assert.equal(sensitive.body.visibility,'sensitive');
+    const regular=await req('POST','/api/feeding-stations',station,owner.token);
+    assert.equal(sensitive.status,201);assert.equal(regular.status,201);assert.equal(sensitive.body.visibility,undefined);
+    await connection.pool.query("UPDATE feeding_stations SET visibility='regular' WHERE public_id=$1",[regular.body._id]);
+    const beforeParents=(await connection.pool.query('SELECT count(*)::int AS n FROM feeding_stations')).rows[0].n;
+    for(const visibility of ['sensitive','regular',null,false]) {
+      const rejected=await req('POST','/api/feeding-stations',{...station,visibility},owner.token);
+      assert.equal(rejected.status,400);
+    }
+    assert.equal((await connection.pool.query('SELECT count(*)::int AS n FROM feeding_stations')).rows[0].n,beforeParents,'explicit visibility never creates a parent');
     const rawParent=(await connection.pool.query('SELECT id,created_by FROM feeding_stations WHERE public_id=$1',[sensitive.body._id])).rows[0];
     const rawUsers=(await connection.pool.query('SELECT id,public_id FROM users WHERE public_id=ANY($1::text[])',[[grantee.id,unrelated.id,wrongGrantor.id]])).rows;
     const uuid=publicId=>rawUsers.find(row=>row.public_id===publicId).id;
     await connection.pool.query('INSERT INTO station_access_grants(station_id,user_id,granted_by,granted_at) VALUES($1,$2,$3,clock_timestamp()),($1,$4,$5,clock_timestamp())',[rawParent.id,uuid(grantee.id),rawParent.created_by,uuid(unrelated.id),uuid(wrongGrantor.id)]);
     for(const path of ['/api/feeding-stations','/api/feeding-stations/'+sensitive.body._id,'/api/feeding-stations/'+sensitive.body._id+'/feedings','/api/feeding-stations/'+sensitive.body._id+'/feeding-summary'])assert.equal((await req('GET',path)).status,401);
-    for(const viewer of [owner,grantee]) {
+    for(const viewer of [owner,grantee,unrelated,wrongGrantor]) {
       const detail=await req('GET','/api/feeding-stations/'+sensitive.body._id,undefined,viewer.token);assert.equal(detail.status,200);assert.ok(detail.body.image);
-      assert.equal(detail.body.createdBy,undefined);assert.equal(detail.body.createdAt,undefined);
+      assert.equal(detail.body.createdBy,undefined);assert.equal(detail.body.createdAt,undefined);assert.equal(detail.body.visibility,undefined);
+      assert.deepEqual(detail.body.permissions,{canManage:viewer===owner,canFeed:true});
+      assert.equal((await req('POST',`/api/media/${image}/read-url`,{},viewer.token)).status,200);
       assert.equal((await req('POST','/api/feeding-stations/'+sensitive.body._id+'/feedings',{food:true,water:false,note:'SYNTHETIC private note'},viewer.token)).status,201);
     }
-    assert.equal((await req('GET','/api/feeding-stations/'+sensitive.body._id,undefined,unrelated.token)).status,404,'wrong grantor does not convey authority');
-    assert.equal((await req('POST','/api/feeding-stations/'+sensitive.body._id+'/feedings',{food:true,water:false},unrelated.token)).status,404);
     const regularFeed=await req('POST','/api/feeding-stations/'+regular.body._id+'/feedings',{food:true,water:true},unrelated.token);assert.equal(regularFeed.status,201);
     const own=await req('GET','/api/feeding-stations/'+sensitive.body._id+'/feedings',undefined,grantee.token);assert.equal(own.status,200);assert.equal(own.body.length,1);assert.equal(own.body[0].userId,undefined);assert.equal(own.body[0].__v,undefined);
-    const summary=await req('GET','/api/feeding-stations/'+sensitive.body._id+'/feeding-summary',undefined,grantee.token);assert.deepEqual(Object.keys(summary.body).sort(),['food','water']);assert.deepEqual(Object.keys(summary.body.food),['recency']);
+    const summary=await req('GET','/api/feeding-stations/'+sensitive.body._id+'/feeding-summary',undefined,grantee.token);
+    assert.deepEqual(summary.body,{food:{recency:'under-2h'},water:{recency:'no-record'}});
     await connection.pool.query('WITH locked AS(SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE) UPDATE station_access_grants SET revoked_at=GREATEST(granted_at,clock_timestamp()) WHERE station_id IN(SELECT id FROM locked) AND user_id=$2',[rawParent.id,uuid(grantee.id)]);
-    assert.equal((await req('GET','/api/feeding-stations/'+sensitive.body._id+'/feedings',undefined,grantee.token)).status,404);
-    assert.equal((await req('POST',`/api/media/${image}/read-url`,{},grantee.token)).status,404);
-    const preserved=await connection.pool.query('SELECT count(*)::int AS n FROM feeding_logs WHERE station_id=$1',[rawParent.id]);assert.equal(preserved.rows[0].n,2);
+    assert.deepEqual((await req('GET','/api/feeding-stations/'+sensitive.body._id+'/feedings',undefined,grantee.token)).body,own.body,'dormant grant revocation does not affect author history');
+    assert.equal((await req('POST',`/api/media/${image}/read-url`,{},grantee.token)).status,200);
+    await connection.pool.query('UPDATE feeding_stations SET active=false WHERE id=$1',[rawParent.id]);
+    for(const viewer of [owner,grantee,unrelated,wrongGrantor]) {
+      const detail=await req('GET','/api/feeding-stations/'+sensitive.body._id,undefined,viewer.token);
+      assert.equal(detail.status,200);assert.equal(detail.body.active,false);
+      assert.deepEqual(detail.body.permissions,{canManage:viewer===owner,canFeed:false});
+      const listed=(await req('GET','/api/feeding-stations',undefined,viewer.token)).body.find(row=>row._id===sensitive.body._id);
+      assert.equal(listed.active,false);assert.equal(listed.visibility,undefined);
+      assert.equal((await req('POST',`/api/media/${image}/read-url`,{},viewer.token)).status,200);
+      assert.equal((await req('POST','/api/feeding-stations/'+sensitive.body._id+'/feedings',{},viewer.token)).status,409);
+    }
+    const preserved=await connection.pool.query('SELECT count(*)::int AS n FROM feeding_logs WHERE station_id=$1',[rawParent.id]);assert.equal(preserved.rows[0].n,4);
   });
   await t.test('concurrent duplicate attachment has one winner and no extra parent',async()=>{
     const u=await user(),id=await issue(u);await complete(u,id);

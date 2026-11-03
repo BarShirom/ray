@@ -288,7 +288,7 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
   });
 
   let a, b, httpStation, httpLog;
-  await t.test("register/login A and B, A creates regular station, B feeds it, own history remains private", async () => {
+  await t.test("register/login A and B, A creates station, unrelated B feeds it, own history remains private", async () => {
     const registered = [];
     for (const firstName of ["User A", "User B"]) {
       const input = { firstName, lastName: "Synthetic", email: `${publicId()}@example.invalid`, password: "synthetic-feeding-password" };
@@ -300,10 +300,10 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
       registered.push({ id: login.body.user.id, bearer: `Bearer ${login.body.token}` });
     }
     [a, b] = registered;
-    const creation = await request("POST", base, { name: "  HTTP station  ", location, visibility: "regular", createdBy: b.id, active: false }, a.bearer);
+    const creation = await request("POST", base, { name: "  HTTP station  ", location, createdBy: b.id, active: false }, a.bearer);
     assert.equal(creation.status, 201);
     httpStation = creation.body;
-    keysAre(httpStation, ["_id", "name", "location", "estimatedCats", "estimatedKittens", "visibility", "permissions", "active"]);
+    keysAre(httpStation, ["_id", "name", "location", "estimatedCats", "estimatedKittens", "permissions", "active"]);
     assert.match(httpStation._id, /^[0-9a-f]{24}$/);
     assert.equal(httpStation.name, "HTTP station");
     assert.deepEqual(httpStation.permissions, { canManage: true, canFeed: true });
@@ -313,8 +313,7 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
     const listing = await request("GET", base, undefined, a.bearer);
     assert.equal(listing.status, 200);
     assert.ok(Array.isArray(listing.body));
-    const { active: _active, ...discovery } = httpStation;
-    assert.deepEqual(listing.body.find((row) => row._id === httpStation._id), discovery);
+    assert.deepEqual(listing.body.find((row) => row._id === httpStation._id), httpStation);
     assert.deepEqual(await request("GET", `${base}/${httpStation._id.toUpperCase()}`, undefined, a.bearer), { status: 200, body: httpStation });
     const feeding = await request("POST", `${base}/${httpStation._id.toUpperCase()}/feedings`, {
       fedAt: "2024-04-03T09:08:07.456+03:00", food: false, water: false, period: "morning", note: "  Shared care  ",
@@ -355,7 +354,7 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
         assert.deepEqual(await request("POST", path, {}, authorization), { status: 401, body: { error } });
       }
     }
-    for (const body of [{ name: " ", location }, { name: "Invalid", location, image: null }, { name: "Invalid", location, notes: null }, { name: "Invalid", location, estimatedCats: -1 }]) {
+    for (const body of [{ name: " ", location }, { name: "Invalid", location, image: null }, { name: "Invalid", location, notes: null }, { name: "Invalid", location, estimatedCats: -1 }, ...["sensitive", "regular", null, false].map(visibility => ({ name: "Explicit visibility", location, visibility }))]) {
       const response = await request("POST", base, body, a.bearer);
       assert.equal(response.status, 400);
       assert.equal(response.body.message, "Validation failed");
@@ -380,7 +379,7 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
   });
 
   await t.test("HTTP notes/default feeding, author-specific history and inactive authorized reads", async () => {
-    const created = await request("POST", base, { name: "Optional HTTP", location, visibility: "regular", notes: "  " }, a.bearer);
+    const created = await request("POST", base, { name: "Optional HTTP", location, notes: "  " }, a.bearer);
     assert.equal(created.status, 201);
     assert.equal(Object.hasOwn(created.body, "image"), false);
     assert.equal(created.body.notes, "  ");
@@ -409,7 +408,9 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
     assert.deepEqual(await counts(), before);
     assert.equal((await request("GET", path, undefined, b.bearer)).body.active, false);
     assert.deepEqual(await request("GET", `${path}/feedings`, undefined, b.bearer), history);
-    assert.equal((await request("GET", base, undefined, b.bearer)).body.some((row) => row._id === created.body._id), false);
+    const discovered = (await request("GET", base, undefined, b.bearer)).body.find((row) => row._id === created.body._id);
+    assert.equal(discovered.active, false);
+    assert.deepEqual(discovered.permissions, { canManage: false, canFeed: false });
   });
 
   await t.test("real rejected SELECT/INSERT queries stay safe failures, never missing rows or empty arrays", async (t) => {

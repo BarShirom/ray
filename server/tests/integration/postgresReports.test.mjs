@@ -139,7 +139,7 @@ test("real ReportStore, report HTTP and combined four-domain PostgreSQL flow", a
     const personal = (actor) => request("GET", `${base}/stats/me`, undefined, actor.bearer);
     assert.deepEqual(await global(), { status: 200, body: { total: 0, resolved: 0, inProgress: 0, new: 0 } });
     assert.deepEqual(await personal(b), { status: 200, body: { total: 0, resolved: 0, inProgress: 0 } });
-    const station = await request("POST", "/api/feeding-stations", { name: "Combined", location, visibility: "regular" }, a.bearer);
+    const station = await request("POST", "/api/feeding-stations", { name: "Combined", location }, a.bearer);
     assert.equal(station.status, 201);
     smokeStation = station.body;
     const log = await request("POST", `/api/feeding-stations/${smokeStation._id}/feedings`, { food: false, water: true }, b.bearer);
