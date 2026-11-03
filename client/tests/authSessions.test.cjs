@@ -639,7 +639,7 @@ test("failed actual navbar logout purges every protected domain and exposes an e
 });
 
 for (const failReads of [false, true]) {
-  test(`logout rejects persistence failure, keeps the guest and supports explicit recovery (read denied=${failReads})`, async context => {
+  test(`logout rejects persistence failure and verifies manual recovery without writing (read denied=${failReads})`, async context => {
     const app = await durableLogoutFixture(context);
     app.blocked.read = failReads; app.blocked.write = app.blocked.remove = true;
     const failed = await app.store.dispatch(logoutUser());
@@ -652,10 +652,22 @@ for (const failReads of [false, true]) {
     assert.ok(app.store.getState().auth.logoutFailure);
     assert.doesNotMatch(JSON.stringify(stillFailed.payload), /synthetic-token|fixture\.invalid|Synthetic storage denied/);
     app.blocked.read = app.blocked.write = app.blocked.remove = false;
+    const writes = app.events.length;
+    const retained = await app.store.dispatch(logoutUser({ retrySessionId: app.store.getState().auth.logoutFailure.sessionId }));
+    assert.equal(retained.type, "auth/logoutUser/rejected", "usable storage alone does not erase retained credentials");
+    assert.ok(app.store.getState().auth.logoutFailure);
+    await app.persistor.flush();
+    assert.equal(app.events.length, writes, "recovery and its queued persistence never mutate shared storage");
+    // Model external/manual site-data clearing, not a recovery side effect.
+    app.storage.removeItem(AUTH_STORAGE_KEY);
+    app.storage.removeItem(AUTHORITY_STORAGE_KEY);
+    const clearedWrites = app.events.length;
     const recovered = await app.store.dispatch(logoutUser({ retrySessionId: app.store.getState().auth.logoutFailure.sessionId }));
     assert.equal(recovered.type, "auth/logoutUser/fulfilled");
     assert.deepEqual(recovered.payload, { persisted: true });
     assert.equal(app.store.getState().auth.logoutFailure, null);
+    await app.persistor.flush();
+    assert.equal(app.events.length, clearedWrites, "successful verification does not publish guest authority");
     const refreshed = createRayStore(app.storage); context.after(refreshed.dispose); await ready(refreshed.persistor);
     assert.equal(refreshed.store.getState().auth.user, null);
   });

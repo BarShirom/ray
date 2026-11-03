@@ -83,15 +83,26 @@ export function createAuthPersistence(storage: StorageAccess | null) {
       } catch { return false; }
     },
     publishLogout(auth: AuthState, previousSessionId: string, retry: boolean): "complete" | "failed" | "superseded" {
+      // Recovery only observes external/site-data clearing. localStorage has no
+      // cross-tab compare-and-swap: even a checked retry must never publish or
+      // remove shared state, nor allow queued persistence to write afterward.
+      if (retry) blocked = true;
       if (!retry) logoutRecoveryOwners = new Set([previousSessionId, null]);
       if (!storage || !logoutRecoveryOwners) return "failed";
       try {
         const marker = storage.getItem(AUTHORITY_STORAGE_KEY);
         const value = storage.getItem(AUTH_STORAGE_KEY);
         const identity = value ? identityFromEncoded(value) : null;
-        // An explicit recovery is scoped to the failed logout. It must never
-        // publish a new logout over an observed newer tab's identity or intent.
+        // A foreign identity/intent supersedes this failed logout. These reads
+        // are observations, not an exclusive claim over a concurrent publisher.
         if (!logoutRecoveryOwners.has(marker) || (identity && !logoutRecoveryOwners.has(identity.sessionId))) return "superseded";
+        if (retry) {
+          // Require both keys to be absent. An old authority marker alone can
+          // still admit an older tab's queued identity write after root removal.
+          if (marker !== null || value !== null) return "failed";
+          logoutRecoveryOwners = null;
+          return "complete";
+        }
         if (value && !identity) return "failed";
         logoutRecoveryOwners.add(auth.sessionId);
         if (!publish(auth)) return "failed";
