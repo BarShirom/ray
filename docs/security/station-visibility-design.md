@@ -1,12 +1,23 @@
 # SEC.1B-3A - Hybrid feeding-station privacy and authorization design
 
 Date: **2026-11-03, Asia/Jerusalem**. Status: **nine product decisions APPROVED;
-engineering design revised after independent critical review; not implemented**.
+engineering design revised after independent critical review; SEC.1B-3B.0
+implementation contracts specified for review; not implemented**.
 Intended release scope: **Release Quality Gate level A, documentation only**.
 The recommended next milestone is SEC.1B-3B, implemented in the small batches below.
 This document does not clear a real-user pilot or production release.
 
 ## 1. Baseline, scope and evidence
+
+**Current SEC.1B-3B.0 preflight, 2026-11-03:** branch `ray-2-postgres`, HEAD
+`3c3f212dbc54381e8900c77df41e4170073831ac`
+(`docs: finalize station privacy product decisions`). The approved design is
+tracked in that commit. The working tree and index were clean; locally recorded
+upstream tracking was **0 ahead / 0 behind**, without a fetch. Section 16 adds
+implementation contracts after inspecting the current source/schema. All earlier
+preflights and executed validation records below are historical **3A** evidence;
+their untracked-file status is not the current baseline. The current task still
+changes only this file and authorizes no implementation or Git writes.
 
 Original drafting preflight found a clean working tree on **`ray-2-postgres`**, HEAD
 **`9a5e646083110640bfa303d81f867b15ac636caa`**, commit
@@ -41,7 +52,7 @@ Reviewed the [Release Quality Gate](../RELEASE_QUALITY_GATE.md),
 [S3 media runbook/acceptance ledger](../migrations/s3-media.md), together with the
 source and tests referenced below. Historical reports describe their own commits
 and evidence dates. In particular, readiness's SEC.1B-2 uncommitted-tree wording
-is historical: SEC.1B-2 is now committed at the HEAD above.
+is historical: SEC.1B-2 was committed at the original drafting HEAD above.
 
 Read the complete independent critical review supplied in this conversation:
 verdict **REVISE BEFORE IMPLEMENTATION**, REV-01 HIGH, REV-02/03 MEDIUM and REV-04
@@ -220,6 +231,10 @@ either; that remaining detail is not approved by PD-04. To restrict its location
 the station as sensitive. A grantee is never automatically a grant manager.
 
 ### Endpoint-by-endpoint design
+
+This table summarizes the policy. Section 16 supplies exact proposed input/output,
+pagination, lifecycle, error and concurrency contracts without adding product
+approval beyond PD-01 through PD-09.
 
 Paths include `/api`. **Existing** endpoints deliberately change their historical
 public/field contracts; **new** endpoints below are proposals for 3B.
@@ -720,6 +735,13 @@ current session cannot be established. Do not install stale event payloads over
 newer storage. Test two tabs, queued writes and reload, not just event callbacks.
 This client lifecycle does not revoke copied server JWTs; SEC-011 remains open.
 
+Section 16.6 specifies the shared coordinator, admission/commit ordering and
+retained-credential storage contract. Its guarantees require cooperating clients
+and working shared storage: a failed durable logout write cannot guarantee a
+future reload tombstone or immediate erasure in another tab. Fail closed locally,
+report reconciliation failure and retain SEC-011; do not claim unconditional
+cross-tab or server-session revocation through this mechanism.
+
 Every protected action captures the accepted actor and generation and uses a
 request ID scoped to its operation/target. Check that identity before starting
 each request, publishing any success/error and continuing an async action chain.
@@ -897,13 +919,13 @@ product approval gates. No implementation or deployment is authorized by this ta
 | **3B.7 - Hebrew owner/feeder UX** | Depends on 3B.5/3B.6. Implement APPROVED audience/default/grant/summary principles and no-note-edit scope; finalize draft Hebrew wording, reference lifecycle feedback and exact history/freshness details. Typed i18n only. | Actual keyboard/reader/mobile/RTL, generic denied/loading/retry and successful saved-receipt behavior on browser/API/disposable PG with labelled media doubles; no claim of live S3 coverage. |
 | **3B.8 - integration and privacy acceptance** | After all preceding dependencies, run affected suites, full authorization/REV regression matrix and actual browser/PG evidence; review stopped-preview upgrade/forward recovery separately before any authorized cutover. | Preserve preview rows/media; verify all routes/issuers and old-client denial together. Recovery remains fail closed, never old public reads. Record dates/tiers and open real-user blockers; no production/cloud/Git action is authorized by this document. |
 
-**Readiness for the first implementation batch:** PD-01 through PD-09 remove the
-previous product-principle gate. 3B.0 can now finalize the bounded technical
-contracts using these approved inputs; 3B.1 can then implement the additive schema/
-policy foundation and disposable migration tests. Invitation reuse, exact history
-fields and retirement execution are resolved before their own dependent batches,
-not treated as reasons to reapprove defaults or reset preview data. No application
-implementation is performed or authorized by this documentation-only task.
+**Readiness for the first implementation batch:** section 16 now specifies the
+3B.0 contract targets and the executable 3B.1 schema/policy-foundation batch.
+PD-01 through PD-09 are unchanged. The additive schema and disposable tests are
+ready for implementation review; lifecycle/history proposals need a recorded
+resolution before their dependent behavior is implemented. These details do not
+require reapproval of defaults or a preview reset. No application implementation
+is performed or authorized by this documentation-only task.
 
 ## 13. Focused test and browser verification plan
 
@@ -1040,6 +1062,10 @@ roles remain TBD, not assigned people or application roles.
 
 ### Remaining details - not approved by PD-01 through PD-09
 
+Section 16 selects concrete **PROPOSED** targets for these open details, rather
+than silently accepting them. Its decision ledger identifies the dependent batch;
+the APPROVED register above is unchanged.
+
 | Detail | Status | Required resolution / secure current recommendation | Owner role |
 | --- | --- | --- | --- |
 | Grant invitation lifecycle/reuse | OPEN / PROPOSED | Self-issued 15-minute reference, exact format/display label, forwarding/reuse limits, consent/acceptance, single-use and self-leave are proposals. Distinguish reference expiry from grant revocation: expiry does not remove an existing grant. | Product/privacy, Security, Engineering |
@@ -1112,7 +1138,7 @@ remaining details stay open. REV-01 through REV-04 corrections are preserved in 
 | REV-03 MEDIUM | Section 10 typed bounded status/kind/presentation/retry metadata plus trusted request/session identity; current versus stale/scoped failure actions; 3B.5 and section 13 tests. | Contract specified; string-only thunks unchanged. Status-driven purge versus draft preservation **NOT_TESTED**; Hebrew copy never determines authority. |
 | REV-04 LOW | Section 8 server-generated projection/embedding/metadata and original-parent resolution invariant; sections 8/9 explicit manual-copy/cache/preissued-S3 residual; section 13 distinct regression cases. | Claim narrowed in this document. No semantic detector or immediate-recall promise; original-parent enforcement remains **NOT_TESTED** until implementation. |
 
-### Reproducible preflight and document validation
+### Historical 3A preflight and document validation
 
 Read-only Git commands use the command-scoped ownership exception because Git
 originally refused the workspace owner's SID; no global/repository config changed.
@@ -1140,7 +1166,7 @@ index checks establish the one-file scope. No application/browser/PG/provider
 verification is represented as executed in 3A. Wait for design review and separate
 implementation authorization before SEC.1B-3B; Git writes remain unauthorized.
 
-Product-finalization validation record, **2026-11-03**, local documentation/source tier:
+Historical 3A product-finalization record, **2026-11-03**, local documentation/source tier:
 
 | Executed command/method | Actual result and limit |
 | --- | --- |
@@ -1162,9 +1188,759 @@ Reviewed single-file staging command, **shown only, not executed**:
 git add -- docs/security/station-visibility-design.md
 ```
 
-Suggested commit message, **not executed**:
-`docs: finalize station privacy product decisions`.
+Historical 3A suggested commit message:
+`docs: finalize station privacy product decisions` (now the current committed baseline).
 
 Wait for review and explicit Git-write authorization before executing it. This
 document does not authorize staging, commit, push, production deployment, preview
 migration or cloud operations.
+
+## 16. SEC.1B-3B.0 implementation contracts
+
+### 16.1 Status, evidence and common boundary
+
+Contract baseline: **2026-11-03**, HEAD
+`3c3f212dbc54381e8900c77df41e4170073831ac`, local source/document inspection.
+This appendix makes the implementation target concrete; it does not describe
+running functionality. **PD-01 through PD-09 remain APPROVED exactly as registered
+in section 14.** All newly selected behavioral details below are **PROPOSED**.
+Engineering authorization/isolation invariants remain mandatory. A proposed
+mechanism is reviewable implementation guidance, not product-owner approval or
+runtime evidence. Resolve the ledger in 16.10 before its affected behavior ships.
+
+Sections 4-13 remain the policy/risk overview; this appendix refines their proposed
+mechanics (including paging versus complete snapshots). It never overrides the
+approved register or weakens an accepted authorization/isolation invariant.
+
+The current implementation has no visibility/grant schema, summary/grant/reference
+routes or session-validation route. Its public station reads and actor-free media
+issuer remain source findings. Existing migrations end at `0006_media_assets.sql`.
+Relevant boundaries are the [station router](../../server/routes/feedingStationRoutes.ts),
+[station handlers](../../server/controllers/feedingStationController.ts),
+[log handlers](../../server/controllers/feedingLogController.ts),
+[PG station store](../../server/feedingStations/postgresFeedingStationStore.ts),
+[PG log store](../../server/feedingLogs/postgresFeedingLogStore.ts),
+[schema](../../server/db/schema.ts), [preview composition](../../server/preview/app.ts),
+[legacy composition](../../server/app.ts) and [media service](../../server/media/service.ts).
+
+All paths below have prefix `/api`. The principal comes only from required auth's
+verified, currently existing account and server-resolved internal UUID. Public
+station/user/log IDs remain canonical lowercase 24-hex; existing uppercase input
+normalization remains. Asset IDs remain UUIDs. Never accept an actor, creator,
+grantor, company, professional role or municipal claim from request data.
+Assignment, feeding authorship and upload ownership are not station access grants.
+
+Set `Cache-Control: private, no-store` and `Referrer-Policy: no-referrer` before
+station/reference/grant/media-read authentication, validation and error handling.
+Disable conditional 304/ETag responses for these protected representations and
+redirects, including unknown station children. These headers do not erase old
+caches. Keep report-media audience checks separate. Route-template logs must omit
+credentials, references, signed URLs, coordinates and free text. Existing global
+parser/ingress/rate-limit failures may precede auth; tests must distinguish those
+from object-policy failures, without leaking an object through either path.
+
+### 16.2 Storage, query and locking contract
+
+Append migration **0007**, subject to rechecking the journal before implementation:
+
+- Add `visibility text NOT NULL DEFAULT 'sensitive'` and a two-value CHECK to
+  `feeding_stations`. Use the constant ADD COLUMN default, no blanket row UPDATE.
+  Leave all prior columns, identity, timestamps, geometry/SRID, owners, references
+  and media strings unchanged. New grants start empty. No ownership backfill.
+- Add `station_access_grants` with non-null `station_id`, `user_id`, `granted_by`
+  UUID restricted FKs, primary key `(station_id,user_id)`, non-null `granted_at`
+  timestamptz and nullable `revoked_at`. CHECK recipient differs from grantor;
+  CHECK revocation is null or at/after grant time. Add the active recipient index
+  from section 5. Do not add a reference/invitation table for the minimal proposal.
+- Keep immutable `created_by` as sole owner. The application verifies owner equals
+  grantor; FKs do not establish that relationship. No transfer, delete, station-note
+  edit or general station PATCH route. Optional discovery indexes require query
+  evidence, not speculative duplication of existing indexes.
+
+Shared policy helper takes a required principal and the transaction client. Its
+classification guard covers **every** audience branch:
+
+```text
+valid visibility AND (regular OR creator = actor OR active explicit grant to actor)
+canManage = valid visibility AND creator = actor
+canFeed = canView AND active                 [regular-viewer writes: PROPOSED]
+```
+
+Missing/unknown classification fails closed even for an owner. Listing adds active
+and applies this predicate in SQL before order/limit/cursors or spatial/count
+derivation. No hidden totals or placeholder rows. Discovery may use one SQL
+snapshot; a later fresh request must reauthorize. Detail, own history, summary and
+grant lists materialize their complete projection within a short transaction:
+resolve/lock the station by public ID **without a pre-wait grant predicate**,
+`FOR SHARE`, then in a fresh READ COMMITTED statement reread policy/grant state.
+Do not reuse a snapshot evaluated before a lock wait.
+
+Every visibility/grant mutation locks station `FOR UPDATE`, checks current owner,
+then resolves/locks any grant/recipient and changes state. Feeding uses station
+`FOR SHARE`, fresh policy, active check and INSERT on the **same transaction client**.
+Keep station-to-grant lock order throughout. Recipient FK/unique races are resolved
+inside that transaction. Any failure rolls back both policy/feeding and associated
+attachment work. No external HTTP, signing or image processing while holding locks.
+
+Post-lock grant/reference time uses a fresh clock (`clock_timestamp()` or a fresh
+server instant), not transaction-start `now()` after a wait. Duplicate active grant
+returns the existing row without rewriting attribution/time; regrant updates that
+one revoked row with current owner/new grant time and clears revocation. Revoke of
+absent/already-revoked recipient is 204 with no rewrite. For a backward clock step,
+stamp `GREATEST(granted_at, clock_timestamp())` to preserve the CHECK. Self-grants
+fail generic validation. A repeated visibility value is a no-op. Visibility changes
+preserve grant states; neither regular viewers nor historical feeders become
+grantees. Revoking a grant on a regular station cannot remove regular access.
+
+Do not turn authorization failures into infrastructure errors. The existing
+[feeding error wrapper](../../server/feedingLogs/feedingPersistenceErrors.ts)
+preserves only known missing/inactive errors, and the media wrapper preserves
+`MediaError`. Map hidden/missing parent to the same safe missing error, or extend
+their explicit safe error union. Plain and media-wrapped handlers must emit the
+same denial; a database outage remains a bounded 500/503, never an empty authorized
+list or an existence-dependent denial. No unrestricted store fallback is permitted.
+
+### 16.3 Exact proposed DTOs, inputs and bounds
+
+**PROPOSED field allowlists**, not serializations of whole database/user records:
+
+```ts
+type Visibility = "sensitive" | "regular";
+type PublicId = string; // canonical lowercase 24-hex, never internal UUID
+type Permissions = { canManage: boolean; canFeed: boolean };
+type StationDiscovery = {
+  _id: PublicId; name: string; location: { lat: number; lng: number };
+  estimatedCats: number; estimatedKittens: number;
+  visibility: Visibility; permissions: Permissions;
+};
+type StationDetail = StationDiscovery & {
+  active: boolean; notes?: string | null; image?: string;
+};
+type Recency = "under-2h" | "2-to-6h" | "6-to-12h" |
+  "12-to-24h" | "older" | "no-record";
+type FeedingSummary = { food: { recency: Recency }; water: { recency: Recency } };
+type OwnFeedingLog = {
+  _id: PublicId; stationId: PublicId; fedAt: string; food: boolean; water: boolean;
+  period?: "morning" | "noon" | "evening" | null; note?: string | null;
+  createdAt: string; updatedAt: string;
+};
+type Grant = { recipientId: PublicId; displayLabel: string | null; grantedAt: string };
+type RecipientReference = { recipientReference: string; expiresAt: string };
+type ReadUrl = { url: string; expiresIn: 60 };
+```
+
+Date strings are UTC ISO instants. Nullable/absent historical own-log period/note
+and detail notes follow existing presence flags; do not fabricate defaults or
+destructively normalize stored history. New writes use validated existing types.
+`image` is omitted unless derived from a ready authoritative attached asset; its
+value is the trusted stable application content URL. No raw stored external URL,
+S3 key or signed capability in a station DTO. Discovery omits notes/images/times.
+Detail omits creator ID/contact, creation/update times and `__v`. No DTO embeds a
+user, grant list, feeding event or internal media row by spreading a record.
+
+| Viewer | Station/detail | Shared feeding response | Individual history |
+| --- | --- | --- | --- |
+| Authenticated regular viewer | Discovery/detail if allowed; canManage false unless creator | `FeedingSummary` only | Own logs only, subject to parent access |
+| Sensitive active grantee | Same DTO; canManage false, canFeed true only while active | Exactly the same summary | Own logs only, subject to parent access |
+| Creator | Same DTO; canManage true; owner grant endpoint separate | Exactly the same summary; no extra feeder details | Own logs only; ownership does not expose other authors |
+| Author without current sensitive access | No station DTO or shared summary | 404 | **PROPOSED:** station-scoped own-history endpoint also 404; rows preserved, no new export/recovery endpoint in this milestone |
+
+Use one captured post-lock instant T for independent `MAX(fed_at)` where food=true
+and water=true and `fed_at <= T`. Bucket ages in `[0,2h)`, `[2h,6h)`, `[6h,12h)`,
+`[12h,24h)`, `[24h,infinity)`, or no matching record. Water-only advances water only;
+neither flag advances neither. Retain valid future events in own history but
+exclude them from shared recency until eligible. Do not change existing accepted
+feeding time semantics implicitly. Return no exact time, `asOf`, count, identity,
+event ID, period, personal note or nested recent event in a summary. Coarse activity
+remains a disclosed residual risk, not anonymity proof.
+
+Summary freshness is **PROPOSED** 60 seconds of monotonic elapsed time from local
+receipt, stored in memory; restored/tab-return summaries are always stale.
+On expiry or tab/dialog return mark refresh-needed and allow explicit fresh GET;
+do not infer exact feeding times or silently retry writes. A successful feeding
+receipt remains saved if summary refresh fails. Ambiguous POST failure needs a
+fresh authorized own-history check; there is no new idempotency-key contract.
+
+| Input name | Exact proposed request contract |
+| --- | --- |
+| Create station | Existing `name`, `location`, nonnegative integer counts, optional bounded `notes`; add optional two-value `visibility`, default sensitive. Preserve current trim/bounds/count defaults. Validate finite latitude -90..90 and longitude -180..180 at API boundary. Both plain and media creation schemas must match. Unknown actor/grant/role keys are stripped as today and never used. Explicit arbitrary `image` URL is rejected, even if a legacy string remains in storage. Optional `imageAssetId` UUID is allowed only by enabled media wrapper; disabled mode rejects it with bounded 503, never silently drops it. |
+| Create feeding | Existing strict schema: optional offset-aware ISO `fedAt`, period enum, boolean food/water and bounded trimmed note; omitted defaults retain current store behavior. Actor/path station derived by server. Unknown keys rejected, including user/station IDs. No new requirement for food=true or water=true. |
+| Change visibility | Strict object with only `visibility`, value sensitive or regular; no null/omission. |
+| Mint / read URL / complete | Strict empty object `{}`; no target user, parent override, TTL, bucket or object key. Preserve existing completion output and lifecycle. |
+| Create grant | Strict `{recipientReference: string}`; bounded at 1024 ASCII characters, exact reference grammar below. No user/email lookup input. |
+| List query | Only optional `limit` positive decimal integer and `after` canonical public ID. Reject unknown query fields, invalid/oversized limit and invalid cursor with safe 400. No total, free-text user search or hidden-inclusive counts. |
+
+Preserve array response bodies rather than introduce wrappers. **PROPOSED bounded
+paging:** station list default 100/max 200; own logs and owner grants default 50/max
+100. Use `X-Next-Cursor` only when another authorized row exists, expose that header
+through application CORS, and return no total. Cursor is the last returned public
+ID, resolved within the same authorized query scope; missing/hidden/out-of-scope
+anchors all give the same 400 invalid-cursor error. Never inspect a hidden anchor
+to disclose its sort tuple. Station sort is created_at DESC/internal id DESC;
+own logs retain fed_at/created_at/internal id DESC; grant sort granted_at DESC/user
+internal id DESC. A cursor is a navigation hint, never authority. Concurrent
+mutations may require a restart; no snapshot pagination guarantee. Client loads
+authorized pages deliberately with an accessible more action, without an unbounded
+auto-fetch loop or hidden-inclusive map bounds. This bounds the selected APIs;
+distributed abuse/load work remains open. Page-one refresh starts a new collection
+epoch and clears its former page chain; more pages append only to that same epoch
+with matching cursor/request lineage, replacing each returned row wholesale.
+Never treat absence from a partial page as proof of parent authorization loss.
+Clear stale map rows on refresh and independently revalidate selected detail;
+only parent 404 or a complete authoritative authorized set establishes exclusion.
+
+### 16.4 Private reference and grant lifecycle
+
+**PROPOSED minimal flow:** no pending invitation, acceptance table or recipient
+redemption endpoint. The recipient initiates self-identification, explicitly shares
+the reference, and the owner redeems it to create the grant immediately. The
+reference itself never opens a station. Deliberate sharing is proposed consent
+for any holder who owns a station to grant that recipient view/feed access there,
+with the minimum owner-visible label. Explain that scope before generation/copy.
+If station-specific acceptance is required, stop this behavioral branch and record
+the additional workflow; do not claim that an acceptance screen already exists.
+
+1. Authenticated self-only POST mints `raygr1.<payload>.<signature>` in component
+   memory. Payload is base64url (unpadded) UTF-8 JSON with exactly `v:1`,
+   `purpose:"station-grant-recipient"`, canonical `recipientId`, integer UTC-second
+   `iat`, `exp=iat+900` and `jti` (16 cryptographically random bytes, unpadded
+   base64url). Signature is unpadded base64url of 32-byte HMAC-SHA256 over ASCII
+   `raygr1.` concatenated with the encoded payload. Derive its key as
+   HMAC-SHA256(PG auth secret, UTF-8 `ray:station-grant-recipient:v1`); never use
+   that derived key as the login key. Verify `iat <= currentSeconds < exp` with
+   no positive future skew and exactly 900 seconds lifetime. No JWT format/parser,
+   `id` claim, email/phone, station, role or authorization claim. Require exact
+   base64url round-trip/field allowlist/length bounds and constant-time signature
+   comparison. Auth JWT and reference must reject one another in both directions.
+2. Store no reference or token hash in PostgreSQL under this stateless proposal.
+   Only grant state is durable. Keep reference out of Redux persistence, URLs,
+   route history, analytics and logs. Copy/share is intentional; Ray sends no
+   message. No public recipient search/validation endpoint is added.
+3. Owner POST authenticates and validates station-ID syntax, locks station and
+   verifies ownership **before** strict grant-body/reference validation or resolving
+   a recipient. Generic transport/body-size limits may run earlier, but a router
+   must not run reference schema/grammar validation before the owner check. Verify
+   signature/purpose/time and current recipient
+   existence inside the operation, including fresh expiry check **after lock wait**.
+   Bad syntax, expiry, wrong purpose, deleted recipient and self-grant all yield the
+   same safe 400; non-owner/missing station gets identical 404 before these checks.
+   A valid reference plus an owner's chosen station is the only recipient lookup.
+4. Grant succeeds immediately and returns `Grant`, using existing public user ID
+   and **PROPOSED** first-name-only display label, bounded by existing user-name
+   limits. A preserved missing/null/blank first name produces null and typed local
+   generic-recipient fallback, never an email/phone substitute. Select fields
+   explicitly: current identity lookup contains email, so
+   never serialize it wholesale. No global name uniqueness or verified identity is
+   claimed. Owner sees only active grants; revoke path recipient ID is meaningful
+   only after ownership checks, not a public account lookup.
+5. Reference expires after 15 minutes and is reusable until expiry for multiple
+   owner-selected stations, duplicate grant and regrant. New mint does not cancel
+   old references; there is no individual reference revocation or single-use
+   guarantee. Closing the dialog/clearing local memory cannot revoke a copied
+   reference. Existing grant persists after reference expiry until owner revokes;
+   revoke does not invalidate the still-unexpired reference, which could regrant.
+   Make this visible in copy. Self-leave/recipient rejection is not in this proposal.
+
+Owner grant mutations use the existing verified-account write budget; no public
+proof-check endpoint. Invalid references do not distinguish account existence.
+Use generic denial bodies and preserve bounded errors. Never log the reference.
+Latest-state attribution is not audit history. Proposed security events record
+action, server actor/station/recipient IDs, time/outcome only; durability, access,
+retention durations and removal remain OPEN before real users. Do not introduce
+an unreviewed audit retention promise to complete this contract.
+
+### 16.5 Protected media and endpoint matrix
+
+Resolve the authoritative ready asset and its `station_id` FK, then the actual
+parent station, never an image string or caller-provided parent ID. Both stable
+content GET and signed-read POST call the same station policy. Initial denial
+makes **zero signer calls**. Sign outside a long SQL transaction; then take a
+short station shared lock, reread current policy and the same ready attachment,
+and release the response only if both still match. A signed result rejected at
+this final check is discarded without disclosure. An owner of the upload has no
+read bypass after parent authorization is lost. Pending/unattached/deleted assets
+are not public readable even to their uploader.
+
+Existing nominal signed GET lifetime is **60 seconds**
+([constant](../../server/media/types.ts), [signer](../../server/media/s3.ts)).
+Add an internal signing receipt/expiry check so a long final lock wait cannot
+release an already-expired URL. `expiresIn:60` describes nominal signing lifetime,
+not a fresh 60 seconds after delivery. Discard expired results and require a fresh
+currently authorized attempt; do not extend TTL automatically. API metadata,
+read-url JSON and redirect use private/no-store/no-referrer with no 304. For new
+signed GETs set S3 response-cache-control override to `private, no-store` so retained
+objects also receive it; current output metadata uses private max-age=60 and is
+not retroactively rewritten in this task. Test signing options locally without
+AWS. Current storage adapter returns only a string: expiry receipt is proposed
+implementation work, not an existing capability.
+
+Authorized detail may expose only the derived stable application URL. Copying
+that URL or embedding it through another server-generated projection cannot
+bypass original-parent authorization. The protected client obtains read-url JSON
+with its current Bearer, fetches signed bytes with `credentials: omit`, no Ray
+Authorization/referrer, and displays an in-memory Blob URL. Dispose both capability
+and Blob on context loss. Never put Bearer into an image URL or forward it to S3.
+Extract the asset UUID only from a URL matching the configured API origin and
+exact `/api/media/{UUID}/content` path, with no userinfo/query/hash. Construct the
+read-url request against that trusted API base; never request a stored external
+origin with credentials. The existing generic image component requires adaptation.
+An anonymous browser img GET of a station stable URL receives 404; supplying a
+bad credential receives 401 before asset resolution. Report content retains its
+separate audience; the station-only POST refuses report-parent assets with 404.
+
+Completion metadata `{assetId,state,expiresAt}` stays owner-authenticated; it is
+not general metadata access to another attached station. No new general asset
+metadata GET is added. Preserve upload/complete owner, purpose, expiry, checksum,
+processing lease, retry and quota controls and atomic station-create attachment.
+For E14 preserve the existing strict upload input exactly: `purpose` station/report,
+`contentType` JPEG/PNG/WebP, integer `byteLength` 1..8388608 and canonical 44-character
+base64 SHA-256 `checksum`. Upload 201 is `{assetId,state:"pending",expiresAt,url,
+headers,uploadExpiresAt,expiresIn:300}`; headers are the existing signer-required
+PUT headers and dates are ISO strings. Completion 200 is
+`{assetId,state:"ready",expiresAt}`. These capabilities stay in the scoped form's
+memory, not Redux/meta/errors. No source/output keys or parent/owner rows returned.
+Carry new principal/visibility through the media creation wrapper; another user's
+asset cannot be attached by a grantee or owner. Suppress legacy external `image`
+strings from protected DTOs without altering stored strings or retained objects;
+reject new arbitrary external station URLs in both plain/media modes. No arbitrary
+URL fetch, re-upload or destructive cleanup is implied. Report external-image
+policy remains independent and unresolved for real-data use.
+
+**REV-04 boundary:** the enforceable indirect-information invariant covers
+server-generated responses, references/embeddings and new access checks against
+the original parent. It cannot prevent an authorized person manually copying
+coordinates, text or pixels into a public report, sharing a screenshot, retaining
+cached bytes or using a previously issued capability. Previously signed URLs and
+in-flight transfers may work through their remaining lifetime after revocation;
+neither cache headers nor removing DOM nodes can promise immediate recall. No
+semantic detector, proxy revocation or new Report policy is asserted.
+
+In the following matrix `A` means required valid existing-account authentication;
+`O` means strict optional identity (missing allowed for report content, supplied
+invalid credential 401). All DTO/input/lifecycle choices refer to 16.2-16.4 and
+remain **PROPOSED** where not expressly approved by PD-01 through PD-09.
+
+Error contract (fixed safe bodies, status-driven **local error kinds**, not a new
+localized wire protocol): preserve required-auth `{error: ...}` 401; station
+missing/hidden/not-owner all `{message: "Feeding station not found"}` 404; media
+missing/unready/unattached/wrong-parent/denied all `{message: "Image not found"}`
+404. New grant reference failures use `{message: "Invalid access reference"}` 400.
+Existing validation `{message,errors}` envelopes remain bounded field feedback,
+not raw database/provider errors. No distinction in headers/body for hidden versus
+missing resources; do not promise constant-time execution. Same-caller malformed
+ID 400 is syntax validation, not evidence of existence.
+
+| Matrix shorthand (not a wire error code) | HTTP status / normalized client kind | Rule |
+| --- | --- | --- |
+| AUTH | 401 / unauthorized | Required or supplied-invalid auth; guest station JSON is denied before object lookup. |
+| VALID | 400 (existing bounded media 413/415/422 where applicable) / validation | Invalid input/ID/cursor; never recipient-existence-specific. |
+| PARENT | 404 / unavailable | Same station body for hidden/missing/non-owner; only current parent-operation denial proves loss of parent access. |
+| IMAGE | 404 / unavailable | Same image body, including report asset on station-only POST; scope is image, not automatically station. |
+| INACTIVE | 409 / inactive | Only after canView and valid feeding input; no feed INSERT. |
+| MEDIA | 403 / forbidden; 404 / unavailable; 409 or 410 / validation | Existing upload-owner denial, missing asset, processing/lease/state conflict or expired intent. These are not parent-station denial or inactive-feed signals. Keep current bounded messages; preserve authorized draft and offer the appropriate explicit retry/reselection. |
+| RATE | 429 / throttled | Existing limiter/media budget; bounded Retry-After 1..86400 seconds, no automatic write retry. |
+| FAIL | 500/503 / server | Safe persistence/service failure; never return success/empty list as a substitute. |
+| RETIRED | 503 / server | Fixed legacy station refusal; no fallback or lookup. |
+
+RATE and FAIL are possible across applicable routes. The client distinguishes
+network/timeout/aborted with **no invented HTTP status**. A surprise 403 normalizes
+to forbidden, scoped to the operation; neither Hebrew nor backend message text
+decides authority. Existing auth/controller envelopes need not be unnecessarily
+replaced; typed client normalization provides the machine decision boundary.
+
+The current required-auth middleware catches identity-store errors together with
+JWT failures. Before these contracts are enforced, separate invalid/expired
+credential or missing account (401) from identity-lookup infrastructure failure
+(bounded 500/503). Test that an outage neither discloses a resource nor triggers
+false session invalidation. Apply the same distinction in strict optional auth;
+no silent anonymous fallback on supplied-invalid auth or lookup outage.
+
+| ID / method and route | Auth / object authorization | Input | Success shape | Errors | Side effects / concurrency | Required later regression evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| E01 `GET /feeding-stations` | A; SQL active AND canView | Bounded list query | 200 `StationDiscovery[]`, optional next header | AUTH, VALID, RATE, FAIL | No writes; filter before paging/order/spatial output, one snapshot | V1: guest/cross-account matrix; hidden rows do not alter visible page/bounds; default-sensitive fixtures; plain/media composition parity |
+| E02 `GET /feeding-stations/:id` | A; canView including inactive | Normalized ID; no extra query | 200 `StationDetail` | AUTH, VALID, PARENT, RATE, FAIL | Shared lock then fresh policy/projection | V1/V2: direct request, identical hidden/missing, revoked after lock wait, no identity/history/external-image fields |
+| E03 `POST /feeding-stations` | A; actor becomes immutable creator | Create input, optional owned ready asset | 201 `StationDetail` | AUTH, VALID, bounded media errors, RATE, FAIL | Atomic create/attach; sensitive unless deliberately regular; media wrapper cannot drop actor/classification | V1/V3: forged owner/grants stripped, both schemas/defaults/coordinates/external URL rejection, foreign asset denial and rollback |
+| E04 `GET /feeding-stations/:stationId/feedings` | A; canView AND log.user=actor | Station ID, bounded list query | 200 `OwnFeedingLog[]`, optional next header | AUTH, VALID, PARENT, RATE, FAIL | Shared parent lock/fresh policy and author-filtered SQL; no other-author events | V1/V4: creator has no other-author privilege; old values/presence/order retained, revoke denial, cursor scoped to actor |
+| E05 `GET /feeding-stations/:stationId/feeding-summary` | A; canView | Station ID, no query | 200 `FeedingSummary` | AUTH, VALID, PARENT, RATE, FAIL | Shared parent lock; one T, independent food/water aggregates | V4: exact bucket boundaries, future/neither/water-only cases, no identity/time/note/count/event fields for any viewer |
+| E06 `POST /feeding-stations/:stationId/feedings` | A; canView then active; regular writes proposed | Existing strict feeding input | 201 `OwnFeedingLog` | AUTH, VALID, PARENT, INACTIVE, RATE, FAIL | Existing shared station transaction, fresh policy, server actor/path and INSERT; no new idempotency guarantee | V1/V2/V4: independent-pool revoke/feed/visibility race, no denied insertion, inactive concealment, UTC/defaults/own receipt |
+| E07 `PATCH /feeding-stations/:id/visibility` | A; creator only | Strict visibility | 200 `StationDetail` | AUTH, VALID, PARENT, RATE, FAIL | Station exclusive lock then owner; no-op keeps timestamps; grants preserved, no implicit grants | V2/V5: non-owner/grantee denied, concurrent feed/read ordered, repeat no rewrite, sensitive/regular transitions |
+| E08 `GET /feeding-stations/:id/access-grants` | A; creator only | ID and bounded list query | 200 active `Grant[]`, optional next header | AUTH, VALID, PARENT, RATE, FAIL | Shared station lock then owner; explicit minimal recipient projection | V5: owner-only, no email/contact/user spread, no revoked rows/global lookup; bounded cursor behavior |
+| E09 `POST /feeding-stations/:id/access-grants` | A; creator only before reference resolution | Strict recipient reference | 200 active `Grant` for new/duplicate/reactivated | AUTH, VALID, PARENT, RATE, FAIL | Exclusive station lock; post-wait proof expiry/recipient check; duplicate no rewrite, regrant same row | V2/V5: wrong owner first, token confusion, expiry while waiting, deleted/self recipient generic, duplicate/regrant concurrent ordering |
+| E10 `DELETE /feeding-stations/:id/access-grants/:recipientId` | A; creator only | Two IDs, no body | 204 empty for revoked/absent grant | AUTH, VALID, PARENT, RATE, FAIL | Exclusive station lock, idempotent latest-state revoke; no recipient existence oracle | V2/V5: grantee cannot administer, absent/repeated revoke no rewrite, feed/read/sign races; regular access caveat |
+| E11 `POST /station-access/recipient-reference` | A; self only | Strict `{}` | 201 `RecipientReference` | AUTH, VALID, RATE, FAIL | Random signed proof; no DB grant/invitation write, no station authorization; owner E09 is redemption, no recipient-accept route | V5: exact grammar/purpose/TTL, no user lookup input, both token-confusion directions, no persisted/logged reference |
+| E12 `POST /media/:assetId/read-url` | A; ready attached station parent canView | UUID + strict `{}` | 200 `ReadUrl` | AUTH, VALID, IMAGE, RATE, FAIL | Initial auth before signing; final shared-lock recheck; expired signed result discarded | V3: initial denial zero signer calls, report asset denied, uploader no bypass, paused signer/revoke/lock wait, nominal 60s/options |
+| E13 `GET /media/:assetId/content` | O; station canView required; independent current Report policy | UUID; accept/ignore bounded legacy `retry=1` query, no authority meaning; reject other query fields | 302 to signed URL only after relevant parent policy | Supplied-invalid AUTH; VALID; station guest/denial IMAGE; RATE, FAIL | Same final station authorization as E12; no anonymous station redirect or 304 | V3: guest/cross-account copied stable URL, valid/invalid supplied auth, unknown/unready parity; current report-image retry preserved independently |
+| E14 `POST /media/uploads`; `POST /media/:assetId/complete` | A; existing upload owner/purpose/state rules | Exact existing upload schema above; UUID + strict `{}` on complete | Exact existing upload 201 / ready metadata 200 above | AUTH, VALID, MEDIA, RATE, FAIL | Existing issuance, processing leases and attachment safeguards; no read/admin grant from completion | V3: current media lifecycle/quotas/leases/foreign asset tests retained; no network under station lock; stale client stages rejected |
+| E15 `GET /media/capabilities` | Current non-object capability policy | No body | Existing `{enabled:boolean,maxBytes:8388608,stationImages:1,reportImages:3}` | Existing bounded failure | No station/asset/identity metadata; disabled mode fails closed for media writes | V3: enabled/disabled compositions; no hidden object lookup or fallback |
+| E16 `GET /auth/session` (new proposal) | A; self identity only | No query/body | 200 `{user:{id:PublicId}}` | AUTH, RATE, FAIL | Read-only identity validation for envelope restore; no refresh/token issuance or profile freshness claim | V6: wrong/deleted/expired token 401; restored actor mismatch purges; valid ID matches verified server principal |
+| E17 all methods `/feeding-stations` and descendants; `/station-access` and descendants in legacy/default station mode | Explicit refusal before any station/user lookup | Ignored; no authority interpretation | No success, fixed 503 | RETIRED only after earlier global transport/CORS handling | No Mongo station/log reads/writes, no invitation/signing; namespace denial, not ACL duplication | V7: direct default export AND real legacy composition, unknown child/method/auth state all refused; unrelated auth/report/health preserved |
+| E18 `POST /auth/login` | Existing credential validation, no station authority | Existing bounded email/password schema | Existing 200 auth response described below | Existing 400 / validation for invalid credentials or body; RATE; 500 / server | No station/grant write; client shared attempt coordinator alone accepts completion | V6: both login/register overlap orders, logout/B before completion, identical-token return, no stale persistence/navigation |
+| E19 `POST /auth/register` | Existing registration validation, no station authority | Existing name/email/password/company schema | Existing 201 auth response described below | Existing 400 / validation (including current duplicate-account behavior); RATE; 500 / server | Existing account creation can finish even when client attempt becomes obsolete; no automatic deletion or implied station access | V6: obsolete registration cannot publish identity/continue station action; report server-side account side effect accurately |
+
+Preserve E18/E19 wire response exactly as
+[auth serializer](../../server/serializers/authResponse.ts): `{user:{id,firstName?,
+lastName?,email?,company?},token}` with historical nullable profile fields.
+Merge token into the intended envelope only after acceptance; do not put passwords
+in thunk args/meta. Preserve [current validation](../../server/validation/authSchemas.ts)
+without claiming that the existing password-byte/session/enumeration release
+findings are resolved. Auth body failures use the current `{msg:...}` or bounded
+validation envelope, mapped by status/context rather than literal text.
+
+Every applicable E01-E19 object denial/error also needs no-store/no-referrer/no-304
+assertions, bounded output and no raw secrets/capabilities in logs/errors. There is
+no POST acceptance, public invitation lookup, general station edit/delete, other
+feeder history or implicit privileged-role endpoint. A later route must join this
+matrix before becoming reachable.
+
+### 16.6 REV-01/03: auth coordinator and typed client failures
+
+**PROPOSED technical mechanism, mandatory isolation result:** one same-origin
+Web Locks exclusive lock `ray.auth.v1` plus one atomic localStorage auth-envelope
+key; remove auth from the ordinary redux-persist writer. Store only committed
+credentials and intended profile display hints in authenticated envelopes, never
+transient requests/errors or protected entities. Example exact envelope states:
+
+```ts
+type SharedAuth = {
+  schema: 1; epoch: string; revision: number;
+} & (
+  { phase: "signedOut" } |
+  { phase: "transitioning"; attemptId: string } |
+  { phase: "authenticated"; attemptId: string;
+    user: { id: string; token: string; firstName?: string | null;
+      lastName?: string | null; email?: string | null; company?: string | null } }
+);
+type Scope = {
+  epoch: string; sharedRevision: number; localIncarnation: string;
+  localFence: number; actorId: string;
+};
+```
+
+`epoch` is a random UUID for a newly initialized envelope; `revision` is a
+nonnegative safe integer incremented for **every** durable begin/terminal/logout
+transition. Initial absence may create a signed-out envelope with a fresh epoch
+under the lock; it never restores credentials or reuses an old epoch/revision.
+This prevents deletion/reinitialization from matching old requests. Corrupt/unknown
+schema, overflow, failed storage or unavailable Web Locks fails closed; do not
+silently reset/recover an authenticated envelope or fall back to a tab counter.
+Initialization/recovery always purges local work. A scope includes fresh random
+local incarnation on bootstrap/restoration/BFCache reentry, so a previous page's
+effects cannot match even if it sees the same committed credentials.
+Keep id/token strict; bound/sanitize optional display hints with existing field
+limits and local fallbacks. Historical absent/null names/email/company cannot
+invalidate an otherwise valid authenticated identity or become policy inputs.
+
+1. Every local login/register/logout/account-switch intent synchronously increments
+   localFence and hides/purges protected UI **before the first await**. Login and
+   register share one attempt namespace. Generate one fresh attempt ID (RTK
+   request ID is sufficient); a queued begin rechecks localFence before writing,
+   so an older same-tab intent cannot supersede a newer one while awaiting lock.
+2. Under the exclusive lock, reread/validate the envelope. Begin login/register
+   writes revision+1, transitioning and attempt ID, with **no previous credentials**.
+   Remember this begin revision/epoch/attempt/fence; release the lock for HTTP.
+   The previous session is not restored if auth fails or the page crashes here.
+3. Completion reacquires lock and checks exact epoch/beginRevision/attempt,
+   transitioning phase and local incarnation/fence. On mismatch discard success,
+   error, loading/finally effects and callbacks. On match atomically persist
+   revision+1 authenticated (validated result) or signedOut (failure). Only after
+   that durable write succeeds publish accepted Redux auth **synchronously while
+   still holding the lock**. No unguarded thunk `setAuth` or fulfilled reducer path.
+4. Return a trusted accepted receipt containing terminal phase/revision/epoch and
+   local attempt/incarnation/fence. Form `.unwrap()` alone does not authorize
+   navigation: auth navigation/error/finally uses `runIfAuthResultCurrent` against
+   that exact receipt. It checks current terminal revision/phase and local intent,
+   including signedOut for a current failed login; it never permits protected
+   data work. Logout writes signedOut
+   at a new revision under the lock. Current-session 401 uses compare-and-set of
+   its captured authenticated epoch/revision/actor; it cannot sign out a newer B.
+5. Every protected request admission and result/error publication uses a short
+   `runIfProtectedCurrent(scope, synchronousEffect)` lock check against ready local
+   session and shared authenticated
+   epoch/revision/actor plus local incarnation/fence. Start the request inside
+   that guarded synchronous effect, release lock immediately and await outside it;
+   reenter the guard to publish. Never hold a lock across HTTP/Blob/hash/signing.
+   Async upload -> completion -> create, and read-url -> byte fetch -> Blob decode
+   recheck at **each stage**, keeping the captured actor/token; never acquire B's
+   latest token to continue A's payload. Redux reducers additionally reject
+   mismatching trusted scope/request IDs; raw action payloads cannot install auth.
+6. Storage/BroadcastChannel signals contain only schema/epoch/revision/transition
+   identifiers. Upon observing a change, purge/hide first, then reread under lock;
+   never install credentials from event payloads or decrement revision. Guard
+   requests and publications by rereading even if a storage event is delayed.
+   A delayed signal may cause a safe extra reconciliation, not resurrection.
+7. Ignore legacy `persist:root` credentials entirely; remove that old auth material
+   under coordinator control, without reading a fallback token. Stop auth's old
+   persist writer. A delayed old writer to that key cannot affect the new key.
+   **PROPOSED compatibility cost:** one-time sign-in for old persisted clients.
+   Restore only a validated authenticated envelope and establish a fresh local
+   restoration-candidate scope. A narrow `runIfRestoreCandidateCurrent` checks its
+   epoch/revision/actor/incarnation/fence under lock and admits **only E16**, while
+   UI and all other protected requests stay gated. Recheck the candidate and E16
+   verified actor before publishing ready. A current 401/identity mismatch clears
+   the candidate by CAS; 429/network/5xx stays restoring/gated with explicit retry.
+   Compare its
+   verified user ID; persisted names/company remain display hints, not freshly
+   verified authorization. No auth/session endpoint exists today. Selectors must
+   gate unknown/restoring/transitioning states, not merely test token presence.
+
+These guarantees cover cooperating same-origin clients on the new build. Old
+open tabs must close/reload at the stopped upgrade boundary. Operations admitted
+before a later transition may finish server-side with their valid copied JWT;
+client results are then discarded. Delayed cross-tab events cannot instantly erase
+a remote screen. A failed durable logout write cannot guarantee another tab's
+logout or future reload tombstone; fail closed in the active context, surface
+reconciliation failure, and do not report durable/global logout success. Copied
+JWT/server revocation, unsupported-browser policy and storage-failure recovery
+remain explicit SEC-011/pilot questions. No unsafe counter-only fallback is accepted.
+
+**Typed rejection contract:** normalize Axios and fetch/media into a serializable
+bounded local type; use `rejectWithValue`, not Hebrew strings or raw transport Error.
+
+```ts
+type ApiFailure = {
+  status?: number; // actual HTTP response only, integer 100..599
+  kind: "unauthorized" | "forbidden" | "unavailable" | "validation" |
+    "inactive" | "throttled" | "network" | "timeout" | "aborted" | "server" | "unknown";
+  messageKey: ErrorMessageKey; // existing/new typed i18n key, never server text
+  retryAfterSeconds?: number; // validated integer 1..86400
+  fields?: Partial<Record<KnownInputField, ErrorMessageKey>>; // <=8 known fields
+};
+type RequestIdentity = Scope & {
+  requestId: string; operation: ProtectedOperation; targetId?: string;
+}; // trusted local thunk metadata, each string bounded at 128 characters
+```
+
+Allow only known operation/input/message-key enums and allowlisted scalar
+interpolation parameters if a typed message needs them. Discard raw response bodies,
+Axios config, headers, URLs, backend stack text and arbitrary validation fields;
+no token/reference/coordinates/draft content in error/meta. HTTP status is preserved
+when present; status-less timeout/network/abort stays status-less. Parse only bounded
+Retry-After using the current helper's 1..86400 range. All handling first checks
+scope **and operation request identity**; stale success and stale failure have
+zero state/navigation/draft effects.
+
+RTK `createAsyncThunk` puts its argument into `action.meta.arg`: a safe custom
+metadata type alone does not remove sensitive inputs. Put auth credentials,
+coordinates/notes, reference and upload/form inputs in a private operation context
+keyed by an opaque request/context ID; dispatched thunk args/meta contain only
+that bounded ID, safe target IDs and trusted scope. Clean context on current/stale
+completion/cancel and session loss. Inspect pending/fulfilled/rejected action
+metadata in tests. Intended accepted auth state/envelope remains a credential
+boundary; no password/reference/draft or arbitrary response enters generic metadata,
+logs or DevTools. Do not claim secrecy by merely sanitizing after dispatch.
+
+| Current accepted failure | Required action |
+| --- | --- |
+| Ray protected 401 | Coordinator CAS invalidation, hide/purge all protected entities/forms/files/map/media, then sign-in feedback; stale 401 cannot clear B. |
+| Parent station detail/history/summary/feeding 404 | Purge that station and children/draft/overlays; neutral map remount. Revalidate discovery. Never keep a forbidden location because a local entity exists. |
+| Image/read-url or management 403/404 | Purge that image/management state and revalidate parent through an authorized endpoint; it is not itself proof of parent denial. |
+| S3 byte-fetch 403/404 | Dispose expired/failed capability, keep permitted form/parent; explicit fresh read-url request through current scope. Never interpret S3 status as Ray-session 401. |
+| Validation 400/413/415/422 or authorized inactive 409 | Bounded typed feedback, preserve same-scope permitted draft; disable inactive feed action. No fabricated saved receipt. |
+| 429, network, timeout, 5xx | Preserve same-scope draft/files and already-confirmed feeding receipt, mark unavailable/stale, bounded retry hint and explicit retry; no automatic POST replay. |
+| Abort/obsolete scope or request | No error/cleanup/navigation in newer context. Abort is best effort, not the acceptance fence. |
+
+### 16.7 REV-02: entity, draft, media and Leaflet isolation
+
+Use complete allowlisted **row** replacement, not merges retaining fields the
+server removed. Page-one refresh replaces the collection epoch; more appends only
+under the current page/cursor lineage as in 16.3, with whole-row replacement.
+Off-page absence is not revocation. Each operation/target has its own request fence as well as session
+scope. A successful create/feed invalidates an earlier in-flight list/own-history
+snapshot, may immediately upsert its accepted detail/own receipt, then fetches a
+new authoritative snapshot. Fresh collection refresh drops the former page chain,
+and current parent denial or a complete authorized set removes excluded entities
+and children; a single bounded page does not prove exclusion. This preserves confirmed
+receipts without allowing `createdDuringFetch` or log merge logic to resurrect
+removed/redacted records. No station/grant/log/reference/summary/media persistence.
+Assigned report data joins the common session fence without changing Report policy.
+
+On any session transition/current 401, purge station lists/details, own logs,
+summaries, grant lists, reference input/output, selection, upload caches, Files,
+previews, signed URLs and Blob URLs. Unmount decoded image nodes and revoke URLs;
+abort pending stages. Clear dialogs, picker coordinates/bounds/marker, focus targets
+and station-owned drafts. Never transfer a draft to another actor. On parent access
+loss do the same for that parent; during a current 429/outage preserve draft/files
+only within the still-accepted scope, gate stale protected display and revalidate
+before using it. Previously copied pixels remain outside recall guarantees.
+
+Key the protected map subtree by accepted session scope plus `authorizationViewEpoch`.
+On session loss, current parent 404 or an authoritative snapshot removing a displayed
+station, hide/unmount it before the next protected paint, increment view epoch and
+remount at the **PROPOSED** fixed neutral center lat 32.0853/lng 34.7818, zoom 13.
+Reset center, zoom, actual bounds, fit-once flag, fit inputs, selected marker,
+popups/tooltips, picker state, overlays, cluster state and pending focus/fit tasks.
+Fit only fresh authorized coordinates once; no animation through the previous
+sensitive viewport. Report layers continue under their own policy and cannot be
+used to preserve station-derived map bounds. Do not assume replacing React marker
+arrays resets Leaflet's actual viewport or earlier tile requests.
+
+On pagehide/hidden, gate and purge protected presentation; quarantine permitted
+draft/files locally with their shared epoch/revision/actor, cancel old continuations
+and do not render them. On pageshow/BFCache/focus/visibility return, reconcile with
+a fresh local incarnation and authorized server snapshots before restoring map/details.
+Rebind quarantined drafts only after proving the **same shared epoch/revision/actor**
+and current parent authorization; never rebind old request identities. Any auth
+intent/actor/revision change or parent denial purges them. Real-browser evidence must inspect actual
+Leaflet center/zoom/bounds/fit and overlays, sensitive tile requests, keyboard focus,
+Blob disposal, two cooperating tabs, delayed signals and BFCache/tab return.
+Redux/SSR tests alone cannot establish this. Previously requested tiles/cache
+cannot be recalled, and no storage event implies immediate remote screen erasure.
+
+### 16.8 Explicit legacy refusal and confidentiality cutover
+
+Replace the default Mongo-bound station router export with a refusal router, and
+make actual `createLegacyApp` mount the same refusal for `/api/feeding-stations`
+and **every descendant/method**, plus `/api/station-access` and descendants. Use
+fixed 503 `{message: "Station service unavailable"}`, private/no-store/no-referrer,
+no retry-to-public fallback, no station/log/user lookup and no Mongo ACL. Mount
+after existing CORS/Helmet and before ingress/body parsers/domain auth/storage, as
+existing retired-upload handling does. Earlier CORS preflight/transport handling may answer without domain
+execution; it must not reach a station handler. Test unknown nested paths too.
+Do not leave the old default export usable by an incidental import/test composition.
+
+Supported PostgreSQL composition must explicitly inject principal-aware handlers,
+both plain and media-wrapped. Switch positive station contract tests away from
+the default Mongo helper to real supported handlers with an injected policy store;
+keep separate historical Mongo adapter/serialization fidelity tests and explicit
+actual-legacy refusal tests. Do not delete local Mongo records, change unrelated
+report/auth/health routes, or imply the entire legacy app is safely retired.
+
+Safe local sequence is additive development behind an unavailable/stopped station
+boundary, followed by joint JSON/media/legacy-path integration. Schema installation
+alone never protects an old backend. No preview migration/start or deployment is
+authorized here. A later authorized persistent-preview upgrade uses the existing
+runbooks inside a stopped boundary, verifies the appended journal and preserved
+rows/assets, and enables only the complete privacy-aware build after local tests.
+Close/reload older clients first. If any boundary fails, keep affected station
+JSON/assets unavailable or stop the local preview; retain PostgreSQL/media data
+and diagnose/forward-fix. Never roll back to old public routes, drop the grants
+table, reset seeds/owners or delete/rekey/reupload media as a privacy recovery.
+
+### 16.9 Executable batches and review evidence
+
+Every test/command in this subsection is **PLANNED / NOT_RUN in SEC.1B-3B.0**.
+Use the [guarded disposable-PG setup](../migrations/postgres-local-foundation.md),
+[preview runbook](../migrations/postgres-preview.md) and
+[media evidence ledger](../migrations/s3-media.md), rather than duplicate their
+operating procedures. Local media doubles prove application decisions/signing
+options, not live S3/IAM/CORS. Ordinary checks must not contact persistent preview
+or cloud. Review actual package scripts before execution; client tests use Node's
+test runner, not an invented package test script.
+
+| Batch / exact scope | Likely files (new files explicitly proposed) | Acceptance and required tests/evidence | Compatibility / recovery boundary |
+| --- | --- | --- | --- |
+| **3B.1 Schema and policy foundation** | `server/db/schema.ts`; new `server/db/migrations/0007_station_visibility.sql` and generated snapshot/journal entry; proposed principal/policy types under `server/feedingStations`; `server/tests/integration/database.mjs`, `server/tests/integration/postgresFeeding.test.mjs`, proposed PG policy tests | Disposable fresh install, 0000-0006 upgrade and replay; CHECK/FK/PK/index tests; every-old-column/media/journal comparison; missing classification denies all branches. Shared policy signature requires principal/transaction; no new reachable route. Reviewer receives exact generated diff, test commands/results, preservation comparisons and guard/refusal results. | Additive only, no old migration/hash edits, seed replay or preview operation. Schema does not protect old handlers. Keep station boundary stopped/unavailable. Forward-fix with a new reviewed migration, never destructive down migration or public-backend rollback. |
+| **3B.2 Protected station/feeding JSON + legacy refusal** | `server/routes/feedingStationRoutes.ts`; station/log controllers, stores/interfaces and serializers; both `server/validation/feedingStationSchemas.ts` and `server/media/validation.ts`; `server/feedingLogs/feedingPersistenceErrors.ts`; required/optional auth middleware error classification; `server/app.ts`, `server/preview/app.ts`; station/log contract helpers/tests and PG feeding tests | E01-E06, E17 and V1/V2/V4/V7: required auth, all audience branches, all exact allowlists and paging, bucket edge cases, own-history filtering, safe errors/headers, no denied INSERT, station-first races on independent PG pools, default AND real legacy refusal. Use SQL fixture grants only within disposable tests until 3B.4. Reviewer receives route wiring inventory and plain/media parity evidence. | Own-history projection/privacy field removals are intentional; old anonymous/full-history assertions become audience tests, historical adapter fidelity remains. No external exposure until 3B.3 is complete. Never substitute empty success on policy/persistence failure. |
+| **3B.3 Protected station media** | `server/media/service.ts`, `routes.ts`, `types.ts`, `s3.ts`, media store/wrappers; shared station policy; `server/preview/app.ts`; media contract/unit/PG integration tests; station image projection schemas | E12-E15/V3: actual PG authoritative parent, both issuers, no initial-denial signer calls, paused signer/final-lock revoke races, expiry receipt/cache override assertions with doubles, uploader no bypass, external suppression/rejection, create/attach rollback and all existing owner/lease/quota protections. Reviewer receives signer-call counts, header options and unchanged report-domain cases. | JSON + media + all default/legacy paths form one confidentiality unit before reachability. No S3 implementation/IAM/config operation now; later source changes tested locally do not prove cloud acceptance. Retained assets/keys/strings untouched; failure keeps station JSON/assets unavailable. |
+| **3B.4 Owner visibility and reference/grant management** | Proposed policy/grant store/reference modules and routes under `server/feedingStations`; station serializers/router; `server/preview/app.ts`; account write limiter reuse; proposed grant/reference unit/PG tests | E07-E11/V2/V5: owner-before-recipient checks, exact reference grammar/derived-key rejection both ways, after-lock expiry, generic invalid/deleted/self failures, bounded label/list, no email enumeration, duplicate/regrant/revoke concurrency and rollback; minimal safe event tests. Reviewer gets selected lifecycle decision, same-row/no-rewrite results and independent-pool races. | Resolve reference consent/reuse/label and grant persistence choices in 16.10 first. No invitation table, pending/accept route, messaging, self-leave or directory. Keep unavailable if paired policy incomplete; preserve all rows/media on recovery. |
+| **3B.5 Mandatory authentication and typed errors** | Proposed `client/src/features/auth/sessionCoordinator.ts`, `client/src/api/apiFailure.ts`; auth slice/thunks/selectors, store, main, Login/Register; existing report session consumers; `server/routes/authRoutes.ts` for proposed E16 using injected required auth and safe identity-store errors; proposed `client/tests/authSessionIsolation.test.cjs`, existing auth/report persistence/password/media/rate-limit tests | V6: real thunk/reducer/coordinator harness with two independent tab runtimes and controllable lock/storage/signals; both completion orders of login/login, login/register, register/login; delayed success/error/finally/navigation after logout/current401/B; identical-token reauth; stale queued begin/commit, delayed signals, legacy queued writer, reload/crash/epoch reinit/corruption/overflow/no-lock/storage-failure cases. Verify E16 and all status-less/401/404/429 distinctions. Reviewer gets interleaving traces and exact guarantee limits. | Retain committed-envelope credentials only; one-time old-key sign-in proposed. No auth slice redux-persist writer or local-counter fallback. Client isolation does not revoke server JWT. Failed durable logout is not reported as globally durable success. Mandatory before 3B.6/7/8 privacy acceptance. |
+| **3B.6 Mandatory protected state/map/media isolation** | Station/log types/thunks/slices/selectors; proposed summary/grant modules; `client/src/pages/mapPage/MapPage.tsx`; CreateFeedingStation, FeedingStationDetails, StationLocationPicker; `client/src/api/media.ts`, `client/src/components/media/Media.tsx`; affected report session consumers; existing station/log/media presentation tests | After 3B.5: trusted scope/request metadata, authoritative replacement with mutation/read fencing, parent-vs-asset failure cleanup, draft/receipt preservation, deferred upload/complete/create/read-url/blob stages, URL disposal. Actual two-tab/Leaflet/BFCache/browser evidence required for viewport/overlay/focus reset; synthetic harness alone insufficient. Reviewer receives state/field absence assertions plus sanitized actual browser results. | No protected entities/drafts/files/capabilities persisted or transferred between actors. Neutral reset before paint, fresh authorized fit. If browser boundary fails, keep protected station UI unavailable; do not restore old public fetching/media embedding. |
+| **3B.7 Hebrew UX and accessibility** | Existing map/create/detail/media components and styles; typed `client/src/i18n` schema/keys/Hebrew strings; chosen reference/grant/visibility/own-history presentation; focused localization/accessibility tests | After 3B.5/6: deliberate publish, reference consent/reuse explanation, owner-only grant/revoke, private own history, independent food/water summaries, saved receipt plus failed refresh, inactive/401/404/429/offline behavior; keyboard/focus/reader, RTL at actual 320px and 390px, mobile overflow and recovery. Reviewer receives screenshots/sanitized interaction evidence with date/browser/viewport and local/double limitations. | Resolve dependent UI behavior in 16.10. No station-note editing, professional role, messaging or public directory. Untranslated/raw technical status is not user-facing authority feedback. Keep scope within current milestone. |
+| **3B.8 Integrated security/PG/browser acceptance** | Affected backend/client suites, actual route compositions and local browser harness/evidence; later documentation updates only when separately scoped | Run full V1-V7 matrix plus all section 13 cases, actual disposable PG races/migration, real-browser two-tab/auth/deferred response/map/media/RTL/a11y flows. Check every reachable issuer/legacy route jointly, no secret evidence, release gate classification and remaining blockers. Independently review read-only; implement confirmed fixes, then rerun affected integration/browser evidence. | Stopped-preview upgrade rehearsal is separate and requires its own operation authorization. Preserve data/assets and restrict access on failure; no public rollback. Test pass is integration evidence, not real-pilot/production or cloud clearance. |
+
+**3B.1 disposable-harness details are part of the batch:** the shared integration
+helper's known-object refusal probe must include `station_access_grants`; an
+unexpected pre-existing grant table must cause refusal rather than adoption.
+Suite-owned cleanup drops the grant table before stations/users, preserving URL,
+database-identity, advisory-lock and `ownsObjects` guards. Never add broad CASCADE
+or allow cleanup to touch persistent preview. All PG suites using that helper
+must still pass. Existing old-chain feeding tests must explicitly separate the
+new visibility assertion from comparisons of **all previous fields**, not weaken
+the preservation check to selected columns. Add a 0000-0006 -> 0007 fixture with
+users/stations/logs/reports and station/report attached media, comparing original
+columns/geometry/SRID/FKs/times and old migration hashes/journal before/after/replay.
+Seed rerun must skip existing rows and cannot undo revocation or classification.
+
+Planned command families, subject to the changed-file scope and existing scripts:
+
+```powershell
+npm.cmd run build --prefix server
+npm.cmd run test --prefix server
+npm.cmd run test:postgres --prefix server
+npm.cmd run build --prefix client
+npm.cmd run build:postgres --prefix client
+node --test client/tests/*.test.cjs
+```
+
+Use existing guarded PG test runner configuration only; do not infer a safe target
+from a command name or invent environment credentials. Run the affected server
+integration script actually present in its package manifest if its name differs
+at implementation time. Add targeted client ESLint against changed files using
+the installed local executable. Do not run cloud acceptance as an ordinary test.
+Backend build verifies types, not authorization; PG doubles/unit tests cannot
+replace real PostgreSQL locks, and DOM/reducer fixtures cannot replace Leaflet or
+browser persistence evidence. Full tests are appropriate at 3B.8; earlier batches
+use meaningful affected checks before broader integration.
+
+For each implementation batch retain the established sequence: implementation ->
+integrated QA -> independent **read-only** review -> confirmed fixes -> affected
+revalidation -> explicit Git-write approval. Reviewer evidence includes source
+diff, actual commands/exit results, date/HEAD/tree, target tier, sanitized fixtures,
+limitations and unresolved findings. Reviewers do not silently patch the batch or
+promote planned/double/historical evidence to current runtime verification.
+No staging/commit/push/merge/deploy follows automatically from a pass.
+
+### 16.10 Remaining decisions and first-batch readiness
+
+These selected defaults are **PROPOSED**, not additional APPROVED product policy:
+
+| ID / selected target | Remaining resolution / dependent batch |
+| --- | --- |
+| C-01 Self-issued reference consent | Product/privacy to accept or replace the 15-minute reusable identification reference, deliberate sharing as consent across holder-owned stations, no pending recipient acceptance/self-leave, no individual proof revocation, regrant after owner revoke while proof valid; first-name label. Required before 3B.4/7. PD-06 private references/no-directory stays approved. |
+| C-02 Grant lifecycle | Product/Engineering to confirm same-row duplicate/regrant behavior and persistence through regular/sensitive switches; revocation on regular does not remove regular audience access. Required before 3B.4/7. No change to PD-04 scope. |
+| C-03 Coordination and author edge | Product/care/privacy to confirm exact DTOs, six recency buckets/60s local freshness, bounded paging and parent-access requirement for station-scoped own history after sensitive revocation. Own rows remain preserved; no new redacted export in milestone. Required before 3B.2/6/7 behavior acceptance; PD-05 appropriate own access is not waived. |
+| C-04 Regular feeding writes | Product/care to confirm retaining current active regular viewer `canFeed`; sensitive-grant feed permission is already PD-04 APPROVED. Required before 3B.2/7. |
+| C-05 Client persistence/compatibility | Engineering/Security to validate Web Locks + atomic envelope/CAS algorithm and supported-browser evidence; one-time legacy-key sign-in and retained credentials are proposed compatibility choices. Storage-failure recovery and remote-screen/server-JWT limits stay explicit. Required before 3B.5/6 acceptance; no new gate to approve the mandatory REV isolation invariant. |
+| C-06 API/retirement mechanics | Engineering/Operations to review exact endpoints/projections/paging/headers/error normalization and namespace refusal/cutover; selected conservative implementation targets, not proof of deployment. Legacy direction is PD-08 APPROVED. Required before 3B.2/3/8 reachability. |
+| C-07 Audit and retention | Product/privacy/Security/Operations to set event access/durability/duration, media/source/backup retention/removal and incident ownership. Latest-state grant table is not full audit. Unresolved before real users, not a reason to reset schema/data. |
+| C-08 Revocation and external/report risk | Product/privacy/Security/Operations disposition of 60-second preissued URLs, caches/manual copies, independent report/external image policy, public report location and operating notices/takedown. No impossible immediate-revocation promise or approval of this risk by implication. Required for real-data release. |
+| C-09 Remaining pilot gates | The complete section 15/readiness blockers, named real S3 acceptance gaps, password/session policy, distributed abuse/pagination/load, dependencies, accessibility/welfare/legal/privacy notices, production/backup/recovery and named operations remain OPEN. No real-pilot readiness from this contract. |
+
+**First implementation batch:** 3B.1 is concretely scoped and ready for review and
+separate implementation authorization: additive classification/grant schema,
+principal-aware policy foundation and guarded disposable migration evidence.
+PD-01/02/03/04/08 already supply its product constraints. No cloud, preview-data
+operation, irreversible ownership repair or remaining reference/UI preference is
+needed to prepare that batch. The selected grant schema must still pass engineering
+review before edits; do not represent this documentation task as authorization to
+start implementation. C-01 through C-06 must be recorded before their dependent
+behavior, rather than silently promoted from PROPOSED. Local partial work stays
+unavailable. Integrated privacy acceptance requires **3B.2 + 3B.3 + legacy refusal**,
+then the full **3B.5 -> 3B.6 -> 3B.7 -> 3B.8** client/evidence chain and applicable
+grant work. All source enforcement/browser behavior remains **NOT_IMPLEMENTED /
+NOT_TESTED for this design**.
+
+### 16.11 Current documentation validation and handoff
+
+SEC.1B-3B.0 validation is local documentation/source tier only, separate from the
+historical 3A table in section 15. Check UTF-8, final newline/whitespace/fences/table
+shape, all local links/line bounds and referenced package commands; compare all
+nine approved PD rows exactly with the committed baseline and retain REV-01
+through REV-04, station-first locks, original-parent media and stopped-cutover
+invariants. Scan this document for selected credential/signed-capability patterns.
+That scan is bounded document hygiene, not a repository/history secret audit.
+
+Executed contract-finalization record, **2026-11-03**, documentation/source tier:
+
+| Executed command/method | Actual result / limitation |
+| --- | --- |
+| Read-only `node -` document validator | **PASS:** 119 local file links, 45 source line bounds, nine package-script references; sections 1-16, consistent table columns, balanced fences, UTF-8/no NUL or replacement characters, no trailing whitespace and final LF. Five selected credential/capability patterns had no match. Bounded document scan only. |
+| Read-only `node -` baseline/invariant comparison using `git show HEAD:<this file>` | **PASS:** all nine PD rows exact, all four independent-review disposition rows exact, complete sections 5/8/9 text-identical; 19 unique endpoint rows, 11 contract subsections and required coordinator/locking/media markers present. Text comparison is not enforcement proof. |
+| Backend, client and grant/media independent read-only source/document reviews | Corrections incorporated: existing denial/capabilities shapes, owner-before-reference validation, scoped pagination, auth-result/restore guards, draft rebinding, RTK metadata isolation, identity-outage distinction, exact reference grammar, report retry compatibility and historical nullable display hints. No remaining blocking contract contradiction reported; no product approval or runtime clearance added. |
+| `git --no-optional-locks -c safe.directory=C:/Users/97254/Desktop/projects-2025/ray diff --check` | **PASS**, exit 0. Git's LF-to-CRLF working-copy policy notice is not a whitespace error; no config change made. |
+| Read-only branch/HEAD/tracking/status/index checks | `ray-2-postgres`; HEAD `3c3f212dbc54381e8900c77df41e4170073831ac`; locally recorded tracking 0/0 without fetch; index empty; only ` M docs/security/station-visibility-design.md`. No unrelated changes. |
+
+No application test/build, browser, database/provider check or new runtime result
+was executed in this contract task. The planned checks above remain NOT_RUN.
+No unrelated document/implementation file changed, and no Git write occurred.
+Any unrelated change requires stopping and preserving it, never stash/reset/restore.
+
+Reviewed staging command, **shown only; not executed**:
+
+```powershell
+git add -- docs/security/station-visibility-design.md
+```
+
+Suggested commit message: `docs: finalize station privacy implementation contracts`.
+Wait for review and explicit Git-write authorization. No staging, commit, push,
+merge, deployment, database or cloud operation is authorized by this document.
