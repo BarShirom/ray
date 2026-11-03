@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { useSelector } from "react-redux";
+import { useSelector, useStore } from "react-redux";
 import { Link } from "react-router-dom";
 import { useAppDispatch } from "../../app/hooks";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
@@ -8,6 +8,7 @@ import {
   selectAllFeedingStations,
   selectFeedingStationsLoading,
   selectFeedingStationsError,
+  selectStationAuthorizationRevision,
 } from "../../features/feedingStations/feedingStationsSelectors";
 import type { FeedingStation } from "../../features/feedingStations/types";
 import FeedingStationMarker from "../../components/feedingStationMarker/FeedingStationMarker";
@@ -21,7 +22,10 @@ import {
   resolveReport,
 } from "../../features/reports/reportsThunks";
 import { selectAllReports } from "../../features/reports/reportsSelectors";
-import { selectToken } from "../../features/auth/authSelectors";
+import { selectToken, selectSessionId, selectUserId, selectAuthLoading } from "../../features/auth/authSelectors";
+import type { RootState } from "../../app/store";
+import { captureSession, isSessionCurrent } from "../../features/auth/session";
+import { useApiRetryGate } from "../../api/useApiRetryGate";
 import ReportMarker from "../../components/reportMarker/ReportMarker";
 import ReportCard from "../../components/reportCard/ReportCard";
 import LocalizedMapControls from "../../components/mapPreview/LocalizedMapControls";
@@ -34,6 +38,7 @@ import type {
 import { t } from "../../i18n";
 import { localizeError } from "../../i18n/errors";
 import { reportTypeLabel, statusLabel } from "../../i18n/formatters";
+import { DEFAULT_STATION_VIEW, stationViewport } from "./stationViewport";
 import "./MapPage.css";
 
 type LegendKey = TypeKey | StatusKey;
@@ -52,26 +57,37 @@ const normStatus = (s: StatusKey | string): StatusKey => {
 
 function StationViewport({ stations }: { stations: FeedingStation[] }) {
   const map = useMap();
-  const fitted = useRef(false);
+  const viewport = useRef<ReturnType<typeof stationViewport> | null>(null);
 
   useEffect(() => {
-    if (fitted.current || stations.length === 0) return;
-    map.fitBounds(stations.map((station) => [station.location.lat, station.location.lng]), {
-      padding: [24, 24],
-      maxZoom: 13,
-    });
-    fitted.current = true;
-  }, [map, stations]);
+    const current = stationViewport(map);
+    viewport.current = current;
+    return () => { current.dispose(); viewport.current = null; };
+  }, [map]);
+  useEffect(() => { viewport.current?.fit(stations); }, [stations]);
 
   return null;
 }
 
 export default function MapPage() {
+  const sessionId = useSelector(selectSessionId);
+  const actorId = useSelector(selectUserId);
+  const authLoading = useSelector(selectAuthLoading);
+  const authorizationRevision = useSelector(selectStationAuthorizationRevision);
+  // Remount Leaflet itself, not just markers: its camera, bounds, fit ref,
+  // picker, popups and native dialogs all belong to this authorization epoch.
+  return <SessionMap key={`${sessionId}:${actorId ?? "guest"}:${authLoading ? "pending" : "ready"}:${authorizationRevision}`} />;
+}
+
+function SessionMap() {
+  const store = useStore<RootState>();
+  const instanceSession = useRef(captureSession(store.getState()));
   const dispatch = useAppDispatch();
   const reports = useSelector(selectAllReports) as Report[];
   const stations = useSelector(selectAllFeedingStations);
   const stationsLoading = useSelector(selectFeedingStationsLoading);
   const stationsError = useSelector(selectFeedingStationsError);
+  const retryBlocked = useApiRetryGate(stationsError);
   const [selectedStation, setSelectedStation] = useState<FeedingStation | null>(null);
   const token = (useSelector(selectToken) ?? null) as string | null;
   const [creationMode, setCreationMode] = useState(false);
@@ -81,14 +97,22 @@ export default function MapPage() {
   const [reportsError, setReportsError] = useState("");
   const [reportsLoading, setReportsLoading] = useState(false);
   const [actionError, setActionError] = useState("");
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const loadReports = useCallback(async () => {
+    // The first StrictMode effect owns the existing request and its callbacks.
+    // A deduplicated dispatch must not become a visible ConditionError.
+    if (store.getState().reports.publicRequestId) return;
     setReportsError("");
     setReportsLoading(true);
     try { await dispatch(fetchReports()).unwrap(); }
-    catch (error) { setReportsError(localizeError(error, "report")); }
-    finally { setReportsLoading(false); }
-  }, [dispatch]);
+    catch (error) { if (mounted.current) setReportsError(localizeError(error, "report")); }
+    finally { if (mounted.current) setReportsLoading(false); }
+  }, [dispatch, store]);
 
   const cancelCreation = () => {
     setCreationMode(false);
@@ -105,9 +129,9 @@ export default function MapPage() {
   );
 
   useEffect(() => {
-    dispatch(fetchFeedingStations());
+    if (token) dispatch(fetchFeedingStations());
     void loadReports();
-  }, [dispatch, loadReports]);
+  }, [dispatch, loadReports, token]);
 
   const onTypeChange = useCallback(
     (t: TypeKey) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,20 +176,15 @@ export default function MapPage() {
     [reports, activeTypes, activeStatuses]
   );
 
-  const defaultCenter = { lat: 32.0853, lng: 34.7818 };
-  const centerSource = filteredReports.length ? filteredReports : reports;
-  const center = stations[0]?.location ?? (
-    centerSource.length > 0
-      ? centerSource[centerSource.length - 1].location
-      : defaultCenter);
 
   const onPrimary = async (id: string, status: StatusKey) => {
-    if (!token) return;
+    const session = instanceSession.current;
+    if (!token || !mounted.current || !isSessionCurrent(store.getState(), session)) return;
     setActionError("");
     try {
       if (status === "new") await dispatch(claimReport({ reportId: id })).unwrap();
       else if (status === "in-progress") await dispatch(resolveReport({ reportId: id })).unwrap();
-    } catch (error) { setActionError(localizeError(error, "report")); }
+    } catch (error) { if (mounted.current && session && isSessionCurrent(store.getState(), session)) setActionError(localizeError(error, "report")); }
   };
 
   return (
@@ -173,15 +192,15 @@ export default function MapPage() {
       <aside className="panel side-left">
         <div className="feeding-stations-summary">
           <div className="section-title">{t("map.stations")}</div>
-          <p>{t("map.stationMarkers")}</p>
-          {stationsLoading && <p role="status">{t("map.loadingStations")}</p>}
-          {stationsError && (
+          <p>{t(token ? "map.stationMarkers" : "map.stationSignInRequired")}</p>
+          {token && stationsLoading && <p role="status">{t("map.loadingStations")}</p>}
+          {token && stationsError && (
             <div role="alert">
               <p>{localizeError(stationsError, "station")}</p>
-              <button type="button" onClick={() => dispatch(fetchFeedingStations())}>{t("map.retry")}</button>
+              <button type="button" disabled={retryBlocked} onClick={() => dispatch(fetchFeedingStations())}>{t("map.retry")}</button>
             </div>
           )}
-          {!stationsLoading && !stationsError && (
+          {token && !stationsLoading && !stationsError && (
             <p role="status">{t("map.stationCount", { count: stations.length })}</p>
           )}
         </div>
@@ -265,8 +284,8 @@ export default function MapPage() {
           {createdStation && <p role="status">{t("map.createdStation")} <bdi>{createdStation.name}</bdi> <button className="btn" type="button" onClick={() => setSelectedStation(createdStation)}>{t("map.viewStation")}</button></p>}
         </div>
         <MapContainer
-          center={[center.lat, center.lng]}
-          zoom={13}
+          center={DEFAULT_STATION_VIEW.center}
+          zoom={DEFAULT_STATION_VIEW.zoom}
           zoomControl={false}
           scrollWheelZoom
           className="leaflet-root"
@@ -275,13 +294,13 @@ export default function MapPage() {
             attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <StationViewport stations={stations} />
+          <StationViewport stations={token ? stations : []} />
           <LocalizedMapControls />
           {creationMode && token && <StationLocationPicker enabled={pickingLocation} location={creationLocation} onSelect={(location) => {
             setCreationLocation(location);
             setPickingLocation(false);
           }} />}
-          {stations.map((station) => (
+          {token && stations.map((station) => (
             <FeedingStationMarker key={station._id} station={station} onSelect={setSelectedStation} />
           ))}
           {filteredReports.map((report) => (
@@ -304,7 +323,7 @@ export default function MapPage() {
           ))}
         </div>
       </aside>
-      {selectedStation && (
+      {token && selectedStation && (
         <FeedingStationDetails key={selectedStation._id} station={selectedStation} onClose={() => setSelectedStation(null)} />
       )}
       {creationMode && token && <CreateFeedingStation open={!pickingLocation} location={creationLocation}

@@ -107,7 +107,8 @@ export function localizeError(error: unknown, context: Context = "generic"): str
   // A throttled attempt says nothing about credentials, membership or field
   // validity. Status takes precedence over all response text and issue details.
   if (status === 429) {
-    const seconds = retryAfterSeconds(response.headers);
+    const seconds = retryAfterSeconds(response.headers) ?? (typeof outer.retryAfter === "number"
+      ? retryAfterSeconds({ "retry-after": String(outer.retryAfter) }) : undefined);
     return seconds === undefined ? t("errors.rateLimited") : retainFeedback(t("errors.rateLimitedWait", { count: seconds }));
   }
   const issues = data.errors ?? data.issues;

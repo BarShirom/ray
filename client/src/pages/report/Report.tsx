@@ -1,6 +1,11 @@
 // Report.tsx
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useStore } from "react-redux";
+import type { RootState } from "../../app/store";
+import { captureSession, isSessionCurrent } from "../../features/auth/session";
+import { isApiFailure, toApiFailure } from "../../api/errors";
+import { invalidateSession } from "../../features/auth/authSlice";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { createReport } from "../../features/reports/reportsThunks";
 import ReportForm from "../../components/reportForm/ReportForm";
@@ -8,16 +13,21 @@ import { type ReportType } from "../../features/reports/reportsSlice";
 import { isPostgresPreview } from "../../preview";
 import { uploadImages, type ImageUploads } from "../../api/media";
 import { useMediaCapability } from "../../components/media/Media";
-import { selectToken } from "../../features/auth/authSelectors";
+import { selectToken, selectSessionId, selectUserId, selectAuthLoading } from "../../features/auth/authSelectors";
 import { t } from "../../i18n";
 import { localizeError } from "../../i18n/errors";
 import "./Report.css";
 
 type LatLng = { lat: number; lng: number };
 
-const Report = () => {
+const ReportContent = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const store = useStore<RootState>();
+  const instanceSession = useRef(captureSession(store.getState()));
+  const mounted = useRef(true);
+  const current = useCallback(() => mounted.current && isSessionCurrent(store.getState(), instanceSession.current), [store]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const token = useAppSelector(selectToken);
   const mediaEnabled = useMediaCapability();
   const uploads = useRef<ImageUploads>(new WeakMap());
@@ -40,17 +50,20 @@ const Report = () => {
     }
     const id = navigator.geolocation.watchPosition(
       (pos) => {
+        if (!current()) return;
         const { latitude, longitude } = pos.coords;
         setLocation({ lat: latitude, lng: longitude });
       },
-      (err) =>
+      (err) => {
+        if (!current()) return;
         setError(
           t(err.code === 1 ? "reports.locationDenied" : "reports.locationFailed")
-        ),
+        );
+      },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
     setWatchId(id);
-  }, []);
+  }, [current]);
 
   useEffect(() => {
     return () => {
@@ -59,7 +72,7 @@ const Report = () => {
   }, [watchId]);
 
   const submitReport = useCallback(async () => {
-    if (locked.current) return;
+    if (locked.current || !current()) return;
     setError(null);
 
     if (!description.trim()) {
@@ -80,22 +93,28 @@ const Report = () => {
     try {
       let attachment: { media?: string[]; mediaAssetIds?: string[] } = {};
       if (isPostgresPreview) {
-        attachment = { mediaAssetIds: mediaFiles.length ? await uploadImages(mediaFiles, "report", token, uploads.current, setProgress) : [] };
+        attachment = { mediaAssetIds: mediaFiles.length ? await uploadImages(mediaFiles, "report", token, uploads.current,
+          message => { if (current()) setProgress(message); }, current) : [] };
       } else {
         const { uploadMedia } = await import("../../api/upload");
         attachment = { media: mediaFiles.length ? await uploadMedia(mediaFiles) : [] };
       }
+      if (!current()) return;
       await dispatch(
         createReport({ description, location, type, ...attachment })
       ).unwrap();
-      navigate("/map-page");
+      if (current()) navigate("/map-page");
     } catch (err: unknown) {
-      setError(localizeError(err, "report"));
+      if (current()) {
+        const failure = isApiFailure(err) ? err : toApiFailure(err, { context: "report", sessionId: instanceSession.current.id, requestId: "report-submit" });
+        if (failure.status === 401) dispatch(invalidateSession({ sessionId: instanceSession.current.id }));
+        else setError(localizeError(failure, "report"));
+      }
     } finally {
       locked.current = false;
-      setSubmitting(false);
+      if (current()) setSubmitting(false);
     }
-  }, [description, location, type, mediaFiles, dispatch, navigate, token, mediaEnabled]);
+  }, [description, location, type, mediaFiles, dispatch, navigate, token, mediaEnabled, current]);
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
@@ -131,4 +150,9 @@ const Report = () => {
   );
 };
 
-export default Report;
+export default function Report() {
+  const sessionId = useAppSelector(selectSessionId);
+  const userId = useAppSelector(selectUserId);
+  const loading = useAppSelector(selectAuthLoading);
+  return <ReportContent key={`${sessionId}:${userId ?? "guest"}:${loading}`} />;
+}

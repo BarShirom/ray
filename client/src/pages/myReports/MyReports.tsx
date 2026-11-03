@@ -1,9 +1,11 @@
 ﻿import { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
+import { useSelector, useStore } from "react-redux";
+import type { RootState } from "../../app/store";
+import { captureSession, isSessionCurrent } from "../../features/auth/session";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../app/hooks";
 import { selectAssignedReports, selectAssignedReportsState } from "../../features/reports/reportsSelectors";
-import { selectAuthLoading, selectUserId, selectToken } from "../../features/auth/authSelectors";
+import { selectAuthLoading, selectUserId, selectToken, selectSessionId } from "../../features/auth/authSelectors";
 import { logoutUser } from "../../features/auth/authThunks";
 import { fetchMyReports, resolveReport } from "../../features/reports/reportsThunks";
 import ReportCard from "../../components/reportCard/ReportCard";
@@ -14,30 +16,38 @@ import "./MyReports.css";
 
 export default function MyReports() {
   const dispatch = useAppDispatch();
+  const store = useStore<RootState>();
+  const sessionId = useSelector(selectSessionId);
   const navigate = useNavigate();
   const mine = useSelector(selectAssignedReports);
   const assigned = useSelector(selectAssignedReportsState);
   const userId = useSelector(selectUserId);
   const token = useSelector(selectToken);
   const authLoading = useSelector(selectAuthLoading);
-  const [actionError, setActionError] = useState<{ userId: string | null; token: string | null; message: string } | null>(null);
+  const [actionError, setActionError] = useState<{ sessionId: string; message: string } | null>(null);
 
   useEffect(() => {
     if (userId && token && !authLoading) void dispatch(fetchMyReports());
-  }, [dispatch, userId, token, authLoading]);
+  }, [dispatch, userId, token, authLoading, sessionId]);
 
   const reauthenticate = async () => {
-    await dispatch(logoutUser());
-    navigate("/login");
+    const previous = captureSession(store.getState());
+    if (previous.id !== sessionId || !isSessionCurrent(store.getState(), previous)) return;
+    const request = dispatch(logoutUser());
+    const session = captureSession(store.getState());
+    await request;
+    if (isSessionCurrent(store.getState(), session)) navigate("/login");
   };
 
   const handlePrimary = async (id: string, status: ReportStatus) => {
+    const session = captureSession(store.getState());
+    if (session.id !== sessionId || !isSessionCurrent(store.getState(), session)) return;
     if (!token || status === "resolved") return;
     const report = mine.find((item) => item._id === id);
     if (!report || reportAssigneeId(report.assignedTo) !== userId) return;
     setActionError(null);
     try { await dispatch(resolveReport({ reportId: id })).unwrap(); }
-    catch (error) { setActionError({ userId, token, message: localizeError(error, "report") }); }
+    catch (error) { if (isSessionCurrent(store.getState(), session)) setActionError({ sessionId, message: localizeError(error, "report") }); }
   };
 
   const authenticated = !!userId && !!token && !authLoading;
@@ -60,7 +70,7 @@ export default function MyReports() {
       ) : (
         <div className="report-list">{mine.map((report) => <ReportCard key={report._id} report={report} onPrimary={handlePrimary} />)}</div>
       )}
-      {loaded && actionError && actionError.userId === userId && actionError.token === token && <p role="alert">{actionError.message}</p>}
+      {loaded && actionError && actionError.sessionId === sessionId && <p role="alert">{actionError.message}</p>}
     </div>
   );
 }

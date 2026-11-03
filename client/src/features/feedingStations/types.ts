@@ -5,11 +5,9 @@ export interface FeedingStation {
   estimatedCats: number;
   estimatedKittens: number;
   image?: string;
-  notes?: string;
-  createdBy: string;
+  notes?: string | null;
   active: boolean;
-  createdAt: string;
-  updatedAt: string;
+  permissions: { canManage: boolean; canFeed: boolean };
 }
 
 export interface CreateFeedingStationData {

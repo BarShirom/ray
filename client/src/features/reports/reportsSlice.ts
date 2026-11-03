@@ -58,9 +58,10 @@ interface ReportsState {
   publicRequestId: string | null;
   publicChangedIds: string[];
   assigned: AssignedReportsState;
+  mutationSessions: Record<string, string>;
 }
 const initialState: ReportsState = {
-  items: [], publicRequestId: null, publicChangedIds: [], assigned: emptyAssigned(),
+  items: [], publicRequestId: null, publicChangedIds: [], assigned: emptyAssigned(), mutationSessions: {},
 };
 
 function isString(u: unknown): u is string {
@@ -133,7 +134,8 @@ function updatePublic(state: ReportsState, report: Report, insert = false) {
   if (state.publicRequestId && !state.publicChangedIds.includes(report._id)) state.publicChangedIds.push(report._id);
 }
 
-function trackMutation(state: ReportsState, meta: { userId: string | null; token: string | null; requestId: string }) {
+function trackMutation(state: ReportsState, meta: { userId: string | null; token: string | null; requestId: string; sessionId: string }) {
+  state.mutationSessions[meta.requestId] = meta.sessionId;
   if (!meta.userId || !meta.token) return;
   if (state.assigned.userId !== meta.userId || state.assigned.token !== meta.token) {
     state.assigned = { ...emptyAssigned(), userId: meta.userId, token: meta.token };
@@ -232,30 +234,39 @@ const reportsSlice = createSlice({
     });
 
     builder.addCase(createReport.fulfilled, (state, action) => {
-      if (!action.payload) return;
+      if (!action.payload || state.mutationSessions[action.meta.requestId] !== action.meta.sessionId) return;
+      delete state.mutationSessions[action.meta.requestId];
       updatePublic(state, action.payload, true);
     });
 
+    builder.addCase(createReport.pending, (state, action) => { state.mutationSessions[action.meta.requestId] = action.meta.sessionId; });
+    builder.addCase(createReport.rejected, (state, action) => { delete state.mutationSessions[action.meta.requestId]; });
+
     builder.addCase(claimReport.fulfilled, (state, action) => {
+      if (state.mutationSessions[action.meta.requestId] !== action.meta.sessionId) return;
+      delete state.mutationSessions[action.meta.requestId];
       updatePublic(state, action.payload, true);
       if (state.assigned.mutationRequests.includes(action.meta.requestId)) updateAssigned(state, state.items.find((report) => report._id === action.payload._id) ?? action.payload);
       state.assigned.mutationRequests = state.assigned.mutationRequests.filter((id) => id !== action.meta.requestId);
     });
 
     builder.addCase(resolveReport.fulfilled, (state, action) => {
+      if (state.mutationSessions[action.meta.requestId] !== action.meta.sessionId) return;
+      delete state.mutationSessions[action.meta.requestId];
       updatePublic(state, action.payload, true);
       if (state.assigned.mutationRequests.includes(action.meta.requestId)) updateAssigned(state, state.items.find((report) => report._id === action.payload._id) ?? action.payload);
       state.assigned.mutationRequests = state.assigned.mutationRequests.filter((id) => id !== action.meta.requestId);
     });
     builder.addCase(claimReport.pending, (state, action) => { trackMutation(state, action.meta); });
     builder.addCase(resolveReport.pending, (state, action) => { trackMutation(state, action.meta); });
-    builder.addCase(claimReport.rejected, (state, action) => { rejectMutation(state, action.meta.requestId, action.error.code === "HTTP_401", action.error.message); });
-    builder.addCase(resolveReport.rejected, (state, action) => { rejectMutation(state, action.meta.requestId, action.error.code === "HTTP_401", action.error.message); });
+    builder.addCase(claimReport.rejected, (state, action) => { delete state.mutationSessions[action.meta.requestId]; rejectMutation(state, action.meta.requestId, action.payload?.status === 401, action.payload?.message); });
+    builder.addCase(resolveReport.rejected, (state, action) => { delete state.mutationSessions[action.meta.requestId]; rejectMutation(state, action.meta.requestId, action.payload?.status === 401, action.payload?.message); });
     builder.addMatcher((action): action is PayloadAction<{ id: string; token: string }> => action.type === "auth/setAuth", (state, action) => {
-      if (state.assigned.userId === action.payload.id && state.assigned.token === action.payload.token) return;
+      Object.assign(state, initialState);
       state.assigned = { ...emptyAssigned(), userId: action.payload.id, token: action.payload.token };
     });
     builder.addMatcher((action) => ["auth/logout", "auth/logoutUser/pending", "auth/loginUser/pending", "auth/registerUser/pending"].includes(action.type), (state) => {
+      Object.assign(state, initialState);
       state.assigned = emptyAssigned();
     });
   },

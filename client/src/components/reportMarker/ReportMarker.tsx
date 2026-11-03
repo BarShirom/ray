@@ -2,14 +2,16 @@ import { MediaImage } from "../media/Media";
 import { Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import { useMemo, useState } from "react";
-import { useSelector } from "react-redux";
+import { useSelector, useStore } from "react-redux";
+import type { RootState } from "../../app/store";
+import { captureSession, isSessionCurrent } from "../../features/auth/session";
 import { useAppDispatch } from "../../app/hooks";
 import type { Report } from "../../features/reports/reportsSlice";
 import {
   claimReport,
   resolveReport,
 } from "../../features/reports/reportsThunks";
-import { selectToken, selectUserId } from "../../features/auth/authSelectors";
+import { selectToken, selectUserId, selectSessionId } from "../../features/auth/authSelectors";
 import { getReporterName } from "../../features/reports/getReporterName";
 import { getAssigneeName } from "../../features/reports/getAssigneeName";
 import { t } from "../../i18n";
@@ -78,10 +80,12 @@ const buildIcon = (type: Report["type"], status: Report["status"]) => {
 
 export default function ReportMarker({ report }: { report: Report }) {
   const dispatch = useAppDispatch();
+  const store = useStore<RootState>();
+  const sessionId = useSelector(selectSessionId);
   const token = useSelector(selectToken);
   const userId = useSelector(selectUserId);
   const isLoggedIn = !!token;
-  const [actionError, setActionError] = useState("");
+  const [actionError, setActionError] = useState<{ sessionId: string; message: string } | null>(null);
 
   const icon = useMemo(
     () => buildIcon(report.type, report.status),
@@ -94,18 +98,22 @@ export default function ReportMarker({ report }: { report: Report }) {
     assignedToId(report.assignedTo) === userId;
 
   const handleClaim = async () => {
-    setActionError("");
+    const session = captureSession(store.getState());
+    if (session.id !== sessionId || !isSessionCurrent(store.getState(), session)) return;
+    setActionError(null);
     if (isLoggedIn) {
       try { await dispatch(claimReport({ reportId: report._id })).unwrap(); }
-      catch (error) { setActionError(localizeError(error, "report")); }
+      catch (error) { if (isSessionCurrent(store.getState(), session)) setActionError({ sessionId, message: localizeError(error, "report") }); }
     }
   };
 
   const handleResolve = async () => {
-    setActionError("");
+    const session = captureSession(store.getState());
+    if (session.id !== sessionId || !isSessionCurrent(store.getState(), session)) return;
+    setActionError(null);
     if (isLoggedIn) {
       try { await dispatch(resolveReport({ reportId: report._id })).unwrap(); }
-      catch (error) { setActionError(localizeError(error, "report")); }
+      catch (error) { if (isSessionCurrent(store.getState(), session)) setActionError({ sessionId, message: localizeError(error, "report") }); }
     }
   };
 
@@ -206,7 +214,7 @@ export default function ReportMarker({ report }: { report: Report }) {
               )}
             </div>
           )}
-          {actionError && <p role="alert">{actionError}</p>}
+          {actionError?.sessionId === sessionId && <p role="alert">{actionError.message}</p>}
         </div>
       </Popup>
     </Marker>

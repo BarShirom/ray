@@ -1,156 +1,101 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
-import { isAxiosError } from "axios";
-import { localizeError } from "../../i18n/errors";
 import { http } from "../../api/http";
+import { apiFailure, isApiFailure, toApiFailure, type ApiFailure } from "../../api/errors";
 import type { RootState } from "../../app/store";
-import { selectName, selectToken, selectUserId } from "../auth/authSelectors";
+import { selectName } from "../auth/authSelectors";
+import { captureSession, isSessionCurrent, type SessionSnapshot } from "../auth/session";
 import type { Report, ReportType } from "./reportsSlice";
 
-const authHeader = (token: string | null) =>
-  token ? { Authorization: `Bearer ${token}` } : undefined;
-
-// Preserve structured API errors until the localized frontend presentation boundary.
-async function reportRequest<T>(request: () => Promise<T>): Promise<T> {
-  try { return await request(); }
-  catch (error) {
-    const localized = new Error(localizeError(error, "report")) as Error & { code?: string };
-    if (isAxiosError(error) && error.response?.status === 401) localized.code = "HTTP_401";
-    throw localized;
+type Config = { state: RootState; rejectValue: ApiFailure;
+  pendingMeta: { sessionId: string; userId: string | null; token: string | null };
+  fulfilledMeta: { sessionId: string } };
+const reportThunk = createAsyncThunk.withTypes<Config>();
+const headers = (session: SessionSnapshot) => session.token ? { Authorization: `Bearer ${session.token}` } : undefined;
+const pending = (_arg: unknown, { getState }: { getState: () => RootState }) => {
+  const session = captureSession(getState());
+  return { sessionId: session.id, userId: session.actorId, token: session.token };
+};
+type Context = { getState: () => RootState; requestId: string; signal: AbortSignal };
+async function reportRequest<T>(api: Context, request: (session: SessionSnapshot) => Promise<T>, required = false) {
+  const session = captureSession(api.getState()), identity = { sessionId: session.id, requestId: api.requestId };
+  try {
+    if (!isSessionCurrent(api.getState(), session)) throw apiFailure("stale", identity, "report");
+    if (required && (!session.actorId || !session.token || api.getState().auth.loading)) throw apiFailure("authentication", identity, "report");
+    const data = await request(session);
+    if (!isSessionCurrent(api.getState(), session)) throw apiFailure("stale", identity, "report");
+    return { data, sessionId: session.id };
+  } catch (error) {
+    if (!isSessionCurrent(api.getState(), session)) throw apiFailure("stale", identity, "report");
+    throw isApiFailure(error) ? error : toApiFailure(error, { ...identity, context: "report" });
   }
 }
 
-type ReportMutationConfig = { state: RootState; pendingMeta: { userId: string | null; token: string | null } };
-const mutationOptions = {
-  getPendingMeta: (_arg: unknown, { getState }: { getState: () => RootState }) => ({ userId: selectUserId(getState()), token: selectToken(getState()) }),
-};
-
-export const fetchReports = createAsyncThunk<Report[]>(
-  "reports/fetchAll",
-  async () => {
-    const { data } = await reportRequest(() => http.get<Report[]>("/api/reports"));
-    return data;
-  }
-);
-
-type CreateReportPayload = {
-  description: string;
-  type: ReportType;
-  location: { lat: number; lng: number };
-  media?: string[];
-  mediaAssetIds?: string[];
-};
-
-export const createReport = createAsyncThunk<
-  Report,
-  CreateReportPayload,
-  { state: RootState }
->("reports/create", async (payload, { getState }) => {
-  const token = selectToken(getState());
-  const { data } = await reportRequest(() => http.post<Report>("/api/reports", payload, {
-    headers: authHeader(token),
-  }));
-  return data;
-});
-
-export const claimReport = createAsyncThunk<
-  Report,
-  { reportId: string },
-  ReportMutationConfig
->("reports/claim", async ({ reportId }, { getState }) => {
-  const state = getState();
-  const token = selectToken(state);
-  const meId = selectUserId(state);
-  const meName = selectName(state);
-
-  const { data } = await reportRequest(() => http.patch<Report>(
-    `/api/reports/${reportId}/claim`,
-    {},
-    { headers: authHeader(token) }
-  ));
-
-  const rawAssigned: unknown = (data as { assignedTo?: unknown }).assignedTo;
-
-  let assignedTo: Report["assignedTo"] | undefined;
-
-  if (rawAssigned && typeof rawAssigned === "object") {
-    assignedTo = rawAssigned as Report["assignedTo"];
-  } else if (typeof rawAssigned === "string") {
-    assignedTo = { _id: rawAssigned, name: data.assignedToName ?? meName };
-  } else if (meId) {
-    assignedTo = { _id: meId, name: meName };
-  }
-
-  return {
-    ...data,
-    assignedTo,
-    assignedToName: data.assignedToName ?? meName ?? undefined,
-  };
-}, mutationOptions);
-
-export const resolveReport = createAsyncThunk<
-  Report,
-  { reportId: string },
-  ReportMutationConfig
->("reports/resolve", async ({ reportId }, { getState }) => {
-  const token = selectToken(getState());
-  const { data } = await reportRequest(() => http.patch<Report>(
-    `/api/reports/${reportId}/resolve`,
-    {},
-    {
-      headers: authHeader(token),
-    }
-  ));
-  return data;
-}, mutationOptions);
-
-export const fetchUserStats = createAsyncThunk<
-  { total: number; resolved: number; inProgress: number },
-  void,
-  { state: RootState }
->("reports/fetchUserStats", async (_void, { getState }) => {
-  const token = selectToken(getState());
-  const { data } = await reportRequest(() => http.get("/api/reports/stats/me", {
-    headers: authHeader(token),
-  }));
-  return data as { total: number; resolved: number; inProgress: number };
-});
-
-export const fetchMyReports = createAsyncThunk<
-  Report[],
-  void,
-  { state: RootState; rejectValue: { message: string; status?: number }; pendingMeta: { userId: string | null; token: string | null } }
->("reports/fetchMyReports", async (_void, { getState, rejectWithValue }) => {
-  const token = selectToken(getState());
+export const fetchReports = reportThunk<Report[]>("reports/fetchAll", async (_, api) => {
   try {
-    const { data } = await http.get<Report[]>("/api/reports/me", { headers: authHeader(token) });
-    return data;
-  } catch (error) {
-    const status = isAxiosError(error) ? error.response?.status : undefined;
-    return rejectWithValue({ message: localizeError(error, "report"), ...(status === undefined ? {} : { status }) });
-  }
-}, {
-  condition: (_void, { getState }) => {
-    const state = getState();
-    const userId = selectUserId(state);
-    const token = selectToken(state);
-    return !!userId && !!token && !state.auth.loading && !(state.reports.assigned.status === "loading" && state.reports.assigned.userId === userId && state.reports.assigned.token === token);
-  },
-  getPendingMeta: (_arg, { getState }) => ({ userId: selectUserId(getState()), token: selectToken(getState()) }),
-});
+    const result = await reportRequest(api, async () => (await http.get<Report[]>("/api/reports", { signal: api.signal })).data);
+    return api.fulfillWithValue(result.data, { sessionId: result.sessionId });
+  } catch (error) { return api.rejectWithValue(error as ApiFailure); }
+}, { getPendingMeta: pending, condition: (_, { getState }) => !getState().reports.publicRequestId });
 
-export const fetchGlobalStats = createAsyncThunk<
-  { total: number; resolved: number; inProgress: number; new: number },
-  void,
-  { state: RootState }
->("reports/fetchGlobalStats", async (_void, { getState }) => {
-  const token = selectToken(getState());
-  const { data } = await reportRequest(() => http.get("/api/reports/stats", {
-    headers: authHeader(token),
-  }));
-  return data as {
-    total: number;
-    resolved: number;
-    inProgress: number;
-    new: number;
-  };
-});
+type CreateReportPayload = { description: string; type: ReportType; location: { lat: number; lng: number };
+  media?: string[]; mediaAssetIds?: string[] };
+export const createReport = reportThunk<Report, CreateReportPayload>("reports/create", async (payload, api) => {
+  try {
+    const result = await reportRequest(api, async session => (await http.post<Report>("/api/reports", payload,
+      { headers: headers(session), signal: api.signal })).data);
+    return api.fulfillWithValue(result.data, { sessionId: result.sessionId });
+  } catch (error) { return api.rejectWithValue(error as ApiFailure); }
+}, { getPendingMeta: pending });
+
+export const claimReport = reportThunk<Report, { reportId: string }>("reports/claim", async ({ reportId }, api) => {
+  try {
+    const meName = selectName(api.getState());
+    const result = await reportRequest(api, async session => {
+      const { data } = await http.patch<Report>(`/api/reports/${encodeURIComponent(reportId)}/claim`, {},
+        { headers: headers(session), signal: api.signal });
+      const raw = data.assignedTo;
+      const assignedTo = raw && typeof raw === "object" ? raw
+        : typeof raw === "string" ? { _id: raw, name: data.assignedToName ?? meName }
+        : session.actorId ? { _id: session.actorId, name: meName } : undefined;
+      return { ...data, assignedTo, assignedToName: data.assignedToName ?? meName };
+    }, true);
+    return api.fulfillWithValue(result.data, { sessionId: result.sessionId });
+  } catch (error) { return api.rejectWithValue(error as ApiFailure); }
+}, { getPendingMeta: pending });
+
+export const resolveReport = reportThunk<Report, { reportId: string }>("reports/resolve", async ({ reportId }, api) => {
+  try {
+    const result = await reportRequest(api, async session => (await http.patch<Report>(
+      `/api/reports/${encodeURIComponent(reportId)}/resolve`, {}, { headers: headers(session), signal: api.signal })).data, true);
+    return api.fulfillWithValue(result.data, { sessionId: result.sessionId });
+  } catch (error) { return api.rejectWithValue(error as ApiFailure); }
+}, { getPendingMeta: pending });
+
+export const fetchMyReports = reportThunk<Report[]>("reports/fetchMyReports", async (_, api) => {
+  try {
+    const result = await reportRequest(api, async session => (await http.get<Report[]>("/api/reports/me",
+      { headers: headers(session), signal: api.signal })).data, true);
+    return api.fulfillWithValue(result.data, { sessionId: result.sessionId });
+  } catch (error) { return api.rejectWithValue(error as ApiFailure); }
+}, { getPendingMeta: pending, condition: (_, { getState }) => {
+  const state = getState(), session = captureSession(state);
+  return !!session.actorId && !!session.token && !state.auth.loading && isSessionCurrent(state, session)
+    && !(state.reports.assigned.status === "loading" && state.reports.assigned.userId === session.actorId
+      && state.reports.assigned.token === session.token);
+} });
+
+type Stats = { total: number; resolved: number; inProgress: number };
+export const fetchUserStats = reportThunk<Stats>("reports/fetchUserStats", async (_, api) => {
+  try {
+    const result = await reportRequest(api, async session => (await http.get<Stats>("/api/reports/stats/me",
+      { headers: headers(session), signal: api.signal })).data, true);
+    return api.fulfillWithValue(result.data, { sessionId: result.sessionId });
+  } catch (error) { return api.rejectWithValue(error as ApiFailure); }
+}, { getPendingMeta: pending });
+export const fetchGlobalStats = reportThunk<Stats & { new: number }>("reports/fetchGlobalStats", async (_, api) => {
+  try {
+    const result = await reportRequest(api, async session => (await http.get<Stats & { new: number }>("/api/reports/stats",
+      { headers: headers(session), signal: api.signal })).data);
+    return api.fulfillWithValue(result.data, { sessionId: result.sessionId });
+  } catch (error) { return api.rejectWithValue(error as ApiFailure); }
+}, { getPendingMeta: pending });

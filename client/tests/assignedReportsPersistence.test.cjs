@@ -34,9 +34,9 @@ test("hard-refresh credentials restore through the production persisted store be
   // Actual redux-persist storage format. A previously interrupted login may
   // have persisted loading=true, but no report collection belongs in storage.
   const saved = new Map([["persist:root", JSON.stringify({
-    auth: JSON.stringify({ user, loading: true, error: null }),
+    auth: JSON.stringify({ user, sessionId: "synthetic-restored-session", loading: true, error: null }),
     _persist: JSON.stringify({ version: -1, rehydrated: true }),
-  })]]);
+  })], ["ray:auth-authority", "synthetic-restored-session"]]);
   global.self = { localStorage: {
     getItem: (key) => saved.get(key) ?? null,
     setItem: (key, value) => saved.set(key, value),
@@ -100,8 +100,11 @@ test("hard-refresh credentials restore through the production persisted store be
   t.after(() => { http.defaults.adapter = previousAdapter; });
   let requests = 0;
   let respond;
+  let markStarted;
+  const started = new Promise((resolve) => { markStarted = resolve; });
   http.defaults.adapter = (config) => {
     requests++;
+    markStarted();
     assert.equal(config.url, "/api/reports/me", "assigned loading does not visit or fetch the map");
     assert.equal(config.method, "get");
     assert.equal(config.headers.get("Authorization"), `Bearer ${user.token}`);
@@ -111,6 +114,7 @@ test("hard-refresh credentials restore through the production persisted store be
   };
 
   const pending = store.dispatch(fetchMyReports());
+  await started;
   assert.equal(selectAssignedReportsState(store.getState()).status, "loading");
   assert.deepEqual(selectAssignedReports(store.getState()), []);
   assert.equal(requests, 1);
@@ -127,6 +131,8 @@ test("hard-refresh credentials restore through the production persisted store be
   const persisted = JSON.parse(encoded);
   assert.deepEqual(Object.keys(persisted).sort(), ["_persist", "auth"]);
   assert.deepEqual(JSON.parse(persisted.auth).user, user);
-  assert.equal(JSON.parse(persisted.auth).loading, false);
+  assert.deepEqual(Object.keys(JSON.parse(persisted.auth)).sort(), ["sessionId", "user"]);
+  assert.equal(typeof JSON.parse(persisted.auth).sessionId, "string");
+  assert.equal(JSON.parse(persisted.auth).loading, undefined, "transient busy/error/attempt state is not persisted");
   assert.equal(encoded.includes(report.description), false, "report data is never persisted to browser storage");
 });

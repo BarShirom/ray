@@ -1,13 +1,19 @@
 ﻿import { useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useEffect } from "react";
+import { useStore } from "react-redux";
+import type { RootState } from "../../app/store";
+import { ownsBrowserAuthority } from "../../features/auth/session";
 import "./Login.css";
-import { useAppDispatch } from "../../app/hooks";
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import { selectAuthError } from "../../features/auth/authSelectors";
 import { loginUser } from "../../features/auth/authThunks";
 import { t } from "../../i18n";
 import { localizeError } from "../../i18n/errors";
 
 export default function Login() {
   const dispatch = useAppDispatch();
+  const store = useStore<RootState>();
   const navigate = useNavigate();
   const emailInput = useRef<HTMLInputElement>(null);
   const passwordInput = useRef<HTMLInputElement>(null);
@@ -16,11 +22,16 @@ export default function Login() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const authError = useAppSelector(selectAuthError);
+  const visibleError = err ?? authError;
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const mounted = useRef(true);
+  const submitting = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (!mounted.current || submitting.current || loading) return;
     setErr(null);
     const errors = {
       email: !email ? t("auth.emailRequired") : emailInput.current?.validity.typeMismatch ? t("auth.emailInvalid") : undefined,
@@ -31,14 +42,25 @@ export default function Login() {
       (errors.email ? emailInput : passwordInput).current?.focus();
       return;
     }
+    submitting.current = true;
     setLoading(true);
+    let submittedSessionId: string | null = null;
     try {
-      await dispatch(loginUser({ email, password })).unwrap();
-      navigate("/map-page");
+      const request = dispatch(loginUser({ email, password }));
+      const attemptSessionId = store.getState().auth.sessionId;
+      submittedSessionId = attemptSessionId;
+      const result = await request;
+      const auth = store.getState().auth;
+      if (!mounted.current || !ownsBrowserAuthority(auth.sessionId)) return;
+      if (loginUser.fulfilled.match(result) && auth.completedAttemptId === request.requestId) navigate("/map-page");
+      else if (loginUser.rejected.match(result) && auth.sessionId === attemptSessionId && !result.meta.aborted) {
+        setErr(localizeError(result.payload, "login"));
+      }
     } catch (error: unknown) {
-      setErr(localizeError(error, "login"));
+      if (mounted.current && submittedSessionId === store.getState().auth.sessionId
+        && ownsBrowserAuthority(submittedSessionId)) setErr(localizeError(error, "login"));
     } finally {
-      setLoading(false);
+      if (mounted.current) { submitting.current = false; setLoading(false); }
     }
   };
 
@@ -46,7 +68,7 @@ export default function Login() {
     <div className="auth-page">
       <section className="panel auth-panel" aria-labelledby="login-title">
         <h1 id="login-title" className="auth-title">{t("auth.login")}</h1>
-        {err && <div className="alert" role="alert">{err}</div>}
+        {visibleError && <div className="alert" role="alert">{visibleError}</div>}
         <form className="auth-form" onSubmit={onSubmit} noValidate>
           <div className="field">
             <label htmlFor="email" className="label">{t("auth.email")}</label>

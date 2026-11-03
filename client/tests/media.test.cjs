@@ -7,7 +7,7 @@ require.extensions['.ts'] = (module, filename) => {
   const source=fs.readFileSync(filename,'utf8').replace('import.meta.env.VITE_API_URL',JSON.stringify('http://127.0.0.1:4001')).replace('import.meta.env.MODE',JSON.stringify('postgres'));
   module._compile(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText,filename);
 };
-const { uploadImages, validateImages, mediaEnabled, stationAssetId, loadStationImage }=require('../src/api/media.ts');
+const { uploadImages, validateImages, mediaEnabled, stationAssetId, loadStationImage, beginStationImageLoad }=require('../src/api/media.ts');
 const { t: translate }=require('../src/i18n/index.ts');
 const { localizeError }=require('../src/i18n/errors.ts');
 const file=()=>new File(['SYNTHETIC image bytes; validation occurs on server'],'synthetic.png',{type:'image/png'});
@@ -171,4 +171,36 @@ test('expired permission produces no PUT and permits an explicit fresh retry',as
   let attempts=0;const selected=file(),cache=new WeakMap();
   t.mock.method(global,'fetch',async(url)=>{if(url.endsWith('/uploads')){attempts++;return json({...permission('id'),uploadExpiresAt:attempts===1?'2000-01-01T00:00:00Z':new Date(Date.now()+300000).toISOString()},201);}if(url.startsWith('https://'))return new Response(null,{status:200});return json({state:'ready'});});
   await assert.rejects(uploadImages([selected],'station','token',cache,()=>{}),/expired/);assert.deepEqual(await uploadImages([selected],'station','token',cache,()=>{}),['id']);assert.equal(attempts,2);
+});
+
+const controlled=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
+test('effect-owned station image lifecycle ignores an old session and revokes every published object URL',async t=>{
+  const issuer=controlled();let current=true,creates=0,revoked=[],loaded=[],failures=[],calls=0;
+  t.mock.method(URL,'createObjectURL',()=>{creates++;return 'blob:synthetic-'+creates;});
+  t.mock.method(URL,'revokeObjectURL',url=>revoked.push(url));
+  t.mock.method(global,'fetch',async()=>++calls===1?issuer.promise:new Response('webp',{headers:{'Content-Type':'image/webp'}}));
+  const old=beginStationImageLoad(stationSource,'a-token',()=>current,url=>loaded.push(url),error=>failures.push(error));
+  current=false;old.dispose();issuer.resolve(json({url:'https://synthetic-s3.invalid/a',expiresIn:60}));await old.completed;
+  assert.equal(calls,1);assert.equal(creates,0);assert.deepEqual(loaded,[]);assert.deepEqual(failures,[]);
+  current=true;t.mock.method(global,'fetch',async(url)=>String(url).includes('/read-url')?json({url:'https://synthetic-s3.invalid/b',expiresIn:60}):new Response('webp',{headers:{'Content-Type':'image/webp'}}));
+  const fresh=beginStationImageLoad(stationSource,'b-token',()=>current,url=>loaded.push(url),error=>failures.push(error));
+  await fresh.completed;assert.deepEqual(loaded,['blob:synthetic-1']);fresh.dispose();fresh.dispose();assert.deepEqual(revoked,['blob:synthetic-1']);
+});
+test('station byte completion after account change creates no URL and explicit failed-read retry starts fresh',async t=>{
+  const bytes=controlled(),entered=controlled();let current=true,calls=0,creates=0,errors=[];
+  t.mock.method(URL,'createObjectURL',()=>{creates++;return 'blob:synthetic';});
+  t.mock.method(global,'fetch',async()=>{if(++calls===1)return json({url:'https://synthetic-s3.invalid/a',expiresIn:60});entered.resolve();return bytes.promise;});
+  const old=beginStationImageLoad(stationSource,'same-token',()=>current,()=>assert.fail('stale render'),error=>errors.push(error));
+  await entered.promise;current=false;old.dispose();bytes.resolve(new Response('webp',{headers:{'Content-Type':'image/webp'}}));await old.completed;
+  assert.equal(creates,0);assert.deepEqual(errors,[]);
+  current=true;t.mock.method(global,'fetch',async()=>{calls++;return json({},429,{'Retry-After':'5'});});
+  const failed=beginStationImageLoad(stationSource,'same-token',()=>current,()=>assert.fail('failed render'),error=>errors.push(error));
+  await failed.completed;assert.equal(errors.length,1);assert.equal(errors[0].response.status,429);assert.equal(errors[0].response.headers['retry-after'],'5');const afterFailure=calls;await Promise.resolve();assert.equal(calls,afterFailure,'no automatic capability retry');failed.dispose();
+  const retry=beginStationImageLoad(stationSource,'same-token',()=>current,()=>assert.fail('failed retry render'),error=>errors.push(error));await retry.completed;assert.equal(calls,afterFailure+1);retry.dispose();
+});
+test('station upload stops before the next protected stage when its session changes',async t=>{
+  const intent=controlled();let current=true,calls=0,entered;const entering=new Promise(resolve=>{entered=resolve;});
+  t.mock.method(global,'fetch',async()=>{calls++;entered();return intent.promise;});
+  const pending=uploadImages([file()],'station','a-token',new WeakMap(),()=>{},()=>current);
+  await entering;current=false;intent.resolve(json(permission('a-intent'),201));await assert.rejects(pending);assert.equal(calls,1,'old actor may not PUT, complete or attach after the intent response');
 });

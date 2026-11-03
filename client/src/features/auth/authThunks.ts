@@ -3,7 +3,8 @@ import { createAsyncThunk } from "@reduxjs/toolkit";
 import type { AxiosResponse } from "axios";
 import { localizeError } from "../../i18n/errors";
 import { http } from "../../api/http";
-import { setAuth, logout } from "./authSlice";
+import type { AuthState } from "./authSlice";
+import { ownsBrowserAuthority } from "./session";
 
 /* ===========
  * API Types
@@ -59,6 +60,15 @@ function toSliceUser(apiUser: BackendUser, token: string): SliceUser {
   };
 }
 
+function currentAttempt(getState: () => unknown, requestId: string): boolean {
+  const { auth } = getState() as { auth: AuthState };
+  return auth.attemptId === requestId && ownsBrowserAuthority(auth.sessionId);
+}
+
+function obsoleteAttempt(): never {
+  throw Object.assign(new Error("Obsolete authentication attempt"), { name: "AbortError" });
+}
+
 /* ======
  * Thunks
  * ====== */
@@ -67,21 +77,24 @@ export const registerUser = createAsyncThunk<
   { user: SliceUser },
   RegisterDTO,
   { rejectValue: string }
->("auth/registerUser", async (dto, { dispatch, rejectWithValue }) => {
+>("auth/registerUser", async (dto, { getState, requestId, signal, rejectWithValue }) => {
   try {
+    if (!currentAttempt(getState, requestId)) return obsoleteAttempt();
     const resp = await http.post<
       AuthResponseFromAPI,
       AxiosResponse<AuthResponseFromAPI, RegisterDTO>,
       RegisterDTO
-    >("/api/auth/register", dto);
+    >("/api/auth/register", dto, { signal });
+
+    if (!currentAttempt(getState, requestId)) return obsoleteAttempt();
 
     const token = resp.data.token;
     if (!token) throw new Error("Missing token in register response");
 
     const mapped = toSliceUser(resp.data.user, token);
-    dispatch(setAuth(mapped));
     return { user: mapped };
   } catch (err) {
+    if (!currentAttempt(getState, requestId)) return obsoleteAttempt();
     return rejectWithValue(localizeError(err, "register"));
   }
 });
@@ -90,35 +103,42 @@ export const loginUser = createAsyncThunk<
   { user: SliceUser },
   LoginDTO,
   { rejectValue: string }
->("auth/loginUser", async (dto, { dispatch, rejectWithValue }) => {
+>("auth/loginUser", async (dto, { getState, requestId, signal, rejectWithValue }) => {
   try {
+    if (!currentAttempt(getState, requestId)) return obsoleteAttempt();
     const resp = await http.post<
       AuthResponseFromAPI,
       AxiosResponse<AuthResponseFromAPI, LoginDTO>,
       LoginDTO
-    >("/api/auth/login", dto);
+    >("/api/auth/login", dto, { signal });
+
+    if (!currentAttempt(getState, requestId)) return obsoleteAttempt();
 
     const token = resp.data.token;
     if (!token) throw new Error("Missing token in login response");
 
     const mapped = toSliceUser(resp.data.user, token);
-    dispatch(setAuth(mapped));
     return { user: mapped };
   } catch (err) {
+    if (!currentAttempt(getState, requestId)) return obsoleteAttempt();
     return rejectWithValue(localizeError(err, "login"));
   }
 });
 
-export const logoutUser = createAsyncThunk(
+export const logoutUser = createAsyncThunk<
+  { persisted: true },
+  { retrySessionId: string } | undefined,
+  { state: { auth: AuthState }; rejectValue: { kind: "storage-unavailable" | "superseded"; sessionId: string } }
+>(
   "auth/logoutUser",
-  async (_, { dispatch }) => {
-    try {
-      localStorage.removeItem("persist:root");
-    } catch (e) {
-      // non-fatal; avoid empty block for ESLint
-      void e;
-    } finally {
-      dispatch(logout());
+  (_, { getState, requestId, rejectWithValue }) => {
+    const auth = getState().auth;
+    if (auth.logoutFailure?.requestId === requestId) {
+      return rejectWithValue({ kind: "storage-unavailable", sessionId: auth.sessionId });
     }
-  }
+    if (auth.completedLogoutId !== requestId) return rejectWithValue({ kind: "superseded", sessionId: auth.sessionId });
+    return { persisted: true };
+  },
+  { condition: (arg, { getState }) => !arg?.retrySessionId || (getState().auth.logoutFailure?.sessionId === arg.retrySessionId
+    && getState().auth.sessionId === arg.retrySessionId && !getState().auth.user && !getState().auth.attemptId) }
 );

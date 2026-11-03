@@ -1,9 +1,14 @@
-import { isPostgresPreview } from "../../preview";
 import { useEffect, useRef, useState } from "react";
+import { useStore } from "react-redux";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { uploadImages, validateImages, type ImageUploads } from "../../api/media";
 import { FilePreview, useMediaCapability } from "../media/Media";
 import { selectIsLoggedIn, selectToken } from "../../features/auth/authSelectors";
+import type { RootState } from "../../app/store";
+import { captureSession, isSessionCurrent } from "../../features/auth/session";
+import { invalidateSession } from "../../features/auth/authSlice";
+import { toApiFailure, type ApiFailure } from "../../api/errors";
+import { useApiRetryGate } from "../../api/useApiRetryGate";
 import { createFeedingStation } from "../../features/feedingStations/feedingStationsThunks";
 import { selectStationCreating, selectStationCreateError } from "../../features/feedingStations/feedingStationsSelectors";
 import { validateStationCreation } from "../../features/feedingStations/validateStationCreation";
@@ -19,6 +24,8 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
   onChangeLocation: () => void;
   onCreated: (station: FeedingStation) => void;
 }) {
+  const store = useStore<RootState>();
+  const instanceSession = useRef(captureSession(store.getState()));
   const dispatch = useAppDispatch();
   const authenticated = useAppSelector(selectIsLoggedIn);
   const token = useAppSelector(selectToken);
@@ -29,14 +36,20 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
   const createError = useAppSelector(selectStationCreateError);
   const dialog = useRef<HTMLDialogElement>(null);
   const locked = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const [name, setName] = useState("");
   const [cats, setCats] = useState("0");
   const [kittens, setKittens] = useState("0");
   const [notes, setNotes] = useState("");
   const [image, setImage] = useState<File | null>(null);
-  const [uploadedImage, setUploadedImage] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadFailure, setUploadFailure] = useState<ApiFailure | null>(null);
+  const retryBlocked = useApiRetryGate(uploadFailure ?? createError);
   const pending = busy || creating;
 
   useEffect(() => {
@@ -46,7 +59,10 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!authenticated || locked.current || creating) return;
+    if (!authenticated || locked.current || creating || retryBlocked) return;
+    const session = instanceSession.current;
+    const current = () => mounted.current && isSessionCurrent(store.getState(), session);
+    if (!current()) return;
     if (!location) { setError(t("stations.selectLocation")); return; }
     const data = {
       name, location,
@@ -59,25 +75,26 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
     locked.current = true;
     setBusy(true);
     setError(null);
+    setUploadFailure(null);
     try {
-      let imageUrl = uploadedImage;
       let imageAssetId: string | undefined;
-      if (image && isPostgresPreview) {
+      if (image) {
         if (!mediaEnabled) throw new Error("Image uploads are disabled in local preview.");
-        [imageAssetId] = await uploadImages([image], "station", token, imageUploads.current, setProgress);
-      } else if (image && !imageUrl) {
-        const { uploadMedia } = await import("../../api/upload");
-        [imageUrl] = await uploadMedia([image]);
-        if (!imageUrl) throw new Error("Image upload did not return a URL. Please try again.");
-        setUploadedImage(imageUrl);
+        [imageAssetId] = await uploadImages([image], "station", token, imageUploads.current, message => { if (current()) setProgress(message); }, current);
       }
-      const result = await dispatch(createFeedingStation({ ...data, ...(isPostgresPreview ? { imageAssetId } : { image: imageUrl }) }));
-      if (createFeedingStation.fulfilled.match(result)) onCreated(result.payload);
+      if (!current()) return;
+      const result = await dispatch(createFeedingStation({ ...data, imageAssetId }));
+      if (current() && createFeedingStation.fulfilled.match(result)) onCreated(result.payload);
     } catch (err) {
-      setError(localizeError(err, "upload"));
+      if (current()) {
+        const failure = toApiFailure(err, { context: "upload", sessionId: session.id, requestId: "station-upload" });
+        if (failure.status === 401) dispatch(invalidateSession({ sessionId: session.id }));
+        setUploadFailure(failure);
+        setError(localizeError(failure, "upload"));
+      }
     } finally {
       locked.current = false;
-      setBusy(false);
+      if (current()) setBusy(false);
     }
   };
 
@@ -88,7 +105,7 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
         <button className="btn" type="button" disabled={pending} onClick={onCancel}>{t("stations.cancel")}</button>
       </header>
       <form onSubmit={submit} noValidate>
-        <fieldset disabled={pending || !authenticated}>
+        <fieldset disabled={pending || !authenticated || retryBlocked}>
           <legend className="create-station-legend">{t("stations.information")}</legend>
           <p className="create-station-location">{location
             ? <>{t("stations.selectedLocation")} <bdi dir="ltr">{location.lat.toFixed(5)}, {location.lng.toFixed(5)}</bdi></>
@@ -104,19 +121,13 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
           </div>
           <label htmlFor="station-notes">{t("stations.notes")}</label>
           <textarea id="station-notes" dir="auto" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
-          <label htmlFor="station-image">{t(isPostgresPreview ? "stations.imagePreview" : "stations.imageLegacy")}</label>
-          {isPostgresPreview && !mediaEnabled && <p>{t("stations.uploadsUnavailable")}</p>}
-          <input disabled={isPostgresPreview && !mediaEnabled} id="station-image" type="file" accept={isPostgresPreview ? "image/jpeg,image/png,image/webp" : "image/*"} onChange={(event) => {
+          <label htmlFor="station-image">{t("stations.imagePreview")}</label>
+          {!mediaEnabled && <p>{t("stations.uploadsUnavailable")}</p>}
+          <input disabled={!mediaEnabled} id="station-image" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
             const file = event.target.files?.[0] ?? null;
-            setUploadedImage(undefined);
             setImage(null);
-            if (file && isPostgresPreview) {
+            if (file) {
               try { validateImages([file], "station"); } catch (error) { setError(localizeError(error, "upload")); event.target.value = ""; return; }
-            }
-            if (!isPostgresPreview && file && (!file.type.startsWith("image/") || file.size > 25 * 1024 * 1024)) {
-              setError(localizeError("Choose an image no larger than 25 MB.", "upload"));
-              event.target.value = "";
-              return;
             }
             setError(null);
             setImage(file);
@@ -126,8 +137,8 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
             {t(pending ? "stations.saving" : "stations.create")}
           </button>
         </fieldset>
-        {pending && <p role="status">{progress || t(image && !uploadedImage ? "media.uploadingImage" : "stations.saving")}</p>}
-        {(error || createError) && <p role="alert">{error || createError}</p>}
+        {pending && <p role="status">{progress || t(image ? "media.uploadingImage" : "stations.saving")}</p>}
+        {(error || createError) && <p role="alert">{error || localizeError(createError, "station")}</p>}
       </form>
     </dialog>
   );

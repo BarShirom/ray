@@ -2,6 +2,7 @@ import { useMediaCapability } from "../media/Media";
 import { isPostgresPreview } from "../../preview";
 import { Outlet } from "react-router-dom";
 import Navbar from "../navbar/Navbar";
+import LogoutStorageWarning from "../navbar/LogoutStorageWarning";
 import { t } from "../../i18n";
 import "./Layout.css";
 
@@ -12,6 +13,7 @@ export default function Layout() {
       <header className="app__header">
         <div className="app__header-inner">
           <Navbar />
+          <LogoutStorageWarning />
           {isPostgresPreview && (
             <p role="status" className="app__preview-banner">
               {mediaEnabled ? t("shell.previewMediaEnabled") : t("shell.previewMediaDisabled")}

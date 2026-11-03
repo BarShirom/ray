@@ -76,7 +76,8 @@ test("claim failures retain useful Hebrew feedback and hide unknown backend deta
     });
   };
   const claimed = await store.dispatch(claimReport({ reportId: report._id }));
-  assert.equal(claimed.error.message, t("errors.alreadyClaimed"));
+  assert.equal(claimed.payload.message, t("errors.alreadyClaimed"));
+  assert.equal(claimed.payload.status, 409);
   const unsafe = "SQL synthetic-secret https://signed.fixture.invalid/?signature=private";
   http.defaults.adapter = async (config) => {
     throw new AxiosError(unsafe, "ERR_BAD_RESPONSE", config, null, {
@@ -84,8 +85,9 @@ test("claim failures retain useful Hebrew feedback and hide unknown backend deta
     });
   };
   const failed = await store.dispatch(resolveReport({ reportId: report._id }));
-  assert.equal(failed.error.message, t("errors.server"));
-  assert.ok(!failed.error.message.includes(unsafe));
+  assert.equal(failed.payload.message, t("errors.server"));
+  assert.equal(failed.payload.status, 500);
+  assert.ok(!JSON.stringify(failed.payload).includes(unsafe));
 });
 
 test("report display-name fallbacks are localized without rewriting supplied names", () => {

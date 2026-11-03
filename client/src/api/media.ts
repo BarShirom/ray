@@ -39,7 +39,13 @@ export async function loadStationImage(source: string, token: string, signal: Ab
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: "{}", cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", redirect: "error", signal: requestSignal,
   });
-  if (!response.ok || !current()) throw new Error("Image unavailable");
+  if (!current()) throw new Error("Image unavailable");
+  if (!response.ok) {
+    const retryAfter = retryAfterSeconds(response.headers);
+    // Only the application issuer can report an auth failure. A private byte
+    // response must never expire the Ray session or disclose its capability.
+    throw { response: { status: response.status, data: {}, ...(retryAfter === undefined ? {} : { headers: { "retry-after": String(retryAfter) } }) } };
+  }
   const permission: unknown = await response.json();
   if (!current() || !permission || typeof permission !== "object" || !("url" in permission) || typeof permission.url !== "string" || permission.url.length > 8192 || !("expiresIn" in permission) || permission.expiresIn !== 60) throw new Error("Image unavailable");
   const capability = new URL(permission.url);
@@ -67,6 +73,28 @@ export async function loadStationImage(source: string, token: string, signal: Ab
   if (!size || !current()) throw new Error("Image unavailable");
   return new Blob(chunks, { type: "image/webp" });
 }
+/** Effect-owned lifecycle, also exercised with controlled promises in tests. */
+export function beginStationImageLoad(source: string, token: string, isCurrent: () => boolean,
+  onLoaded: (url: string) => void, onFailure: (error: unknown) => void) {
+  const controller = new AbortController();
+  let disposed = false;
+  let objectUrl: string | undefined;
+  const current = () => !disposed && isCurrent();
+  const completed = loadStationImage(source, token, controller.signal, current).then(blob => {
+    if (!current()) return;
+    objectUrl = URL.createObjectURL(blob);
+    if (current()) onLoaded(objectUrl);
+    else { URL.revokeObjectURL(objectUrl); objectUrl = undefined; }
+  }).catch(error => { if (current()) onFailure(error); });
+  return {
+    completed,
+    dispose() {
+      disposed = true;
+      controller.abort();
+      if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = undefined; }
+    },
+  };
+}
 async function api(path: string, token: string, body: unknown) {
   let response: Response;
   try {
@@ -85,19 +113,22 @@ async function api(path: string, token: string, body: unknown) {
 }
 // Retry completion with the same intent after an uncertain PUT; never overwrite it.
 // WeakMap entries and permissions exist only in this mounted form's memory.
-export async function uploadImages(files: File[], purpose: "station" | "report", token: string | null, cache: ImageUploads, progress: (message: string) => void): Promise<string[]> {
+export async function uploadImages(files: File[], purpose: "station" | "report", token: string | null, cache: ImageUploads, progress: (message: string) => void, isCurrent: () => boolean = () => true): Promise<string[]> {
   if (!isPostgresPreview) throw new Error("S3 images require PostgreSQL preview.");
   if (!token) throw new Error("Sign in to add images. You can submit a report without images.");
   validateImages(files, purpose);
   const ids: string[] = [];
   for (const [index, file] of files.entries()) {
+    if (!isCurrent()) throw new Error("Image unavailable");
     let item = cache.get(file);
     if (item?.token !== token) item = undefined;
     if (!item) {
       progress(t("media.preparing", { current: formatNumber(index + 1), total: formatNumber(files.length) }));
       const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
+      if (!isCurrent()) throw new Error("Image unavailable");
       const checksum = btoa(Array.from(hash, b => String.fromCharCode(b)).join(""));
       const permission = await api("uploads", token, { purpose, contentType: file.type, byteLength: file.size, checksum }) as Permission;
+      if (!isCurrent()) throw new Error("Image unavailable");
       item = { permission, uploaded: false, ready: false, token }; cache.set(file, item);
     }
     if (!item.uploaded && !item.ready) {
@@ -108,6 +139,7 @@ export async function uploadImages(files: File[], purpose: "station" | "report",
         // No Ray token, cookies, multipart encoding or manually set Content-Length.
         response = await fetch(item.permission.url, { method: "PUT", headers: item.permission.headers, body: file, credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(60_000) });
       } catch { throw new Error("Image transfer failed. Your form is preserved; retry the upload."); }
+      if (!isCurrent()) throw new Error("Image unavailable");
       // A prior PUT may have succeeded before its response was lost. Completion
       // verifies the stored bytes; 412 alone is never considered ready.
       if (!response.ok && response.status !== 412) throw new Error("Image transfer was rejected. Check the S3 setup or select the image again.");
@@ -116,6 +148,7 @@ export async function uploadImages(files: File[], purpose: "station" | "report",
     if (!item.ready) {
       progress(t("media.verifying", { current: formatNumber(index + 1), total: formatNumber(files.length) }));
       const completed = await api(`${item.permission.assetId}/complete`, token, {});
+      if (!isCurrent()) throw new Error("Image unavailable");
       if (completed.state !== "ready") throw new Error("Image verification did not finish. Please retry.");
       item.ready = true;
     }

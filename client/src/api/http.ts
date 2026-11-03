@@ -14,4 +14,17 @@ export const http = axios.create({
   withCredentials: false, 
 });
 
+// All bearer-bearing requests belong to the configured Ray origin. Never allow
+// an absolute/protocol-relative URL supplied by data to inherit Ray credentials.
+http.interceptors.request.use((config) => {
+  if (config.headers.get("Authorization")) {
+    const ray = new URL(BASE);
+    const target = new URL(config.url ?? "", `${config.baseURL ?? BASE}/`);
+    if (target.origin !== ray.origin || target.username || target.password) {
+      throw new Error("Refusing credentials outside the configured Ray API");
+    }
+  }
+  return config;
+}, (error) => { throw error; }, { synchronous: true });
+
 export default http;

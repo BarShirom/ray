@@ -32,6 +32,9 @@
 .station-map-toolbar bdi{ overflow-wrap:anywhere; }
 .leaflet-root{ height: var(--map-h); width:100%; border-radius:12px; }
 .leaflet-container{ height:100%; width:100%; border-radius:12px; }
+.station-location-keyboard { position: absolute; inset-block-end: 24px; inset-inline: 10px; z-index: 900; padding: 8px; border-radius: 8px; background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+.station-location-keyboard p { margin: 0 0 6px; }
+.station-location-keyboard .btn { min-height: 44px; white-space: normal; }
 
 /* Filters (single row chips) */
 .side-left .section-title{ font-weight:600; margin-bottom:10px; }

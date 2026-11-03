@@ -1,13 +1,18 @@
 ﻿import { useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { useStore } from "react-redux";
+import type { RootState } from "../../app/store";
+import { captureSession, isSessionCurrent } from "../../features/auth/session";
 import "./Navbar.css";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { logoutUser } from "../../features/auth/authThunks";
-import { selectToken } from "../../features/auth/authSelectors";
+import { selectToken, selectSessionId } from "../../features/auth/authSelectors";
 import { t } from "../../i18n";
 
 export default function Navbar() {
   const dispatch = useAppDispatch();
+  const store = useStore<RootState>();
+  const sessionId = useAppSelector(selectSessionId);
   const navigate = useNavigate();
   const token = useAppSelector(selectToken);
   const isLoggedIn = Boolean(token);
@@ -16,9 +21,13 @@ export default function Navbar() {
 
   const closeMenu = () => setMenuOpen(false);
   const handleLogout = async () => {
+    const previous = captureSession(store.getState());
+    if (previous.id !== sessionId) return;
     closeMenu();
-    await dispatch(logoutUser());
-    navigate("/");
+    const request = dispatch(logoutUser());
+    const guest = captureSession(store.getState());
+    const result = await request;
+    if (logoutUser.fulfilled.match(result) && isSessionCurrent(store.getState(), guest)) navigate("/");
   };
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>

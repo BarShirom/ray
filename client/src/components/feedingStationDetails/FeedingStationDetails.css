@@ -51,3 +51,7 @@
 .station-feeding-history li { border-top: 1px solid var(--border); padding: 12px 0; }
 .station-feeding-history li p { margin: 6px 0 0; }
 .station-feeding-period { margin-inline-start: 8px; }
+.station-feeding-summary { display: grid; gap: 12px; }
+.station-feeding-summary > div { padding: 10px; border: 1px solid var(--border); border-radius: 8px; }
+.station-feeding-summary dt { font-weight: 600; }
+.station-feeding-summary dd { margin: 4px 0 0; overflow-wrap: anywhere; }

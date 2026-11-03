@@ -146,7 +146,7 @@ test("fresh login hides assigned data during authentication and prevents report 
   const store = makeStore();
   http.defaults.adapter = async (config) => response(config, [report("private")]);
   await store.dispatch(fetchMyReports());
-  store.dispatch({ type: "auth/loginUser/pending" });
+  store.dispatch({ type: "auth/loginUser/pending", meta: { requestId: "synthetic-current-login" } });
   let requests = 0;
   http.defaults.adapter = async (config) => { requests++; return response(config, []); };
   const blocked = await store.dispatch(fetchMyReports());
@@ -155,8 +155,7 @@ test("fresh login hides assigned data during authentication and prevents report 
   assert.deepEqual(selectAssignedReports(store.getState()), []);
   assert.ok(render(store).includes(t("reports.authRestoring")));
   assert.ok(!render(store).includes("SYNTHETIC private"));
-  store.dispatch(setAuth(userB));
-  store.dispatch({ type: "auth/loginUser/fulfilled", payload: { user: userB } });
+  store.dispatch({ type: "auth/loginUser/fulfilled", payload: { user: userB }, meta: { requestId: "synthetic-current-login" } });
   await store.dispatch(fetchMyReports());
   assert.equal(requests, 1);
   assert.equal(selectAssignedReportsState(store.getState()).status, "succeeded");
@@ -234,7 +233,7 @@ test("late actor-A mutation cannot repopulate actor-B assigned collection", asyn
   assert.deepEqual(store.getState().reports.assigned.items, []);
 });
 
-test("401 while resolving clears assigned cards without changing the authenticated account", async () => {
+test("isolated reports reducer clears assigned cards on resolve401; production store session invalidation is tested separately", async () => {
   const store = makeStore();
   http.defaults.adapter = async (config) => response(config, [report("private")]);
   await store.dispatch(fetchMyReports());

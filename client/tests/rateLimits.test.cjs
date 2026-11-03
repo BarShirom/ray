@@ -19,6 +19,10 @@ for (const extension of [".ts", ".tsx"]) {
 require.extensions[".css"] = () => {};
 
 const React = require("react");
+let activeStore;
+const reduxFile = require.resolve("react-redux");
+const redux = require(reduxFile);
+require.cache[reduxFile].exports = { ...redux, useStore: () => activeStore };
 const { configureStore } = require("@reduxjs/toolkit");
 const { AxiosError, AxiosHeaders } = require("axios");
 const { http } = require("../src/api/http.ts");
@@ -88,7 +92,14 @@ function callbackFixture(context, store, Component, props = {}) {
   context.after(() => { http.defaults.adapter = previousAdapter; });
   const navigations = [];
   navigate = path => navigations.push(path);
-  const render = () => { cursor = 0; return Component(props); };
+  const render = () => {
+    activeStore = store;
+    cursor = 0;
+    let element = Component(props);
+    // Execute keyed session-boundary wrappers in this captured-callback fixture.
+    while (typeof element?.type === "function") element = element.type(element.props);
+    return element;
+  };
   return { render, calls, navigations };
 }
 function find(element, predicate) {
@@ -213,7 +224,7 @@ test("real station callback keeps fields and location without closing or claimin
 
 test("real feeding-log callback retains open draft and food/water choices after 429", async context => {
   const store = makeStore();
-  const station = { _id: "synthetic-station", name: "תחנה", active: true, estimatedCats: 1, estimatedKittens: 0, location };
+  const station = { _id: "111111111111111111111111", name: "תחנה", active: true, permissions: { canManage: true, canFeed: true }, estimatedCats: 1, estimatedKittens: 0, location };
   const fixture = callbackFixture(context, store, StationDetails, { station, onClose() { assert.fail("Rejected log must not close details"); } });
   const open = find(fixture.render(), element => element.type === "button" && element.props.children === t("feeding.fedHere"));
   assert.ok(open);
@@ -258,11 +269,14 @@ test("throttled claim/resolve do not mutate report status, clear auth or retry a
   };
   await seed(report);
   const claim = await store.dispatch(claimReport({ reportId: report._id }));
-  assert.equal(claim.error.message, expectedWait(2));
+  assert.equal(claim.payload.message, expectedWait(2));
+  assert.equal(claim.payload.status, 429);
+  assert.equal(claim.payload.retryAfter, 2);
   assert.equal(store.getState().reports.items[0].status, "new");
   await seed({ ...report, status: "in-progress", assignedTo: user.id });
   const resolve = await store.dispatch(resolveReport({ reportId: report._id }));
-  assert.equal(resolve.error.message, expectedWait(2));
+  assert.equal(resolve.payload.message, expectedWait(2));
+  assert.equal(resolve.payload.kind, "rate-limit");
   assert.equal(store.getState().reports.items[0].status, "in-progress");
   assert.equal(store.getState().auth.user.id, user.id);
   await settle();

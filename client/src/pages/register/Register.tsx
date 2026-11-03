@@ -1,7 +1,12 @@
 ﻿import { useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useEffect } from "react";
+import { useStore } from "react-redux";
+import type { RootState } from "../../app/store";
+import { ownsBrowserAuthority } from "../../features/auth/session";
 import "./Register.css";
-import { useAppDispatch } from "../../app/hooks";
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import { selectAuthError } from "../../features/auth/authSelectors";
 import { registerUser } from "../../features/auth/authThunks";
 import { validateRegistrationPassword } from "../../features/auth/validateRegistrationPassword";
 import { t } from "../../i18n";
@@ -11,13 +16,19 @@ type FieldErrors = Partial<Record<"firstName" | "lastName" | "email" | "password
 
 export default function Register() {
   const dispatch = useAppDispatch();
+  const store = useStore<RootState>();
   const navigate = useNavigate();
   const formRef = useRef<HTMLFormElement>(null);
   const [formData, setFormData] = useState({ firstName: "", lastName: "", email: "", password: "", company: "" });
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const authError = useAppSelector(selectAuthError);
+  const visibleError = error ?? authError;
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const mounted = useRef(true);
+  const submitting = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((s) => ({ ...s, [e.target.name]: e.target.value }));
@@ -25,7 +36,7 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (!mounted.current || submitting.current || loading) return;
     setError(null);
     const emailInput = formRef.current?.elements.namedItem("email") as HTMLInputElement | null;
     const errors: FieldErrors = {
@@ -40,14 +51,25 @@ export default function Register() {
       (formRef.current?.elements.namedItem(firstInvalid) as HTMLInputElement | null)?.focus();
       return;
     }
+    submitting.current = true;
     setLoading(true);
+    let submittedSessionId: string | null = null;
     try {
-      await dispatch(registerUser(formData)).unwrap();
-      navigate("/map-page");
+      const request = dispatch(registerUser(formData));
+      const attemptSessionId = store.getState().auth.sessionId;
+      submittedSessionId = attemptSessionId;
+      const result = await request;
+      const auth = store.getState().auth;
+      if (!mounted.current || !ownsBrowserAuthority(auth.sessionId)) return;
+      if (registerUser.fulfilled.match(result) && auth.completedAttemptId === request.requestId) navigate("/map-page");
+      else if (registerUser.rejected.match(result) && auth.sessionId === attemptSessionId && !result.meta.aborted) {
+        setError(localizeError(result.payload, "register"));
+      }
     } catch (err: unknown) {
-      setError(localizeError(err, "register"));
+      if (mounted.current && submittedSessionId === store.getState().auth.sessionId
+        && ownsBrowserAuthority(submittedSessionId)) setError(localizeError(err, "register"));
     } finally {
-      setLoading(false);
+      if (mounted.current) { submitting.current = false; setLoading(false); }
     }
   };
 
@@ -55,7 +77,7 @@ export default function Register() {
     <div className="auth-page">
       <section className="panel auth-panel" aria-labelledby="register-title">
         <h1 id="register-title" className="auth-title">{t("auth.register")}</h1>
-        {error && <div className="alert" role="alert">{error}</div>}
+        {visibleError && <div className="alert" role="alert">{visibleError}</div>}
         <form ref={formRef} className="auth-form" onSubmit={handleSubmit} noValidate>
           <div className="field">
             <label htmlFor="firstName" className="label">{t("auth.firstName")}</label>
