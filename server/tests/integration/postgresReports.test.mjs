@@ -16,6 +16,7 @@ import { applyLocalMigrations } from "../../dist/db/migrate.js";
 import { createPostgresUserStore } from "../../dist/users/postgresUserStore.js";
 import { createPostgresFeedingStationStore } from "../../dist/feedingStations/postgresFeedingStationStore.js";
 import { createPostgresFeedingLogStore } from "../../dist/feedingLogs/postgresFeedingLogStore.js";
+import { createPostgresStationPrivacyStore } from "../../dist/feedingStations/postgresStationPrivacyStore.js";
 import { createPostgresReportStore, reportCount } from "../../dist/reports/postgresReportStore.js";
 import { serializeReport } from "../../dist/serializers/reportResponse.js";
 import Report from "../../dist/models/ReportModel.js";
@@ -41,8 +42,8 @@ const safeError = (error) => {
 const base = "/api/reports";
 const conflict = { status: 400, body: { error: "Report is already claimed or resolved" } };
 const forbidden = { status: 403, body: { error: "Only assigned user can resolve the report" } };
-const allStores = (db) => ({ users: createPostgresUserStore(db), stations: createPostgresFeedingStationStore(db), logs: createPostgresFeedingLogStore(db), reports: createPostgresReportStore(db) });
-const app = (t, stores) => startPostgresAuthApp(t, stores.users, { stations: stores.stations, logs: stores.logs }, stores.reports);
+const allStores = (db) => ({ users: createPostgresUserStore(db), stations: createPostgresFeedingStationStore(db), logs: createPostgresFeedingLogStore(db), privacy: createPostgresStationPrivacyStore(db), reports: createPostgresReportStore(db) });
+const app = (t, stores) => startPostgresAuthApp(t, stores.users, { privacy: stores.privacy }, stores.reports);
 
 test.beforeEach((t) => {
   const unexpected = () => { throw new Error("Unexpected MongoDB access in PostgreSQL report tests"); };
@@ -138,14 +139,15 @@ test("real ReportStore, report HTTP and combined four-domain PostgreSQL flow", a
     const personal = (actor) => request("GET", `${base}/stats/me`, undefined, actor.bearer);
     assert.deepEqual(await global(), { status: 200, body: { total: 0, resolved: 0, inProgress: 0, new: 0 } });
     assert.deepEqual(await personal(b), { status: 200, body: { total: 0, resolved: 0, inProgress: 0 } });
-    const station = await request("POST", "/api/feeding-stations", { name: "Combined", location }, a.bearer);
+    const station = await request("POST", "/api/feeding-stations", { name: "Combined", location, visibility: "regular" }, a.bearer);
     assert.equal(station.status, 201);
     smokeStation = station.body;
     const log = await request("POST", `/api/feeding-stations/${smokeStation._id}/feedings`, { food: false, water: true }, b.bearer);
     assert.equal(log.status, 201);
     smokeLog = log.body;
-    assert.equal(smokeLog.userId, b.id);
-    assert.deepEqual(await request("GET", `/api/feeding-stations/${smokeStation._id}/feedings`), { status: 200, body: [smokeLog] });
+    assert.equal(Object.hasOwn(smokeLog, "userId"), false);
+    assert.deepEqual(await request("GET", `/api/feeding-stations/${smokeStation._id}/feedings`, undefined, b.bearer), { status: 200, body: [smokeLog] });
+    assert.deepEqual(await request("GET", `/api/feeding-stations/${smokeStation._id}/feedings`, undefined, a.bearer), { status: 200, body: [] });
     const created = await request("POST", base, { ...input(), media: ["second", "first", "second"], createdBy: b.id, createdByName: "Forged", assignedTo: b.id, assignedToName: "Forged", status: "resolved", __v: 99 }, a.bearer);
     assert.equal(created.status, 201);
     smokeReport = created.body;
@@ -194,8 +196,8 @@ test("real ReportStore, report HTTP and combined four-domain PostgreSQL flow", a
     try {
       await assertDatabaseIdentity(fresh.pool, "test");
       const send = await app(t, allStores(fresh.db));
-      assert.deepEqual(await send("GET", `/api/feeding-stations/${smokeStation._id}`), { status: 200, body: smokeStation });
-      assert.deepEqual(await send("GET", `/api/feeding-stations/${smokeStation._id}/feedings`), { status: 200, body: [smokeLog] });
+      assert.deepEqual(await send("GET", `/api/feeding-stations/${smokeStation._id}`, undefined, a.bearer), { status: 200, body: smokeStation });
+      assert.deepEqual(await send("GET", `/api/feeding-stations/${smokeStation._id}/feedings`, undefined, b.bearer), { status: 200, body: [smokeLog] });
       assert.deepEqual(await send("GET", `${base}/me`, undefined, b.bearer), { status: 200, body: [smokeReport] });
       assert.deepEqual((await send("GET", `${base}/stats/me`, undefined, b.bearer)).body, { total: 1, resolved: 1, inProgress: 0 });
     } finally { await fresh.close(); }

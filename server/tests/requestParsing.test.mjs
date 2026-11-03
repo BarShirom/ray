@@ -94,7 +94,7 @@ for (const mode of ["legacy", "postgres"]) {
     }
     assert.equal((await post("{}", "application/json; charset=unsupported", {}, "/api/auth/login")).status, 415);
     assert.equal((await post("{}" + " ".repeat(REQUEST_BODY_BYTES), "application/json", {}, "/api/auth/login")).status, 413);
-    assert.equal((await post("{}", "application/json", {}, "/api/feeding-stations")).status, 401);
+    assert.equal((await post("{}", "application/json", {}, "/api/feeding-stations")).status, mode === "legacy" ? 503 : 401);
     assert.doesNotMatch(JSON.stringify(logs), /private-body-marker|invalid compressed input/);
   });
 

@@ -53,7 +53,6 @@ test("every product text limit accepts its boundary and rejects the next Unicode
     [createFeedingStationSchema, station, "notes", INPUT_LIMITS.description],
     [createFeedingLogSchema, {}, "note", INPUT_LIMITS.feedingNote],
     [createReportSchema, report, "description", INPUT_LIMITS.description],
-    [createFeedingStationSchema, station, "image", INPUT_LIMITS.url],
   ];
   for (const [schema, input, field, limit] of boundaries) {
     for (const character of ["א", "🐈"]) {
@@ -72,6 +71,16 @@ test("every product text limit accepts its boundary and rejects the next Unicode
   }
   assert.equal(createReportSchema.safeParse({ ...report, media: ["x".repeat(INPUT_LIMITS.url)] }).success, true);
   assert.equal(createReportSchema.safeParse({ ...report, media: ["x".repeat(INPUT_LIMITS.url + 1)] }).success, false);
+});
+
+test("both station modes reject all legacy image strings while retaining bounded approved notes", () => {
+  for (const schema of [createFeedingStationSchema, mediaStationSchema]) {
+    for (const image of ["", "https://synthetic.example.invalid/image.jpg", "x".repeat(INPUT_LIMITS.url), null]) {
+      assert.equal(invoke(schema, { ...station, image }).status, 400);
+    }
+    assert.equal(invoke(schema, { ...station, notes: "x".repeat(INPUT_LIMITS.description) }).continued, true);
+    assert.equal(invoke(schema, { ...station, notes: "x".repeat(INPUT_LIMITS.description + 1) }).status, 400);
+  }
 });
 
 test("array limits stop before item validation, including each alternate S3 field", () => {

@@ -82,7 +82,7 @@ export function createS3Storage(client: S3Client, config: S3Config): MediaStorag
       try {
         if (!key.includes("/ready/")) throw new Error();
         await client.send(new PutObjectCommand({ ...object(key), Body: bytes, ContentLength: bytes.length, ContentType: "image/webp",
-          ChecksumSHA256: checksum, IfNoneMatch: "*", ServerSideEncryption: "AES256", CacheControl: "private, max-age=60", ContentDisposition: "inline" }), { abortSignal: AbortSignal.timeout(15_000) });
+          ChecksumSHA256: checksum, IfNoneMatch: "*", ServerSideEncryption: "AES256", CacheControl: "private, no-store", ContentDisposition: "inline" }), { abortSignal: AbortSignal.timeout(15_000) });
       } catch (e) {
         if ((e as { name?: string })?.name !== "PreconditionFailed") throw unavailable();
         // Retry after a successful S3 write but failed DB update: accept only identical output.
@@ -95,7 +95,7 @@ export function createS3Storage(client: S3Client, config: S3Config): MediaStorag
     async signRead(key) {
       try {
         if (!key.includes("/ready/")) throw new Error();
-        return await getSignedUrl(client, new GetObjectCommand({ ...object(key), ResponseContentType: "image/webp", ResponseContentDisposition: "inline" }), { expiresIn: READ_SECONDS });
+        return await getSignedUrl(client, new GetObjectCommand({ ...object(key), ResponseContentType: "image/webp", ResponseContentDisposition: "inline", ResponseCacheControl: "private, no-store" }), { expiresIn: READ_SECONDS });
       } catch { throw unavailable(); }
     },
     async deleteObject(key) {

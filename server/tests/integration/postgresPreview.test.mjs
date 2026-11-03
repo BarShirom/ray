@@ -80,7 +80,7 @@ test("actual preview composition on disposable PostgreSQL", async (t) => {
     const created = await request("POST", "/api/feeding-stations", { name: "SYNTHETIC HTTP station", location: { lat: 32.08, lng: 34.78 } }, token);
     assert.equal(created.status, 201); station = created.body;
     assert.equal((await request("POST", `/api/feeding-stations/${station._id}/feedings`, { note: "SYNTHETIC feeding", water: true }, token)).status, 201);
-    assert.equal((await request("GET", `/api/feeding-stations/${station._id}/feedings`)).body.length, 1);
+    assert.equal((await request("GET", `/api/feeding-stations/${station._id}/feedings`, undefined, token)).body.length, 1);
     const made = await request("POST", "/api/reports", { description: "SYNTHETIC HTTP report; no real incident", type: "general", location: { lat: 32.08, lng: 34.78 } }, token);
     assert.equal(made.status, 201); report = made.body;
     const second = await request("POST", "/api/auth/login", { email: "demo2@ray.example.invalid", password: demoPassword });
@@ -91,7 +91,11 @@ test("actual preview composition on disposable PostgreSQL", async (t) => {
     assert.equal((await request("GET", "/api/reports/stats", undefined, second.body.token)).body.total, 4);
     assert.equal((await request("POST", "/api/feeding-stations", {})).status, 401);
     await insertSyntheticSeed(connection);
-    assert.equal((await request("GET", "/api/feeding-stations")).body.length, 4);
+    assert.equal((await request("GET", "/api/feeding-stations")).status, 401);
+    assert.equal((await request("GET", "/api/feeding-stations", undefined, token)).body.length, 1);
+    // Existing seeded stations remain sensitive and preserved; this newly
+    // registered account owns only its own station.
+    assert.equal((await connection.pool.query("SELECT count(*) FROM feeding_stations")).rows[0].count, '4');
     assert.equal((await connection.pool.query("SELECT count(*) FROM users")).rows[0].count, '3');
   });
   await t.test("shutdown bounds stalled HTTP requests and ends its real PostgreSQL pool", async () => {

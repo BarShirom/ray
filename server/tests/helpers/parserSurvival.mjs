@@ -20,7 +20,7 @@ const port = listener.address().port;
 async function post(body, type, encoding) {
   return new Promise((resolve, reject) => {
     const req = request({
-      host: "127.0.0.1", port, method: "POST", path: "/api/feeding-stations", agent: false,
+      host: "127.0.0.1", port, method: "PATCH", path: "/api/reports/200000000000000000000001/claim", agent: false,
       headers: { "Content-Type": type, "Content-Encoding": encoding, "Content-Length": body.length },
     }, res => {
       res.resume();

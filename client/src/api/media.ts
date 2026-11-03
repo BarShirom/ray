@@ -20,6 +20,53 @@ export async function mediaEnabled(signal: AbortSignal): Promise<boolean> {
     return response.ok && (await response.json()).enabled === true;
   } catch { return false; }
 }
+// Stored station strings are untrusted. Credentials go only to the configured
+// application origin and a reconstructed UUID route, never to a stored URL.
+export function stationAssetId(source: string): string | null {
+  try {
+    const base = new URL(BASE || window.location.origin);
+    const value = new URL(source);
+    if (value.origin !== base.origin || value.username || value.password || value.search || value.hash) return null;
+    return /^\/api\/media\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/content$/i.exec(value.pathname)?.[1].toLowerCase() ?? null;
+  } catch { return null; }
+}
+export async function loadStationImage(source: string, token: string, signal: AbortSignal, isCurrent: () => boolean): Promise<Blob> {
+  const assetId = stationAssetId(source);
+  const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
+  const current = () => !requestSignal.aborted && isCurrent();
+  if (!assetId || !token || !current()) throw new Error("Image unavailable");
+  const response = await fetch(`${BASE}/api/media/${assetId}/read-url`, {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: "{}", cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", redirect: "error", signal: requestSignal,
+  });
+  if (!response.ok || !current()) throw new Error("Image unavailable");
+  const permission: unknown = await response.json();
+  if (!current() || !permission || typeof permission !== "object" || !("url" in permission) || typeof permission.url !== "string" || permission.url.length > 8192 || !("expiresIn" in permission) || permission.expiresIn !== 60) throw new Error("Image unavailable");
+  const capability = new URL(permission.url);
+  if (capability.protocol !== "https:" || capability.username || capability.password || capability.hash) throw new Error("Image unavailable");
+  // The second request carries neither the Ray Bearer nor browser credentials.
+  const bytes = await fetch(capability.href, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer", redirect: "error", signal: requestSignal });
+  if (!bytes.ok || !current()) throw new Error("Image unavailable");
+  if (!bytes.body || bytes.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !== "image/webp") throw new Error("Image unavailable");
+  const reader = bytes.body.getReader();
+  const chunks: ArrayBuffer[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (!current()) throw new Error("Image unavailable");
+      if (done) break;
+      size += value.byteLength;
+      if (size > 8 * 1024 * 1024) throw new Error("Image unavailable");
+      chunks.push(new Uint8Array(value).buffer);
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  if (!size || !current()) throw new Error("Image unavailable");
+  return new Blob(chunks, { type: "image/webp" });
+}
 async function api(path: string, token: string, body: unknown) {
   let response: Response;
   try {

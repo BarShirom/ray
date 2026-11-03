@@ -24,7 +24,7 @@ export async function startPostgresAuthApp(t, store, feeding, reports) {
   app.get("/optional", createOptionalAuthMiddleware(store), (req, res) => res.json({ user: req.user ?? null }));
   if (feeding) {
     const { createFeedingStationRouter } = await import("../../dist/routes/feedingStationRoutes.js");
-    app.use("/api/feeding-stations", createFeedingStationRouter(feeding.stations, feeding.logs, createAuthMiddleware(store)));
+    app.use("/api/feeding-stations", createFeedingStationRouter(feeding.privacy, createAuthMiddleware(store)));
   }
   if (reports) {
     const { createReportRouter } = await import("../../dist/routes/reportRoutes.js");

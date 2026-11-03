@@ -3,14 +3,12 @@ import cors from "cors";
 import helmet from "helmet";
 import { createAuthRouter } from "./routes/authRoutes.js";
 import { createReportRouter } from "./routes/reportRoutes.js";
-import { createFeedingStationRouter } from "./routes/feedingStationRoutes.js";
+import { createRetiredStationRouter } from "./feedingStations/retiredStationRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import { requestParsers, requestErrorHandler } from "./middleware/requestParsing.js";
 import { createAbuseProtection, type AbuseOptions } from "./security/abuseProtection.js";
 import { mongoUserStore } from "./users/mongoUserStore.js";
 import { mongoReportStore } from "./reports/mongoReportStore.js";
-import { mongoFeedingStationStore } from "./feedingStations/mongoFeedingStationStore.js";
-import { mongoFeedingLogStore } from "./feedingLogs/mongoFeedingLogStore.js";
 import { authMiddleware } from "./middleware/authMiddleware.js";
 import { optionalAuthMiddleware } from "./middleware/optionalAuthMiddleware.js";
 
@@ -77,6 +75,8 @@ export function createLegacyApp(abuseOptions?: AbuseOptions) {
 
   // Retired before any body parsing or storage-provider access.
   app.use("/api/upload", uploadRoutes);
+  app.use("/api/feeding-stations", createRetiredStationRouter());
+  app.use("/api/station-access", createRetiredStationRouter());
   // Cheap liveness bypasses body parsing. All remaining paths share admission,
   // so an unknown URL cannot bypass the parser's ingress budget.
   app.get("/healthz", (_req, res) => { res.status(200).send("ok"); });
@@ -86,7 +86,6 @@ export function createLegacyApp(abuseOptions?: AbuseOptions) {
   // --- routes ---
   app.use("/api/auth", createAuthRouter(mongoUserStore, undefined, abuse) as Router);
   app.use("/api/reports", createReportRouter(mongoReportStore, authMiddleware, optionalAuthMiddleware, undefined, abuse) as Router);
-  app.use("/api/feeding-stations", createFeedingStationRouter(mongoFeedingStationStore, mongoFeedingLogStore, authMiddleware, undefined, abuse));
 
   app.get("/", (_req, res) => {
     res.send("Ray backend is running!");

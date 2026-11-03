@@ -1,66 +1,36 @@
 import type { RequestHandler } from "express";
-import { mongoFeedingStationStore } from "../feedingStations/mongoFeedingStationStore.js";
-import { serializeFeedingStation } from "../serializers/feedingStationResponse.js";
-import { isPublicId } from "../utils/publicId.js";
-import type { FeedingStationStore } from "../feedingStations/feedingStationStore.js";
+import type { StationPrivacyStore } from "../feedingStations/stationPrivacyStore.js";
+import { noQueryOrReject, pageOrReject, privacyError, stationIdOrReject } from "../feedingStations/stationPrivacyHttp.js";
 
-export function createFeedingStationHandlers(stations: FeedingStationStore) {
+export function createFeedingStationHandlers(stations: StationPrivacyStore) {
   const createFeedingStation: RequestHandler = async (req, res, next) => {
+    if (!noQueryOrReject(req, res)) return;
     try {
-      const { name, location, estimatedCats, estimatedKittens, image, notes } =
-        req.body;
-
-      const station = await stations.create({
-        name,
-        location,
-        estimatedCats,
-        estimatedKittens,
-        image,
-        ...(req.body.imageAssetId !== undefined ? { imageAssetId: req.body.imageAssetId } : {}),
-        notes,
-        createdBy: req.user._id,
+      const { name, location, estimatedCats, estimatedKittens, notes, visibility, imageAssetId } = req.body;
+      const station = await stations.create(req.user, {
+        name, location, estimatedCats, estimatedKittens, notes, visibility,
+        ...(imageAssetId === undefined ? {} : { imageAssetId }),
       });
-
-      res.status(201).json(serializeFeedingStation(station));
-    } catch (err) {
-      next(err);
-    }
+      res.status(201).json(station);
+    } catch (error) { if (!privacyError(error, res)) next(error); }
   };
-
-  const getAllFeedingStations: RequestHandler = async (_req, res, next) => {
+  const getAllFeedingStations: RequestHandler = async (req, res, next) => {
+    const page = pageOrReject(req, res, "stations");
+    if (!page) return;
     try {
-      const records = await stations.listActive();
-
-      res.json(records.map(serializeFeedingStation));
-    } catch (err) {
-      next(err);
-    }
+      const result = await stations.list(req.user, page);
+      if (result.nextCursor) res.set("X-Next-Cursor", result.nextCursor);
+      res.json(result.items);
+    } catch (error) { if (!privacyError(error, res)) next(error); }
   };
-
   const getFeedingStationById: RequestHandler = async (req, res, next) => {
-    if (!isPublicId(req.params.id)) {
-      res.status(400).json({
-        message: "Validation failed",
-        errors: [{ field: "id", message: "Invalid feeding station ID" }],
-      });
-      return;
-    }
-
+    const id = stationIdOrReject(req.params.id, "id", res);
+    if (!id || !noQueryOrReject(req, res)) return;
     try {
-      const station = await stations.findByPublicId(req.params.id);
-
-      if (!station) {
-        res.status(404).json({ message: "Feeding station not found" });
-        return;
-      }
-
-      res.json(serializeFeedingStation(station));
-    } catch (err) {
-      next(err);
-    }
+      const station = await stations.detail(req.user, id);
+      if (!station) { res.status(404).json({ message: "Feeding station not found" }); return; }
+      res.json(station);
+    } catch (error) { if (!privacyError(error, res)) next(error); }
   };
-
   return { createFeedingStation, getAllFeedingStations, getFeedingStationById };
 }
-
-export const { createFeedingStation, getAllFeedingStations, getFeedingStationById } = createFeedingStationHandlers(mongoFeedingStationStore);

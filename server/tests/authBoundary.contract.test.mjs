@@ -88,7 +88,7 @@ test("optional auth supports legacy _id claims and name snapshots; required auth
   assert.deepEqual(await request("GET", "/api/reports/me", undefined, token), {
     status: 401, body: { error: "User not found" },
   });
-  assert.deepEqual(lookedUp, [ids.user, undefined]);
+  assert.deepEqual(lookedUp, [ids.user]);
 });
 
 for (const scenario of ["missing-user", "database-failure", "missing-secret", "missing-claim", "expired", "malformed-id", "empty-bearer"]) {
@@ -111,7 +111,7 @@ for (const scenario of ["missing-user", "database-failure", "missing-secret", "m
   });
 }
 
-test("lookup/create failures preserve auth HTTP error envelopes", async (t) => {
+test("lookup outages remain server failures while credential failures remain 401", async (t) => {
   const { request, token } = await startApp(t);
   t.mock.method(console, "error", () => {});
   const fail = () => { throw new Error("synthetic database failure"); };
@@ -124,7 +124,7 @@ test("lookup/create failures preserve auth HTTP error envelopes", async (t) => {
   assert.deepEqual(await request("POST", "/api/auth/register", input), { status: 500, body: { msg: "Server error" } });
   t.mock.method(User, "findById", () => ({ select: async () => fail() }));
   assert.deepEqual(await request("GET", "/api/reports/me", undefined, token), {
-    status: 401, body: { error: "Invalid or expired token" },
+    status: 500, body: { error: "Error", message: "Authentication service unavailable" },
   });
 });
 

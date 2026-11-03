@@ -60,13 +60,18 @@ test('existing per-process and per-owner worker ceilings reject before work and 
 
 test('media router forwards positive Retry-After without changing its bounded error body', async t => {
   const app = express();
+  app.use(express.json());
   const deny = async () => { throw new MediaError(429, 'Image processing busy; try again shortly', 2.1); };
-  app.use('/api/media', createMediaRouter({ issue: deny, complete: deny, content: deny }, (req, _res, next) => { req.user = { _id: 'a'.repeat(24) }; next(); }));
+  const authenticate = (req, _res, next) => { req.user = { _id: 'a'.repeat(24) }; next(); };
+  const strictOptional = (req, res, next) => req.headers.authorization === undefined ? next() : authenticate(req, res, next);
+  app.use('/api/media', createMediaRouter({ issue: deny, complete: deny, content: deny }, authenticate, strictOptional));
   app.use((error, _req, res, _next) => res.status(error.status).json({ message: error.message }));
   const listener = await new Promise(resolve => { const server = app.listen(0, '127.0.0.1', () => resolve(server)); });
   t.after(() => new Promise(resolve => { listener.close(resolve); listener.closeAllConnections(); }));
   for (const [method, suffix] of [['POST', 'uploads'], ['POST', randomUUID() + '/complete'], ['GET', randomUUID() + '/content']]) {
-    const response = await fetch(`http://127.0.0.1:${listener.address().port}/api/media/${suffix}`, { method });
+    const response = await fetch(`http://127.0.0.1:${listener.address().port}/api/media/${suffix}`, {
+      method, ...(method === 'POST' ? { headers: { 'Content-Type': 'application/json' }, body: '{}' } : {}),
+    });
     assert.equal(response.status, 429);
     assert.equal(response.headers.get('retry-after'), '3');
     assert.deepEqual(await response.json(), { message: 'Image processing busy; try again shortly' });

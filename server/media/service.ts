@@ -2,19 +2,21 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { createPostgres } from "../db/connection.js";
 import { mediaAssets as assets, users, feedingStations, reports } from "../db/schema.js";
-import { MediaError, UPLOAD_SECONDS, MEDIA_DAILY_INTENTS, MEDIA_DAILY_BYTES, type Intent, type MediaStorage, type Purpose } from "./types.js";
+import { MediaError, UPLOAD_SECONDS, READ_SECONDS, MEDIA_DAILY_INTENTS, MEDIA_DAILY_BYTES, type Intent, type MediaStorage, type Purpose } from "./types.js";
 import { normalizeImage } from "./image.js";
 import { intentSchema, assetIdSchema } from "./validation.js";
 import { createPostgresFeedingStationStore } from "../feedingStations/postgresFeedingStationStore.js";
 import { createPostgresReportStore } from "../reports/postgresReportStore.js";
-import type { FeedingStationStore } from "../feedingStations/feedingStationStore.js";
+import type { FeedingStationStore, CreateFeedingStation } from "../feedingStations/feedingStationStore.js";
 import type { ReportStore } from "../reports/reportStore.js";
+import type { AuthIdentity } from "../users/userStore.js";
+import { lockAndAuthorizeStation, resolveStationPrincipalFromVerifiedIdentity } from "../feedingStations/stationAuthorization.js";
+import { mediaContentUrl as contentUrl } from "./contentUrl.js";
 
 type Database = ReturnType<typeof createPostgres>["db"];
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Asset = typeof assets.$inferSelect;
 const unattached = and(isNull(assets.stationId), isNull(assets.reportId));
-const contentUrl = (id: string) => `http://127.0.0.1:4001/api/media/${id}/content`;
 const safe = async <T>(fn: () => Promise<T>): Promise<T> => {
   try { return await fn(); } catch (e) {
     if (e instanceof MediaError) throw e;
@@ -23,7 +25,7 @@ const safe = async <T>(fn: () => Promise<T>): Promise<T> => {
 };
 const publicAsset = (row: Asset) => ({ assetId: row.id, state: row.state, expiresAt: row.expiresAt.toISOString() });
 
-export function createMediaService(db: Database, storage: MediaStorage, prefix = "dev/", completionClock: () => number = Date.now) {
+export function createMediaService(db: Database, storage: MediaStorage, prefix = "dev/", completionClock: () => number = Date.now, readClock: () => number = Date.now) {
   if (!/^dev\/(test-runs\/[0-9a-f-]{36}\/)?$/.test(prefix)) throw new Error("Invalid media prefix");
   let active = 0;
   const activeUsers = new Set<string>();
@@ -62,17 +64,18 @@ export function createMediaService(db: Database, storage: MediaStorage, prefix =
     }
     return ids;
   }
+  async function createStationInTransaction(tx: Transaction, input: CreateFeedingStation) {
+    if (input.image !== undefined) throw new MediaError(400, "Use imageAssetId, not an image URL");
+    const ids = await claimable(tx, input.imageAssetId ? [input.imageAssetId] : [], "station", input.createdBy);
+    const station = await createPostgresFeedingStationStore(tx).create({ ...input, image: ids[0] ? contentUrl(ids[0]) : undefined });
+    if (ids[0]) {
+      const [parent] = await tx.select({ id: feedingStations.id }).from(feedingStations).where(eq(feedingStations.publicId, station.publicId));
+      await tx.update(assets).set({ stationId: parent.id }).where(eq(assets.id, ids[0]));
+    }
+    return station;
+  }
   const stations: FeedingStationStore = { ...createPostgresFeedingStationStore(db),
-    create: input => safe(() => db.transaction(async tx => {
-      if (input.image !== undefined) throw new MediaError(400, "Use imageAssetId, not an image URL");
-      const ids = await claimable(tx, input.imageAssetId ? [input.imageAssetId] : [], "station", input.createdBy);
-      const station = await createPostgresFeedingStationStore(tx).create({ ...input, image: ids[0] ? contentUrl(ids[0]) : undefined });
-      if (ids[0]) {
-        const [parent] = await tx.select({ id: feedingStations.id }).from(feedingStations).where(eq(feedingStations.publicId, station.publicId));
-        await tx.update(assets).set({ stationId: parent.id }).where(eq(assets.id, ids[0]));
-      }
-      return station;
-    })),
+    create: input => safe(() => db.transaction(tx => createStationInTransaction(tx, input))),
   };
   const reportStore: ReportStore = { ...createPostgresReportStore(db),
     create: input => safe(() => db.transaction(async tx => {
@@ -86,8 +89,54 @@ export function createMediaService(db: Database, storage: MediaStorage, prefix =
       return report;
     })),
   };
+  const notFound = () => new MediaError(404, "Image not found");
+  async function authorizeStationAsset(tx: Transaction, row: Asset, viewer: AuthIdentity | null) {
+    if (!row.stationId || row.reportId || row.purpose !== "station" || !viewer) throw notFound();
+    const [parent] = await tx.select({ publicId: feedingStations.publicId }).from(feedingStations)
+      .where(eq(feedingStations.id, row.stationId)).limit(1);
+    if (!parent) throw notFound();
+    const principal = await resolveStationPrincipalFromVerifiedIdentity(tx, viewer);
+    if (!await lockAndAuthorizeStation(tx, principal, parent.publicId)) throw notFound();
+    // The station lock precedes this fresh attachment check. A copied URL or
+    // upload ownership never substitutes for the actual parent policy.
+    const [current] = await tx.select({ id: assets.id }).from(assets).where(and(
+      eq(assets.id, row.id), eq(assets.stationId, row.stationId), isNull(assets.reportId),
+      eq(assets.purpose, "station"), eq(assets.state, "ready"), eq(assets.outputKey, row.outputKey),
+    )).limit(1);
+    if (!current) throw notFound();
+  }
+  async function readCapability(id: string, viewer: AuthIdentity | null, stationOnly: boolean) {
+    if (!assetIdSchema.safeParse(id).success) throw new MediaError(400, "Invalid asset ID");
+    const [row] = await db.select().from(assets).where(and(eq(assets.id, id), eq(assets.state, "ready"))).limit(1);
+    if (!row) throw notFound();
+    if (row.stationId) {
+      // Initial denial must perform no signing. The result is checked again after
+      // signing, since revocation/visibility may change while external work waits.
+      await db.transaction(tx => authorizeStationAsset(tx, row, viewer));
+    } else {
+      if (stationOnly || row.purpose !== "report" || !row.reportId) throw notFound();
+      const [parent] = await db.select({ id: reports.id }).from(reports).where(eq(reports.id, row.reportId)).limit(1);
+      if (!parent) throw notFound();
+    }
+    // Conservatively include signer latency in the nominal lifetime. Rounding
+    // down matches SigV4 second precision; a slow signer cannot extend this receipt.
+    const expiresAt = Math.floor(readClock() / 1000) * 1000 + READ_SECONDS * 1000;
+    const url = await storage.signRead(row.outputKey);
+    if (row.stationId) await db.transaction(async tx => {
+      await authorizeStationAsset(tx, row, viewer);
+      if (readClock() >= expiresAt) throw new MediaError(409, "Image read permission expired; request it again");
+    });
+    else {
+      const [current] = await db.select({ id: assets.id }).from(assets).innerJoin(reports, eq(reports.id, assets.reportId))
+        .where(and(eq(assets.id, row.id), eq(assets.reportId, row.reportId!), isNull(assets.stationId), eq(assets.purpose, "report"), eq(assets.state, "ready"), eq(assets.outputKey, row.outputKey))).limit(1);
+      if (!current) throw notFound();
+    }
+    if (readClock() >= expiresAt) throw new MediaError(409, "Image read permission expired; request it again");
+    return url;
+  }
   return {
     stations, reports: reportStore,
+    createStationInTransaction: (tx: Transaction, input: CreateFeedingStation) => safe(() => createStationInTransaction(tx, input)),
     issue: (owner: string, input: Intent) => safe(async () => {
       const parsed = intentSchema.safeParse(input);
       if (!parsed.success) throw new MediaError(400, "Use JPEG, PNG or WebP, 1 byte to 8 MiB, a SHA-256 checksum and station/report purpose");
@@ -173,17 +222,8 @@ export function createMediaService(db: Database, storage: MediaStorage, prefix =
         throw e;
       } finally { active--; activeUsers.delete(owner); }
     }),
-    content: (id: string) => safe(async () => {
-      if (!assetIdSchema.safeParse(id).success) throw new MediaError(400, "Invalid asset ID");
-      const [row] = await db.select().from(assets).where(and(eq(assets.id, id), eq(assets.state, "ready")));
-      // Existing parent detail reads are public, including inactive stations. Resolve
-      // that same parent visibility instead of using ID knowledge as authorization.
-      if (!row) throw new MediaError(404, "Image not found");
-      const parent = row.stationId ? await db.select({ id: feedingStations.id }).from(feedingStations).where(eq(feedingStations.id, row.stationId))
-        : row.reportId ? await db.select({ id: reports.id }).from(reports).where(eq(reports.id, row.reportId)) : [];
-      if (!parent.length) throw new MediaError(404, "Image is not attached to a public resource");
-      return storage.signRead(row.outputKey);
-    }),
+    content: (id: string, viewer: AuthIdentity | null = null) => safe(() => readCapability(id, viewer, false)),
+    readUrl: (id: string, viewer: AuthIdentity) => safe(async () => ({ url: await readCapability(id, viewer, true), expiresIn: READ_SECONDS })),
     // Dry run is read-only. Apply takes an exact reviewed UUID list (max 100), never
     // bucket listing. A deleting tombstone excludes attachment/completion races.
     cleanup: (ids?: string[]) => safe(async () => {

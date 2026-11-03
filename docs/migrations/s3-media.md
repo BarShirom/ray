@@ -1,5 +1,29 @@
 # S3.1: private images in the local PostgreSQL preview
 
+**Station-contract supersession, 2026-11-03 (source review):** the S3.1 status,
+HEAD, public station-image behavior and verification results below describe the
+dated historical checkpoint. The current contract is the
+[station privacy design](../security/station-visibility-design.md), with
+implementation and evidence recorded in
+[SEC.1B-3B.2](../security/sec-1b-3b-2-endpoint-privacy.md).
+
+The current PostgreSQL implementation requires authenticated authorization to the
+image's authoritative station parent: regular stations permit authenticated
+viewers; sensitive stations require creator ownership or an active explicit grant
+issued by that creator. Both stable content GET/HEAD and station read-URL issuance
+enforce that policy before signing and recheck it before releasing the capability.
+The legacy Mongo composition refuses `/api/feeding-stations` (including feeding
+children) and `/api/station-access` with 503 before parsing, authentication or
+storage access; an earlier CORS preflight may return 204. There is no public
+station fallback. Report media retains its separate existing public content
+policy; the station read-URL endpoint does not issue Report capabilities.
+
+Historical guest station-image display is not evidence for the protected flow.
+This correction records source alignment only, with no new live S3 or browser
+verification. Previously issued signed URLs remain usable until expiry; cached
+or copied images cannot be recalled. Existing retained records and media remain
+preserved.
+
 Status: **ready for a development checkpoint with verified browser functional flows; full security acceptance and public-deployment readiness are NOT complete.** Restricted SDK activation, station/report uploads, decoded display, refresh and API-restart persistence passed. Direct browser wire-header/preflight inspection and named security cases below remain pending. The S3-enabled API was stopped. The 2026-09-24 closeout below supersedes earlier checkpoint blockers; historical setup commands are not instructions to run more operations in this closeout. HEAD remains `f91d393ce4618cb2e6dc13d4d022b46ed048de13` on `ray-2-postgres` (completed 10E); the expected S3.1 working tree remains uncommitted. Normal application startup still uses MongoDB. The preview remains loopback-only, on API `127.0.0.1:4001` and frontend `127.0.0.1:5175`.
 
 Ray uses fresh stores. Only synthetic local fixtures are involved; no MongoDB import, historical session migration or Cloudinary transfer. Applied migrations `0000`-`0005` and prior snapshots are unchanged. Migration `0006_media_assets.sql` is additive; during implementation it was applied only to the disposable test database. During the authorized activation run below it was also applied to the guarded persistent preview database. No database or volume was reset.
@@ -59,6 +83,11 @@ All four attached station/report objects and existing preview records remain ret
 The reviewed working set remains **49 files: 28 modified and 21 new**, with no staged changes. Only this runbook is edited by this closeout; the existing implementation and unrelated work are preserved. The complete, shown-only commands in [Reviewed staging list](#reviewed-staging-list) include exact paths and exclude local evidence, secrets and generated files. Suggested commit message: `feat: add private S3 images with verified browser flows`.
 
 ## Flow and contracts
+
+**Historical S3.1 contract:** items 4-5 retain the original behavior. Their public
+station-image audience and unchanged Mongo station contracts are **superseded**
+by the station-contract notice above. The dated tests and browser observations
+remain historical evidence, not verification of current station authorization.
 
 `RAY_MEDIA_MODE` defaults to `disabled`. In that mode, `/api/media/capabilities` returns `enabled:false`, media routes return 503 and forms offer creation without images. `/api/upload` remains unavailable in every PostgreSQL mode. S3 activation verifies a restricted caller before the API starts. Readiness subsequently checks SQL; it does not perform a chargeable S3 health probe on every request. S3/session failures produce a safe 503 with a source-login renewal hint.
 

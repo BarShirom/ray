@@ -72,7 +72,15 @@ function stores() {
     async listActive() { calls.read++; return []; },
   };
   const logs = { async create(input) { calls.feeding++; return { ...input, publicId: "400000000000000000000001" }; }, async listForStation() { calls.read++; return []; } };
-  return { users, reports, stations, logs, calls };
+  const privacy = {
+    async create(identity, input) { calls.station++; return { ...stationRecord, ...input, _id: stationId, visibility: input.visibility ?? "sensitive" }; },
+    async createFeeding(identity, id, input) { calls.feeding++; return { ...input, _id: "400000000000000000000001", stationId: id }; },
+    async list() { calls.read++; return { items: [] }; },
+    async detail() { calls.read++; return null; },
+    async ownLogs() { calls.read++; return { items: [] }; },
+    async summary() { calls.read++; return { food: { recency: "no-record" }, water: { recency: "no-record" } }; },
+  };
+  return { users, reports, stations, logs, privacy, calls };
 }
 
 function compose(fixtures, abuse) {
@@ -82,8 +90,9 @@ function compose(fixtures, abuse) {
   const authenticate = createAuthMiddleware(fixtures.users, () => secret);
   app.use("/api/auth", createAuthRouter(fixtures.users, () => secret, abuse));
   app.use("/api/reports", createReportRouter(fixtures.reports, authenticate, createOptionalAuthMiddleware(fixtures.users, () => secret), undefined, abuse));
-  app.use("/api/feeding-stations", createFeedingStationRouter(fixtures.stations, fixtures.logs, authenticate, undefined, abuse));
-  app.use("/api/media", createMediaRouter({ content: async () => { fixtures.calls.content++; return "https://synthetic.invalid/image"; } }, authenticate, abuse));
+  app.use("/api/feeding-stations", createFeedingStationRouter(fixtures.privacy, authenticate, undefined, abuse));
+  const strictOptional = (req, res, next) => req.headers.authorization === undefined ? next() : authenticate(req, res, next);
+  app.use("/api/media", createMediaRouter({ content: async () => { fixtures.calls.content++; return "https://synthetic.invalid/image"; } }, authenticate, strictOptional, abuse));
   app.use(requestErrorHandler);
   return app;
 }
@@ -161,8 +170,10 @@ test("public lists, authenticated statistics and signed reads are bounded before
   assert.equal((await request("GET", "/api/media/synthetic/content")).status, 302);
   const lookups = f.calls.lookup;
   limited(await request("GET", "/api/reports/stats", undefined, jwt.sign({ id: userA }, secret)));
-  limited(await request("GET", "/api/feeding-stations"));
-  assert.equal(f.calls.read, 1); assert.equal(f.calls.content, 1); assert.equal(f.calls.lookup, lookups);
+  assert.equal(f.calls.lookup, lookups, "Report read admission precedes required authentication");
+  limited(await request("GET", "/api/feeding-stations", undefined, jwt.sign({ id: userA }, secret)));
+  assert.equal(f.calls.read, 1); assert.equal(f.calls.content, 1);
+  assert.equal(f.calls.lookup, lookups + 1, "Station authentication remains mandatory before its read budget; rejected work never reaches the protected store");
   time.advance(60_000);
   assert.equal((await request("GET", "/api/reports/stats", undefined, jwt.sign({ id: userA }, secret))).status, 200);
 });

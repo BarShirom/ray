@@ -1,4 +1,4 @@
-import { MediaImage } from "../media/Media";
+import { StationMediaImage } from "../media/StationMediaImage";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
@@ -84,7 +84,7 @@ export default function FeedingStationDetails({ station, onClose }: {
         <button type="button" className="btn" onClick={closeDetails} aria-label={t("stations.closeDetails")}>{t("stations.close")}</button>
       </header>
       <div className="station-details-body">
-        {station.image && <MediaImage className="station-details-image" src={station.image} alt={station.name} />}
+        {station.image && <StationMediaImage className="station-details-image" src={station.image} alt={station.name} />}
         <p className="station-details-counts">
           <span>{t("stations.catsCount", { number: formatNumber(station.estimatedCats) })}</span>
           <span>{t("stations.kittensCount", { number: formatNumber(station.estimatedKittens) })}</span>

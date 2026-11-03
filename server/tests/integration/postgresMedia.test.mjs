@@ -19,20 +19,20 @@ test('S3 media HTTP/service integration with real disposable PostgreSQL and stor
   const owned=await openTestDatabase(t); await applyLocalMigrations(owned,'test',owned.url);
   const connection=createPostgres({connectionString:owned.url,max:8,application_name:'ray-media-test'});
   t.after(()=>connection.close());
-  const objects=new Map(),writes=[],deletes=[];let failOutput=false, failSign=false, pauseSource, failDelete=false, checkTransactions=true;
+  const objects=new Map(),writes=[],deletes=[];let failOutput=false, failSign=false, pauseSource, pauseRead, readEntered, failDelete=false, checkTransactions=true, readCalls=0;
   async function outsideTransaction(){if(!checkTransactions)return;const r=await owned.pool.query("SELECT count(*)::int AS count FROM pg_stat_activity WHERE application_name='ray-media-test' AND state='idle in transaction'");assert.equal(r.rows[0].count,0,'No SQL transaction held during storage operations');}
   const storage={
     async signUpload(key){await outsideTransaction();if(failSign) throw new Error('PRIVATE-SDK-DETAIL');return {url:'https://synthetic.invalid/'+key,headers:{}};},
     async source(key,expected){await outsideTransaction();if(pauseSource) await pauseSource;const data=objects.get(key);if(!data) throw new MediaError(409,'Upload missing');if(data.length!==expected.byteLength||digest(data)!==expected.checksum) throw new MediaError(422,'Checksum mismatch');return data;},
     async putOutput(key,data){await outsideTransaction();if(failOutput) throw new Error('PRIVATE-SDK-DETAIL');objects.set(key,data);writes.push(key);},
-    async signRead(key){await outsideTransaction();return 'https://synthetic.invalid/'+key+'?read='+randomUUID();},
+    async signRead(key){await outsideTransaction();readCalls++;readEntered?.();if(pauseRead)await pauseRead;return 'https://synthetic.invalid/'+key+'?read='+randomUUID();},
     async deleteObject(key){await outsideTransaction();if(failDelete && key.includes("/ready/"))throw new Error("PRIVATE-DELETE-DETAIL");deletes.push(key);objects.delete(key);},
   };
   const service=createMediaService(connection.db,storage);
   const listener=await new Promise(resolve=>{const s=createPreviewApp(connection,secret,storage).listen(0,'127.0.0.1',()=>resolve(s));});
   t.after(()=>new Promise(resolve=>{listener.close(resolve);listener.closeAllConnections();}));
   const base='http://127.0.0.1:'+listener.address().port;
-  const req=async(method,path,body,token)=>{const r=await fetch(base+path,{method,redirect:'manual',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});const text=await r.text();return {status:r.status,headers:r.headers,body:r.headers.get('content-type')?.includes('json')?JSON.parse(text):text};};
+  const req=async(method,path,body,token)=>{const r=await fetch(base+path,{method,redirect:'manual',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});const text=await r.text();return {status:r.status,headers:r.headers,body:text&&r.headers.get('content-type')?.includes('json')?JSON.parse(text):text};};
   const user=async()=>{const r=await req('POST','/api/auth/register',{firstName:'Synthetic',lastName:'Media',email:randomUUID()+'@example.invalid',password:'SyntheticMedia123!'});assert.equal(r.status,201);return {token:r.body.token,id:jwt.verify(r.body.token,secret).id??jwt.verify(r.body.token,secret)._id};};
   const row=async id=>(await connection.pool.query('SELECT * FROM media_assets WHERE id=$1',[id])).rows[0];
   const issue=async(u,purpose='station')=>{const r=await req('POST','/api/media/uploads',{...intent,purpose},u.token);assert.equal(r.status,201,JSON.stringify(r.body));objects.set((await row(r.body.assetId)).source_key,png);return r.body.assetId;};
@@ -54,22 +54,41 @@ test('S3 media HTTP/service integration with real disposable PostgreSQL and stor
   });
   await t.test('owner-only completion/attachment and private pending/ready unattached objects',async()=>{
     const id=await issue(a);
+    const assertUnattachedDenials=async state=>{
+      const before=readCalls;
+      for(const [viewer,audience] of [[a,'owner'],[b,'unrelated user']]) {
+        for(const method of ['GET','HEAD','POST']) {
+          const path=`/api/media/${id}/${method==='POST'?'read-url':'content'}`;
+          const denied=await req(method,path,method==='POST'?{}:undefined,viewer.token);
+          const label=`${state} unattached ${audience} ${method}`;
+          assert.equal(denied.status,404,label);
+          assert.equal(denied.headers.get('location'),null,label);
+          assert.equal(denied.headers.get('cache-control'),'private, no-store',label);
+          assert.equal(denied.headers.get('etag'),null,label);
+          if(method==='HEAD')assert.equal(denied.body,'',label);
+          else assert.deepEqual(denied.body,{message:'Image not found'},label);
+          assert.equal(readCalls,before,`${label} never calls signer`);
+        }
+      }
+    };
     assert.equal((await req('GET',`/api/media/${id}/content`)).status,404);
+    await assertUnattachedDenials('pending');
     assert.equal((await req('POST',`/api/media/${id}/complete`,{},b.token)).status,403);
     assert.equal((await req('POST','/api/feeding-stations',{...station,imageAssetId:id},a.token)).status,409);
     await complete(a,id);
     assert.equal((await req('GET',`/api/media/${id}/content`)).status,404);
+    await assertUnattachedDenials('ready');
     assert.equal((await req('POST','/api/feeding-stations',{...station,imageAssetId:id},b.token)).status,403);
     assert.equal((await req('POST','/api/reports',{...report,mediaAssetIds:[id]},a.token)).status,409);
     const before=writes.length;await complete(a,id);assert.equal(writes.length,before);
     const made=await req('POST','/api/feeding-stations',{...station,imageAssetId:id},a.token);assert.equal(made.status,201,JSON.stringify(made.body));
     assert.equal(made.body.image,`http://127.0.0.1:4001/api/media/${id}/content`);attached=id;
-    const read=await req('GET',`/api/media/${id}/content`);assert.equal(read.status,302);assert.match(read.headers.get('location'),/ready/);assert.equal(read.headers.get('cache-control'),'no-store');assert.equal(read.headers.get('referrer-policy'),'no-referrer');
-    const again=await req('GET',`/api/media/${id}/content`);assert.notEqual(again.headers.get('location'),read.headers.get('location'));
+    const read=await req('GET',`/api/media/${id}/content`,undefined,a.token);assert.equal(read.status,302);assert.match(read.headers.get('location'),/ready/);assert.equal(read.headers.get('cache-control'),'private, no-store');assert.equal(read.headers.get('referrer-policy'),'no-referrer');
+    const again=await req('GET',`/api/media/${id}/content`,undefined,a.token);assert.notEqual(again.headers.get('location'),read.headers.get('location'));
     await connection.pool.query('UPDATE feeding_stations SET active=false WHERE public_id=$1',[made.body._id]);
-    assert.equal((await req('GET',`/api/media/${id}/content`)).status,302);
-    assert.equal((await req('GET','/api/feeding-stations/'+made.body._id)).body.image,made.body.image);
-    assert.equal(await createMediaService(connection.db,storage).content(id).then(()=>true),true,'new service instance resolves persisted relationship');
+    assert.equal((await req('GET',`/api/media/${id}/content`,undefined,a.token)).status,302);
+    assert.equal((await req('GET','/api/feeding-stations/'+made.body._id,undefined,a.token)).body.image,made.body.image);
+    assert.equal(await createMediaService(connection.db,storage).content(id,{_id:a.id}).then(()=>true),true,'new service instance resolves persisted relationship');
   });
   await t.test('ordered report images and fresh public read resolution',async()=>{
     const u=await user(),ids=[];for(let i=0;i<3;i++){const id=await issue(u,'report');await complete(u,id);ids.push(id);}
@@ -80,6 +99,119 @@ test('S3 media HTTP/service integration with real disposable PostgreSQL and stor
     const stored=await connection.pool.query('SELECT id,position FROM media_assets WHERE report_id=(SELECT id FROM reports WHERE public_id=$1) ORDER BY position',[made.body._id]);assert.deepEqual(stored.rows.map(r=>r.id),ids);
     assert.deepEqual((await req('GET','/api/reports')).body.find(r=>r._id===made.body._id).media,made.body.media);
     for(const id of ids) assert.equal((await req('GET',`/api/media/${id}/content`)).status,302);
+  });
+  await t.test('station media has non-enumerating parent policy, strict identity and station-only read capabilities',async()=>{
+    const before=readCalls;
+    const hidden=await req('GET',`/api/media/${attached}/content`);
+    const missing=await req('GET',`/api/media/${randomUUID()}/content`);
+    assert.equal(hidden.status,404);assert.deepEqual(hidden.body,missing.body);
+    assert.equal((await req('GET',`/api/media/${attached}/content`,undefined,b.token)).status,404);
+    const guestHead=await req('HEAD',`/api/media/${attached}/content`);
+    assert.equal(guestHead.status,404);assert.equal(guestHead.body,'');assert.equal(guestHead.headers.get('location'),null);
+    assert.equal((await req('POST',`/api/media/${attached}/read-url`,{})).status,401);
+    assert.equal((await req('GET',`/api/media/${attached}/content`,undefined,'invalid')).status,401);
+    assert.equal(readCalls,before,'denied initial access never calls signer');
+    const head=await req('HEAD',`/api/media/${attached}/content`,undefined,a.token);
+    assert.equal(head.status,302);assert.equal(head.body,'');assert.match(head.headers.get('location'),/ready/);
+    assert.equal(head.headers.get('cache-control'),'private, no-store');assert.equal(head.headers.get('etag'),null);
+    assert.equal(readCalls,before+1,'authorized attached HEAD signs once');
+    const permitted=await req('POST',`/api/media/${attached}/read-url`,{},a.token);
+    assert.equal(permitted.status,200);assert.deepEqual(Object.keys(permitted.body).sort(),['expiresIn','url']);
+    assert.equal(permitted.body.expiresIn,60);assert.match(permitted.body.url,/^https:\/\/synthetic\.invalid\//);
+    assert.equal(permitted.headers.get('cache-control'),'private, no-store');assert.equal(permitted.headers.get('etag'),null);
+    for(const r of [hidden,missing,guestHead,await req('GET',`/api/media/${attached}/content`,undefined,'invalid')]) {
+      assert.equal(r.headers.get('cache-control'),'private, no-store');assert.equal(r.headers.get('referrer-policy'),'no-referrer');assert.equal(r.headers.get('etag'),null);
+    }
+    assert.equal((await req('POST',`/api/media/${attached}/read-url`,{stationId:'invented'},a.token)).status,400);
+    assert.equal((await req('POST',`/api/media/${attached}/read-url?parent=x`,{},a.token)).status,400);
+    assert.equal((await req('GET',`/api/media/${attached}/content?retry=1`,undefined,a.token)).status,302);
+    assert.equal((await req('GET',`/api/media/${attached}/content?token=x`,undefined,a.token)).status,400);
+    const reportAsset=(await connection.pool.query('SELECT id FROM media_assets WHERE report_id IS NOT NULL LIMIT 1')).rows[0].id;
+    assert.equal((await req('POST',`/api/media/${reportAsset}/read-url`,{},a.token)).status,404);
+    assert.equal((await req('GET',`/api/media/${reportAsset}/content`)).status,302,'independent public Report image policy remains');
+    assert.equal((await req('GET',`/api/media/${reportAsset}/content`,undefined,'invalid')).status,401,'supplied invalid identity never becomes guest access');
+    const conditional=await fetch(base+`/api/media/${attached}/content`,{redirect:'manual',headers:{Authorization:'Bearer '+a.token,'If-None-Match':'*','If-Modified-Since':new Date().toUTCString()}});
+    assert.equal(conditional.status,302);assert.equal(conditional.headers.get('etag'),null);
+  });
+  await t.test('regular viewers and explicit sensitive grantees can read; copies and revocations never bypass the authoritative parent',async()=>{
+    const parent=(await connection.pool.query('SELECT id,created_by FROM feeding_stations WHERE id=(SELECT station_id FROM media_assets WHERE id=$1)',[attached])).rows[0];
+    const recipient=(await connection.pool.query('SELECT id FROM users WHERE public_id=$1',[b.id])).rows[0].id;
+    await connection.pool.query('INSERT INTO station_access_grants(station_id,user_id,granted_by,granted_at) VALUES($1,$2,$3,clock_timestamp())',[parent.id,recipient,parent.created_by]);
+    const issued=await req('POST',`/api/media/${attached}/read-url`,{},b.token);assert.equal(issued.status,200);
+    // A secondary server-generated report reference still resolves this asset's
+    // station FK. The Report domain's public read policy cannot override it.
+    await connection.pool.query('UPDATE reports SET media=ARRAY[$1]::text[] WHERE id=(SELECT report_id FROM media_assets WHERE report_id IS NOT NULL LIMIT 1)',[`http://127.0.0.1:4001/api/media/${attached}/content`]);
+    assert.equal((await req('GET',`/api/media/${attached}/content`)).status,404);
+    // This fixture update uses one atomic station-first SQL statement; later
+    // management endpoints must use the same station-lock order in a live tx.
+    await connection.pool.query('WITH locked AS (SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE) UPDATE station_access_grants SET revoked_at=GREATEST(granted_at,clock_timestamp()) WHERE station_id IN(SELECT id FROM locked) AND user_id=$2',[parent.id,recipient]);
+    const before=readCalls;assert.equal((await req('POST',`/api/media/${attached}/read-url`,{},b.token)).status,404);assert.equal(readCalls,before);
+    assert.match(issued.body.url,/read=/,'revocation does not purport to recall an already issued mock capability');
+    await connection.pool.query("UPDATE feeding_stations SET visibility='regular' WHERE id=$1",[parent.id]);
+    assert.equal((await req('POST',`/api/media/${attached}/read-url`,{},b.token)).status,200);
+    assert.equal((await req('GET',`/api/media/${attached}/content`)).status,404,'regular is authenticated, not public');
+    await connection.pool.query("UPDATE feeding_stations SET visibility='sensitive' WHERE id=$1",[parent.id]);
+  });
+  await t.test('paused signing and a real final shared-lock wait observe a committed revocation before URL release',async()=>{
+    const parent=(await connection.pool.query('SELECT id,created_by FROM feeding_stations WHERE id=(SELECT station_id FROM media_assets WHERE id=$1)',[attached])).rows[0];
+    const recipient=(await connection.pool.query('SELECT id FROM users WHERE public_id=$1',[b.id])).rows[0].id;
+    await connection.pool.query('UPDATE station_access_grants SET granted_at=clock_timestamp(),revoked_at=NULL WHERE station_id=$1 AND user_id=$2',[parent.id,recipient]);
+    let releaseSign;pauseRead=new Promise(resolve=>{releaseSign=resolve;});const entered=new Promise(resolve=>{readEntered=resolve;});
+    const before=readCalls,pending=req('POST',`/api/media/${attached}/read-url`,{},b.token);
+    await entered;
+    const blocker=await connection.pool.connect();checkTransactions=false;
+    try {
+      await blocker.query('BEGIN');const pid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      await blocker.query('SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE',[parent.id]);
+      await blocker.query('UPDATE station_access_grants SET revoked_at=GREATEST(granted_at,clock_timestamp()) WHERE station_id=$1 AND user_id=$2',[parent.id,recipient]);
+      releaseSign();pauseRead=undefined;readEntered=undefined;
+      const deadline=Date.now()+8000;let observed=false;
+      do {
+        const result=await owned.pool.query("SELECT pid FROM pg_stat_activity WHERE application_name='ray-media-test' AND wait_event_type='Lock' AND $1::integer=ANY(pg_blocking_pids(pid)) AND position('feeding_stations' in query)>0",[pid]);
+        if(result.rows.length){observed=true;break;}await new Promise(resolve=>setTimeout(resolve,15));
+      }while(Date.now()<deadline);
+      assert.equal(observed,true,'independent PostgreSQL connection blocks on final station shared lock');
+      await blocker.query('COMMIT');
+      const rejected=await pending;assert.equal(rejected.status,404);assert.deepEqual(rejected.body,{message:'Image not found'});
+      assert.equal(readCalls,before+1,'signed result is discarded, never returned or retried');
+      assert.equal(rejected.headers.get('location'),null);
+    }finally{releaseSign();pauseRead=undefined;readEntered=undefined;await blocker.query('ROLLBACK');blocker.release();checkTransactions=true;}
+  });
+  await t.test('visibility change during signing and expired signing receipts discard the result without extending TTL',async()=>{
+    const parent=(await connection.pool.query('SELECT station_id FROM media_assets WHERE id=$1',[attached])).rows[0].station_id;
+    await connection.pool.query("UPDATE feeding_stations SET visibility='regular' WHERE id=$1",[parent]);
+    let releaseSign;pauseRead=new Promise(resolve=>{releaseSign=resolve;});const entered=new Promise(resolve=>{readEntered=resolve;});
+    const pending=req('POST',`/api/media/${attached}/read-url`,{},b.token);await entered;
+    await connection.pool.query("UPDATE feeding_stations SET visibility='sensitive' WHERE id=$1",[parent]);releaseSign();pauseRead=undefined;readEntered=undefined;
+    const denied=await pending;assert.equal(denied.status,404);assert.equal(denied.body.url,undefined);
+    let now=100000;const expiring=createMediaService(connection.db,{...storage,async signRead(){now+=60000;return 'https://synthetic.invalid/expired';}},'dev/',Date.now,()=>now);
+    await assert.rejects(expiring.readUrl(attached,{_id:a.id}),error=>error instanceof MediaError&&error.status===409&&!error.message.includes('https://'));
+  });
+  await t.test('media-enabled station creation preserves the JSON and feeding audience/author-only DTO boundary',async()=>{
+    const owner=await user(),grantee=await user(),unrelated=await user(),wrongGrantor=await user();
+    const image=await issue(owner);await complete(owner,image);
+    const sensitive=await req('POST','/api/feeding-stations',{...station,imageAssetId:image},owner.token);
+    const regular=await req('POST','/api/feeding-stations',{...station,visibility:'regular'},owner.token);
+    assert.equal(sensitive.status,201);assert.equal(regular.status,201);assert.equal(sensitive.body.visibility,'sensitive');
+    const rawParent=(await connection.pool.query('SELECT id,created_by FROM feeding_stations WHERE public_id=$1',[sensitive.body._id])).rows[0];
+    const rawUsers=(await connection.pool.query('SELECT id,public_id FROM users WHERE public_id=ANY($1::text[])',[[grantee.id,unrelated.id,wrongGrantor.id]])).rows;
+    const uuid=publicId=>rawUsers.find(row=>row.public_id===publicId).id;
+    await connection.pool.query('INSERT INTO station_access_grants(station_id,user_id,granted_by,granted_at) VALUES($1,$2,$3,clock_timestamp()),($1,$4,$5,clock_timestamp())',[rawParent.id,uuid(grantee.id),rawParent.created_by,uuid(unrelated.id),uuid(wrongGrantor.id)]);
+    for(const path of ['/api/feeding-stations','/api/feeding-stations/'+sensitive.body._id,'/api/feeding-stations/'+sensitive.body._id+'/feedings','/api/feeding-stations/'+sensitive.body._id+'/feeding-summary'])assert.equal((await req('GET',path)).status,401);
+    for(const viewer of [owner,grantee]) {
+      const detail=await req('GET','/api/feeding-stations/'+sensitive.body._id,undefined,viewer.token);assert.equal(detail.status,200);assert.ok(detail.body.image);
+      assert.equal(detail.body.createdBy,undefined);assert.equal(detail.body.createdAt,undefined);
+      assert.equal((await req('POST','/api/feeding-stations/'+sensitive.body._id+'/feedings',{food:true,water:false,note:'SYNTHETIC private note'},viewer.token)).status,201);
+    }
+    assert.equal((await req('GET','/api/feeding-stations/'+sensitive.body._id,undefined,unrelated.token)).status,404,'wrong grantor does not convey authority');
+    assert.equal((await req('POST','/api/feeding-stations/'+sensitive.body._id+'/feedings',{food:true,water:false},unrelated.token)).status,404);
+    const regularFeed=await req('POST','/api/feeding-stations/'+regular.body._id+'/feedings',{food:true,water:true},unrelated.token);assert.equal(regularFeed.status,201);
+    const own=await req('GET','/api/feeding-stations/'+sensitive.body._id+'/feedings',undefined,grantee.token);assert.equal(own.status,200);assert.equal(own.body.length,1);assert.equal(own.body[0].userId,undefined);assert.equal(own.body[0].__v,undefined);
+    const summary=await req('GET','/api/feeding-stations/'+sensitive.body._id+'/feeding-summary',undefined,grantee.token);assert.deepEqual(Object.keys(summary.body).sort(),['food','water']);assert.deepEqual(Object.keys(summary.body.food),['recency']);
+    await connection.pool.query('WITH locked AS(SELECT id FROM feeding_stations WHERE id=$1 FOR UPDATE) UPDATE station_access_grants SET revoked_at=GREATEST(granted_at,clock_timestamp()) WHERE station_id IN(SELECT id FROM locked) AND user_id=$2',[rawParent.id,uuid(grantee.id)]);
+    assert.equal((await req('GET','/api/feeding-stations/'+sensitive.body._id+'/feedings',undefined,grantee.token)).status,404);
+    assert.equal((await req('POST',`/api/media/${image}/read-url`,{},grantee.token)).status,404);
+    const preserved=await connection.pool.query('SELECT count(*)::int AS n FROM feeding_logs WHERE station_id=$1',[rawParent.id]);assert.equal(preserved.rows[0].n,2);
   });
   await t.test('concurrent duplicate attachment has one winner and no extra parent',async()=>{
     const u=await user(),id=await issue(u);await complete(u,id);
@@ -155,6 +287,6 @@ test('S3 media HTTP/service integration with real disposable PostgreSQL and stor
     const before=deletes.length,candidates=await service.cleanup();assert.equal(deletes.length,before);assert.ok(candidates.some(r=>r.assetId===id));for(const excluded of [attached,valid,processing])assert.ok(!candidates.some(r=>r.assetId===excluded));
     failDelete=true;await assert.rejects(service.cleanup([id]),e=>e.status===503&&!e.message.includes('PRIVATE'));failDelete=false;assert.equal((await row(id)).state,'deleting');assert.equal(deletes.length,before+1);
     assert.deepEqual((await service.cleanup([id,attached,valid,processing])).map(r=>r.assetId),[id]);assert.equal(deletes.length,before+3);assert.equal((await row(id)).state,'deleted');
-    assert.deepEqual(await service.cleanup([id]),[]);assert.equal(deletes.length,before+3);assert.equal((await req('GET',`/api/media/${attached}/content`)).status,302);
+    assert.deepEqual(await service.cleanup([id]),[]);assert.equal(deletes.length,before+3);assert.equal((await req('GET',`/api/media/${attached}/content`,undefined,a.token)).status,302);
   });
 });

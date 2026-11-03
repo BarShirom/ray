@@ -1,85 +1,33 @@
 import type { RequestHandler } from "express";
-import { mongoFeedingLogStore } from "../feedingLogs/mongoFeedingLogStore.js";
-import { mongoFeedingStationStore } from "../feedingStations/mongoFeedingStationStore.js";
-import { serializeFeedingLog } from "../serializers/feedingLogResponse.js";
-import { isPublicId } from "../utils/publicId.js";
-import type { FeedingStationStore } from "../feedingStations/feedingStationStore.js";
-import type { FeedingLogStore } from "../feedingLogs/feedingLogStore.js";
-import { FeedingStationMissingError, FeedingStationInactiveError } from "../feedingLogs/feedingPersistenceErrors.js";
+import type { StationPrivacyStore } from "../feedingStations/stationPrivacyStore.js";
+import { noQueryOrReject, pageOrReject, privacyError, stationIdOrReject } from "../feedingStations/stationPrivacyHttp.js";
 
-export function createFeedingLogHandlers(stations: FeedingStationStore, logs: FeedingLogStore) {
+export function createFeedingLogHandlers(stations: StationPrivacyStore) {
   const createFeedingLog: RequestHandler = async (req, res, next) => {
-    const { stationId } = req.params;
-    if (!isPublicId(stationId)) {
-      res.status(400).json({
-        message: "Validation failed",
-        errors: [{ field: "stationId", message: "Invalid feeding station ID" }],
-      });
-      return;
-    }
-
+    const stationId = stationIdOrReject(req.params.stationId, "stationId", res);
+    if (!stationId || !noQueryOrReject(req, res)) return;
     try {
-      const station = await stations.findByPublicId(stationId);
-      if (!station) {
-        res.status(404).json({ message: "Feeding station not found" });
-        return;
-      }
-      if (!station.active) {
-        res.status(409).json({ message: "Feeding station is inactive" });
-        return;
-      }
-
       const { fedAt, period, food, water, note } = req.body;
-      const log = await logs.create({
-        stationId,
-        userId: req.user._id,
-        fedAt,
-        period,
-        food,
-        water,
-        note,
-      });
-
-      res.status(201).json(serializeFeedingLog(log));
-    } catch (err) {
-      if (err instanceof FeedingStationMissingError) {
-        res.status(404).json({ message: "Feeding station not found" });
-        return;
-      }
-      if (err instanceof FeedingStationInactiveError) {
-        res.status(409).json({ message: "Feeding station is inactive" });
-        return;
-      }
-      next(err);
-    }
+      const log = await stations.createFeeding(req.user, stationId, { fedAt, period, food, water, note });
+      res.status(201).json(log);
+    } catch (error) { if (!privacyError(error, res)) next(error); }
   };
-
   const getLogsForStation: RequestHandler = async (req, res, next) => {
-    const { stationId } = req.params;
-    if (!isPublicId(stationId)) {
-      res.status(400).json({
-        message: "Validation failed",
-        errors: [{ field: "stationId", message: "Invalid feeding station ID" }],
-      });
-      return;
-    }
-
+    const stationId = stationIdOrReject(req.params.stationId, "stationId", res);
+    if (!stationId) return;
+    const page = pageOrReject(req, res, "logs");
+    if (!page) return;
     try {
-      const station = await stations.findByPublicId(stationId);
-      if (!station) {
-        res.status(404).json({ message: "Feeding station not found" });
-        return;
-      }
-
-      const records = await logs.listForStation(stationId);
-
-      res.json(records.map(serializeFeedingLog));
-    } catch (err) {
-      next(err);
-    }
+      const result = await stations.ownLogs(req.user, stationId, page);
+      if (result.nextCursor) res.set("X-Next-Cursor", result.nextCursor);
+      res.json(result.items);
+    } catch (error) { if (!privacyError(error, res)) next(error); }
   };
-
-  return { createFeedingLog, getLogsForStation };
+  const getFeedingSummary: RequestHandler = async (req, res, next) => {
+    const stationId = stationIdOrReject(req.params.stationId, "stationId", res);
+    if (!stationId || !noQueryOrReject(req, res)) return;
+    try { res.json(await stations.summary(req.user, stationId)); }
+    catch (error) { if (!privacyError(error, res)) next(error); }
+  };
+  return { createFeedingLog, getLogsForStation, getFeedingSummary };
 }
-
-export const { createFeedingLog, getLogsForStation } = createFeedingLogHandlers(mongoFeedingStationStore, mongoFeedingLogStore);

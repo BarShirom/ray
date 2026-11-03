@@ -84,7 +84,49 @@ export function stubReportDocument(t, doc, users = [populatedUser]) {
   return doc;
 }
 
-export async function startApp(t, { user = userFields } = {}) {
+// Offline endpoint fixture only. Real PostgreSQL policy/projection evidence lives
+// in integration/postgresStationPrivacy.test.mjs, not in this stub.
+export function privacyFixture() {
+  const state = { calls: [], detail: { _id: ids.station, name: "Garden cats", location,
+    estimatedCats: 0, estimatedKittens: 0, visibility: "sensitive",
+    permissions: { canManage: true, canFeed: true }, active: true }, logs: [], failure: null };
+  const call = (operation, identity, ...args) => {
+    state.calls.push({ operation, identity, args });
+    if (state.failure) throw state.failure;
+  };
+  const store = {
+    async list(identity, paging) { call("list", identity, paging); return { items: state.detail ? [state.detail] : [] }; },
+    async detail(identity, id) { call("detail", identity, id); return state.detail; },
+    async create(identity, input) {
+      call("create", identity, input);
+      return { ...state.detail, ...input, _id: ids.station, visibility: input.visibility ?? "sensitive" };
+    },
+    async ownLogs(identity, id, paging) {
+      call("ownLogs", identity, id, paging);
+      if (!state.detail) { const { FeedingStationMissingError } = await import("../../dist/feedingLogs/feedingPersistenceErrors.js"); throw new FeedingStationMissingError(); }
+      return { items: state.logs };
+    },
+    async summary(identity, id) {
+      call("summary", identity, id);
+      if (!state.detail) { const { FeedingStationMissingError } = await import("../../dist/feedingLogs/feedingPersistenceErrors.js"); throw new FeedingStationMissingError(); }
+      return { food: { recency: "no-record" }, water: { recency: "no-record" } };
+    },
+    async createFeeding(identity, id, input) {
+      call("createFeeding", identity, id, input);
+      const { FeedingStationMissingError, FeedingStationInactiveError } = await import("../../dist/feedingLogs/feedingPersistenceErrors.js");
+      if (!state.detail) throw new FeedingStationMissingError();
+      if (state.detail.active !== true) throw new FeedingStationInactiveError();
+      return { _id: "400000000000000000000001", stationId: id.toLowerCase(),
+        food: input.food ?? true, water: input.water ?? false,
+        fedAt: input.fedAt ?? timestamp, createdAt: timestamp, updatedAt: timestamp,
+        ...(input.period === undefined ? {} : { period: input.period }),
+        ...(input.note === undefined ? {} : { note: input.note }) };
+    },
+  };
+  return { state, store };
+}
+
+export async function startApp(t, { user = userFields, stationStore = privacyFixture().store } = {}) {
   const previousSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = "ray-contract-tests-only-not-a-production-secret";
   t.after(() => {
@@ -109,16 +151,17 @@ export async function startApp(t, { user = userFields } = {}) {
       return query;
     } };
   });
-  const [{ default: auth }, { default: reports }, { default: stations }] = await Promise.all([
+  const [{ default: auth }, { default: reports }, { createFeedingStationRouter }, { authMiddleware }] = await Promise.all([
     import("../../dist/routes/authRoutes.js"),
     import("../../dist/routes/reportRoutes.js"),
     import("../../dist/routes/feedingStationRoutes.js"),
+    import("../../dist/middleware/authMiddleware.js"),
   ]);
   const app = express();
   app.use(express.json());
   app.use("/api/auth", auth);
   app.use("/api/reports", reports);
-  app.use("/api/feeding-stations", stations);
+  app.use("/api/feeding-stations", createFeedingStationRouter(stationStore, authMiddleware));
   // Same JSON shape as server.ts, without importing startup or uploads.
   app.use((err, _req, res, _next) => res.status(500).json({
     error: err?.name || "ServerError", message: err?.message || "Internal Server Error",
@@ -133,8 +176,9 @@ export async function startApp(t, { user = userFields } = {}) {
       method, headers: { "Content-Type": "application/json", ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    assert.match(response.headers.get("content-type"), /application\/json/);
-    return { status: response.status, body: await response.json() };
+    const text = await response.text();
+    if (text) assert.match(response.headers.get("content-type"), /application\/json/);
+    return { status: response.status, body: text ? JSON.parse(text) : null };
   }
   return { request, token, invalidToken };
 }

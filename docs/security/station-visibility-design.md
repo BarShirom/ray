@@ -2,7 +2,18 @@
 
 Date: **2026-11-03, Asia/Jerusalem**. Status: **nine product decisions APPROVED;
 engineering design revised after independent critical review; SEC.1B-3B.0
-implementation contracts specified for review; not implemented**.
+contracts retained; SEC.1B-3B.2 implementation evidence recorded separately**.
+
+**SEC.1B-3B.2 decision update, 2026-11-03:** the product owner additionally
+approved authenticated viewing/feeding of active regular stations (no administration),
+and the section 16.3 feeding contract: six shared recency buckets, separate
+author-only logs, and current parent access for station-scoped own history (404
+after sensitive access is revoked; stored logs preserved). C-03/C-04 below record
+that scope. The [endpoint implementation report](sec-1b-3b-2-endpoint-privacy.md)
+records current enforcement and verification separately. Earlier source inventories,
+preflights and NOT_IMPLEMENTED/NOT_TESTED statements in this design describe their
+named historical milestones; they are not a current implementation inventory.
+Unspecified invitation, retention, client and operating decisions remain open.
 Intended release scope: **Release Quality Gate level A, documentation only**.
 The recommended next milestone is SEC.1B-3B, implemented in the small batches below.
 This document does not clear a real-user pilot or production release.
@@ -110,7 +121,8 @@ they are the creator or explicitly granted access to that station.
 5. **Shared feeding information is minimized to useful coordination summaries.**
    Other feeders' identities, precise timestamps and personal notes are not
    automatically disclosed. Authors retain appropriate access to their own logs;
-   exact response fields and access after parent authorization loss remain open.
+   section 16.3 feeding fields and access after parent authorization loss were
+   additionally approved in SEC.1B-3B.2, as recorded above and in C-03.
 6. **Recipients use private, purpose-specific invitation references.** No public
    user directory or email disclosure. These grant-recipient references identify an
    intended recipient; possession alone does not self-authorize station access.
@@ -150,7 +162,7 @@ Line references identify useful entry points, not runtime verification.
 | Station persistence | [PG store, line 32](../../server/feedingStations/postgresFeedingStationStore.ts#L32) joins creator public IDs, filters activity for lists and only ID for detail. Creation uses the supplied trusted creator reference. | Viewer-aware SQL queries; no fetch-all/filter-in-React or unrestricted store fallback. |
 | Creation/validation | [Controller, line 10](../../server/controllers/feedingStationController.ts#L10) selects fields and derives `createdBy` from `req.user._id`; [schema](../../server/validation/feedingStationSchemas.ts) has no visibility. [Media station schema](../../server/media/validation.ts) is a distinct creation variant. | Preserve actor-derived ownership in both schemas and media wrapper; validate classification explicitly. Unknown actor/grant fields cannot acquire authority. |
 | Station response | [Serializer, line 3](../../server/serializers/feedingStationResponse.ts#L3) returns coordinates, notes, image reference, counts, creator public ID, activity, exact creation/update times and optional `__v`. | Use audience-specific allowlists. Remove creator linkage and unnecessary metadata from discovery. A stable image URL is not permission. |
-| Feeding history | [Controller, line 57](../../server/controllers/feedingLogController.ts#L57) reads all logs for any existing station, including inactive ones. [Serializer](../../server/serializers/feedingLogResponse.ts) exposes feeder `userId`, exact `fedAt`, period, food/water, note, event/station IDs, creation/update times and optional `__v`. It does not populate feeder names/email, but IDs can be joined with named public reports. | Protect history, summaries and their metadata by the same parent policy; minimize identity/routine exposure. |
+| Feeding history | [Controller (historical baseline line 57)](../../server/controllers/feedingLogController.ts) read all logs for any existing station, including inactive ones at that baseline. [Serializer](../../server/serializers/feedingLogResponse.ts) exposed feeder `userId`, exact `fedAt`, period, food/water, note, event/station IDs, creation/update times and optional `__v`. It did not populate feeder names/email, but IDs could be joined with named public reports. | Protect history, summaries and their metadata by the same parent policy; minimize identity/routine exposure. |
 | Feeding writes | [Controller, line 21](../../server/controllers/feedingLogController.ts#L21) checks only station existence/activity. [PG log store, line 29](../../server/feedingLogs/postgresFeedingLogStore.ts#L29) locks station `FOR SHARE`, rechecks active and inserts in a transaction. [Mongo log store](../../server/feedingLogs/mongoFeedingLogStore.ts) uses separate operations. [Log schema](../../server/validation/feedingLogSchemas.ts) rejects forged user/station fields. | Add authorization inside the PG transaction after lock acquisition. Preserve strict actor/path derivation and inactive rejection. Do not claim equivalent Mongo race protection. |
 | Authentication | [Required auth, line 19](../../server/middleware/authMiddleware.ts#L19) verifies a Bearer JWT and reloads stored identity. [Optional auth](../../server/middleware/optionalAuthMiddleware.ts) currently falls back to guest for invalid report credentials. | Use required auth for station JSON operations; never apply report-style guest fallback to a station operation. Account identity confers no professional trust. |
 | Client authentication race | [Auth thunks, line 82](../../client/src/features/auth/authThunks.ts#L82) and line 105 dispatch `setAuth` after awaited requests. [Auth reducer, line 49](../../client/src/features/auth/authSlice.ts#L49) also accepts every fulfillment; logout invalidates no pending authentication generation. | REV-01: fence login/register intent, dispatches, reducers, persistence, navigation and subsequent protected work, not just station responses. |
@@ -180,10 +192,9 @@ the body, query, client state or a station serializer. Define:
 
 - `canView`: authenticated, valid stored classification, and regular **or** creator
   **or** an active explicit care grant.
-- `canFeed`: proposed implementation predicate `canView` and station active. The
-  sensitive grant's view-and-feed scope is APPROVED; retaining feeding by all
-  authenticated regular viewers preserves current behavior but was not separately
-  approved by that grant decision. Record that remaining detail in section 14.
+- `canFeed`: `canView` and station active. The sensitive grant's view-and-feed
+  scope and authenticated regular-viewer feeding are APPROVED. The latter was
+  explicitly approved for SEC.1B-3B.2; it confers no administration.
   A grant never confers administration. Authorize before disclosing active state.
 - `canManage`: authenticated creator of a validly classified station. An explicit
   grant, past feeding, report assignment, company or future verified status is insufficient.
@@ -206,7 +217,7 @@ Existing ingress/read/write limits and safe 429/Retry-After remain in force.
 
 ### Actor matrix
 
-`R` = regular; `S` = sensitive. "Own history" is the recommendation in section 7.
+`R` = regular; `S` = sensitive. "Own history" follows the approved section 7/C-03 policy.
 Future professionals follow the authenticated/grantee/creator columns, with no
 additional entitlement. The matrix applies approved product principles; unspecified
 operation/field details remain design proposals, not current implementation/test results.
@@ -225,9 +236,8 @@ operation/field details remain design proposals, not current implementation/test
 | Related reports/private reporter data | Independent report policy | Independent report policy | Station ownership adds no report right | Station grant adds no report right | Revocation does not alter independent report rights | No new report/professional rights |
 
 Revocation removes the extra sensitive permission. It cannot ban an authenticated
-account from regular-station viewing or its minimized summary. Under the separately
-recommended regular-contributor policy, it would not ban their feeding action
-either; that remaining detail is not approved by PD-04. To restrict its location audience, the owner must classify
+account from regular-station viewing, its minimized summary or feeding an active
+regular station (C-04 APPROVED in SEC.1B-3B.2). To restrict its location audience, the owner must classify
 the station as sensitive. A grantee is never automatically a grant manager.
 
 ### Endpoint-by-endpoint design
@@ -487,13 +497,13 @@ Removing a name while leaving a stable user ID is not anonymization.
 | Option for authorized station viewers | Benefit | Privacy/compatibility tradeoff |
 | --- | --- | --- |
 | A: current full history, identity and notes | Maximum detail | **Excluded as an automatic audience by APPROVED PD-05:** exposes routines/free text. Owner status does not imply every feeder's consent. |
-| B: coarse food/water recency plus caller's own detailed entries | Supports avoiding repeated care while retaining personal receipts/history | **APPROVED principles:** minimized shared summary and appropriate author access, with no automatic other-person identity/timeline/note disclosure. Exact bucket widths, author DTO fields and post-revocation semantics remain PROPOSED; verify usability. |
+| B: coarse food/water recency plus caller's own detailed entries | Supports avoiding repeated care while retaining personal receipts/history | **APPROVED:** minimized shared summary and appropriate author access, with no automatic other-person identity/timeline/note disclosure. Section 16.3 bucket widths, author feeding DTO and parent-access-required post-revocation semantics additionally approved in SEC.1B-3B.2; client usability still requires verification. |
 | C: exact latest food/water time, no identity/history | More precise immediate coordination | **Not approved for 3B** as an automatic disclosure; changing PD-05 would require a separate explicit decision. Still enables live routine inference. |
 | D: detailed shared care-team history for sensitive stations | Could support a deliberately trusted team | **Not approved for 3B**; any future detailed audience/permission/notice needs separate review. An approved care grant does not include automatic feeder identity/history disclosure. |
 
-For B, new summary DTO is `{food:{recency},water:{recency}}`, with recommended
+For B, new summary DTO is `{food:{recency},water:{recency}}`, with approved
 server-computed buckets `under-2h`, `2-to-6h`, `6-to-12h`, `12-to-24h`, `older`,
-`no-record`. These bucket widths are a product recommendation to test, not a
+`no-record`. These bucket widths are approved coordination disclosure, not a
 clinical feeding schedule. Compute food from latest log with `food=true`, water
 from latest `water=true`, independently, using server time and non-future `fedAt`.
 Water-only never advances food; `food=false,water=false` advances neither. Do not
@@ -511,13 +521,14 @@ other-user counts; the current unbounded-list release finding is not closed by
 changing visibility. Owners/grantees see the same minimized shared summary and
 their own entries unless a separate detailed-team policy is approved.
 
-PROPOSED secure station-endpoint default: after sensitive access is revoked, even
-the revoked feeder's old station-specific history is unavailable there. Product
-approval of appropriate author access does not settle this edge case; resolve
-its exact scope before the affected history batch, including whether a redacted
-author-only route is required. Do not let an own-history link
+APPROVED in SEC.1B-3B.2: after sensitive access is revoked, even
+the revoked feeder's old station-specific history is unavailable there (404).
+Keep stored logs; no new redacted export is included in this milestone.
+Do not let an own-history link
 become a backdoor to sensitive coordinates/notes; future account exports need a
-separate redaction decision. Keep records rather than destructively deleting them.
+separate redaction decision. Future personal-data access/deletion processes remain
+a separate release-readiness requirement; parent revocation does not implement
+or waive them. Keep records rather than destructively deleting them.
 
 Update the current "I Fed Here" flow to show the shared summary and clearly label
 "ההיסטוריה שלי בתחנה". Preserve food/water/period/note submission and Jerusalem
@@ -528,7 +539,7 @@ have no station-note edit operation and general editing remains outside 3B.
 Summary-only ongoing coordination is now **APPROVED** for this milestone, and
 station-note editing is explicitly out of scope. Here "summary-only" means no
 shared individual-feeder timeline; it does not remove appropriate author access
-to their own logs. Exact author DTO/access semantics remain open. Any later owner-
+to their own logs. Section 16.3 author feeding DTO/access semantics are approved by C-03. Any later owner-
 notes edit is a separate feature; do not expand 3B or expose private feeding notes.
 On successful feeding, retain the confirmed own receipt and invalidate/refetch
 that station's shared summary with current-session/request fencing. A summary
@@ -539,7 +550,9 @@ recommended initial rule, after 60 seconds mark it "update required" until refre
 Do not indefinitely present an old `under-2h` bucket as current or infer an exact
 feeding time from that bucket. No background retry loop is required. Revalidation
 on dialog/tab return and explicit refresh support current coordination.
-"No recorded feeding" must never imply an animal was not fed, and "older" is not
+"No recorded feeding" means no qualifying food/water feeding was recorded in Ray;
+it must never imply an animal was not fed. This meaning was explicitly reaffirmed
+by the product owner with the section 16.3 approval. "Older" is not
 a claim of present food availability. Near-real-time polling can still infer
 activity and physical observers can identify feeders; buckets/limits reduce data
 exposure without promising anonymity or animal safety.
@@ -1041,7 +1054,8 @@ The supplied hybrid audience and professional-phone privacy are established inpu
 the architectural constraints retained in section 2 are accepted design constraints.
 The latest product-owner instruction in this conversation, **2026-11-03**, explicitly
 approves PD-01 through PD-09 below. This supersedes the previous draft's PROPOSED
-status for those principles only. They are **not implemented or runtime-verified**.
+status for those principles only. Approval itself is **not implementation or
+runtime verification**; current endpoint evidence is linked above.
 Unspecified technical, lifecycle and operating details are separately OPEN/PROPOSED;
 do not promote them through association with an approved principle. Responsible
 roles remain TBD, not assigned people or application roles.
@@ -1070,8 +1084,8 @@ the APPROVED register above is unchanged.
 | --- | --- | --- | --- |
 | Grant invitation lifecycle/reuse | OPEN / PROPOSED | Self-issued 15-minute reference, exact format/display label, forwarding/reuse limits, consent/acceptance, single-use and self-leave are proposals. Distinguish reference expiry from grant revocation: expiry does not remove an existing grant. | Product/privacy, Security, Engineering |
 | Grant state across visibility changes | OPEN / PROPOSED | Recommend retaining only active explicit grants when switching sensitive/regular; decide precise lifecycle/regrant semantics. Never infer grants from past viewers/feeders. | Product, Engineering |
-| Feeding/DTO detail | OPEN / PROPOSED | Set exact recency buckets, freshness threshold and discovery/detail/author DTO fields. Decide author access after sensitive parent revocation, preserving the approved appropriate-author-access principle without a sensitive-data backdoor. Automatic other-feeder disclosure is not an option under PD-05. | Product/privacy/care coordination, Engineering |
-| Regular-station feeding detail | OPEN / PROPOSED | Keeping current authenticated regular feeding through `canFeed` is recommended; PD-04 specifically approves sensitive-grant contribution and does not separately approve every regular viewer's write rights. No extra administration is implied. | Product/care coordination |
+| Feeding/DTO detail | APPROVED feeding contract; remaining client mechanics PROPOSED | SEC.1B-3B.2 approves section 16.3 shared buckets and author-only feeding DTOs, with parent-access-required station history and preserved rows after revocation. Client freshness presentation and discovery/detail implementation mechanics are not product approvals by implication. Automatic other-feeder disclosure remains excluded by PD-05. | Product/privacy/care coordination, Engineering |
+| Regular-station feeding detail | APPROVED | SEC.1B-3B.2 explicitly permits every authenticated account to view/feed active regular stations. Sensitive feeding remains creator/active-grantee only. Creator-only administration is unchanged. | Product/care coordination |
 | Owner/API surface | OPEN / PROPOSED | Finalize creator-only visibility/grant endpoint and DTO mechanics within accepted ownership constraints. General editing/deletion/transfer stays excluded; PD-09 specifically excludes station-note editing. | Engineering, Product |
 | Audit logging/retention | OPEN / PROPOSED | Set event fields, access, durability and durations; latest grant state is not a complete audit ledger. Media/source/backup retention and removal/recovery remain separate release work. | Product/privacy, Operations, Security |
 | Cross-tab authentication/session fencing | OPEN implementation specification; mandatory invariant | Define/test generation, shared transition ordering, queued persistence/restore, callbacks/navigation and stale action-chain handling under REV-01/02/03. No new product approval gate; no implementation or runtime evidence yet. Server JWT revocation remains SEC-011. | Engineering, Security |
@@ -1203,7 +1217,9 @@ Contract baseline: **2026-11-03**, HEAD
 `3c3f212dbc54381e8900c77df41e4170073831ac`, local source/document inspection.
 This appendix makes the implementation target concrete; it does not describe
 running functionality. **PD-01 through PD-09 remain APPROVED exactly as registered
-in section 14.** All newly selected behavioral details below are **PROPOSED**.
+in section 14.** Newly selected behavioral details below remain **PROPOSED**
+except the C-03 feeding contract and C-04 regular feeding explicitly approved
+subsequently in SEC.1B-3B.2.
 Engineering authorization/isolation invariants remain mandatory. A proposed
 mechanism is reviewable implementation guidance, not product-owner approval or
 runtime evidence. Resolve the ledger in 16.10 before its affected behavior ships.
@@ -1263,7 +1279,7 @@ classification guard covers **every** audience branch:
 ```text
 valid visibility AND (regular OR creator = actor OR active explicit grant to actor)
 canManage = valid visibility AND creator = actor
-canFeed = canView AND active                 [regular-viewer writes: PROPOSED]
+canFeed = canView AND active                 [regular-viewer writes: APPROVED in 3B.2]
 ```
 
 Missing/unknown classification fails closed even for an owner. Listing adds active
@@ -1302,7 +1318,9 @@ list or an existence-dependent denial. No unrestricted store fallback is permitt
 
 ### 16.3 Exact proposed DTOs, inputs and bounds
 
-**PROPOSED field allowlists**, not serializations of whole database/user records:
+**Field allowlists**, not serializations of whole database/user records. The
+feeding summary/author-log contract and author-access edge are **APPROVED by C-03
+in SEC.1B-3B.2**; other DTO and engineering mechanics remain PROPOSED:
 
 ```ts
 type Visibility = "sensitive" | "regular";
@@ -1343,7 +1361,7 @@ user, grant list, feeding event or internal media row by spreading a record.
 | Authenticated regular viewer | Discovery/detail if allowed; canManage false unless creator | `FeedingSummary` only | Own logs only, subject to parent access |
 | Sensitive active grantee | Same DTO; canManage false, canFeed true only while active | Exactly the same summary | Own logs only, subject to parent access |
 | Creator | Same DTO; canManage true; owner grant endpoint separate | Exactly the same summary; no extra feeder details | Own logs only; ownership does not expose other authors |
-| Author without current sensitive access | No station DTO or shared summary | 404 | **PROPOSED:** station-scoped own-history endpoint also 404; rows preserved, no new export/recovery endpoint in this milestone |
+| Author without current sensitive access | No station DTO or shared summary | 404 | **APPROVED by C-03:** station-scoped own-history endpoint also 404; rows preserved, no new export/recovery endpoint in this milestone |
 
 Use one captured post-lock instant T for independent `MAX(fed_at)` where food=true
 and water=true and `fed_at <= T`. Bucket ages in `[0,2h)`, `[2h,6h)`, `[6h,12h)`,
@@ -1353,6 +1371,12 @@ exclude them from shared recency until eligible. Do not change existing accepted
 feeding time semantics implicitly. Return no exact time, `asOf`, count, identity,
 event ID, period, personal note or nested recent event in a summary. Coarse activity
 remains a disclosed residual risk, not anonymity proof.
+
+The product owner's approval explicitly excludes feeder identities, exact
+individual timestamps and private notes from shared buckets. `no-record` refers
+only to Ray's qualifying recorded history, not whether cats were actually fed.
+The approved station-scoped own-history 404 preserves records after revocation;
+future personal-data access/deletion processes remain separate release requirements.
 
 Summary freshness is **PROPOSED** 60 seconds of monotonic elapsed time from local
 receipt, stored in memory; restored/tab-return summaries are always stale.
@@ -1562,7 +1586,7 @@ no silent anonymous fallback on supplied-invalid auth or lookup outage.
 | E03 `POST /feeding-stations` | A; actor becomes immutable creator | Create input, optional owned ready asset | 201 `StationDetail` | AUTH, VALID, bounded media errors, RATE, FAIL | Atomic create/attach; sensitive unless deliberately regular; media wrapper cannot drop actor/classification | V1/V3: forged owner/grants stripped, both schemas/defaults/coordinates/external URL rejection, foreign asset denial and rollback |
 | E04 `GET /feeding-stations/:stationId/feedings` | A; canView AND log.user=actor | Station ID, bounded list query | 200 `OwnFeedingLog[]`, optional next header | AUTH, VALID, PARENT, RATE, FAIL | Shared parent lock/fresh policy and author-filtered SQL; no other-author events | V1/V4: creator has no other-author privilege; old values/presence/order retained, revoke denial, cursor scoped to actor |
 | E05 `GET /feeding-stations/:stationId/feeding-summary` | A; canView | Station ID, no query | 200 `FeedingSummary` | AUTH, VALID, PARENT, RATE, FAIL | Shared parent lock; one T, independent food/water aggregates | V4: exact bucket boundaries, future/neither/water-only cases, no identity/time/note/count/event fields for any viewer |
-| E06 `POST /feeding-stations/:stationId/feedings` | A; canView then active; regular writes proposed | Existing strict feeding input | 201 `OwnFeedingLog` | AUTH, VALID, PARENT, INACTIVE, RATE, FAIL | Existing shared station transaction, fresh policy, server actor/path and INSERT; no new idempotency guarantee | V1/V2/V4: independent-pool revoke/feed/visibility race, no denied insertion, inactive concealment, UTC/defaults/own receipt |
+| E06 `POST /feeding-stations/:stationId/feedings` | A; canView then active; regular writes C-04 APPROVED | Existing strict feeding input | 201 `OwnFeedingLog` | AUTH, VALID, PARENT, INACTIVE, RATE, FAIL | Existing shared station transaction, fresh policy, server actor/path and INSERT; no new idempotency guarantee | V1/V2/V4: independent-pool revoke/feed/visibility race, no denied insertion, inactive concealment, UTC/defaults/own receipt |
 | E07 `PATCH /feeding-stations/:id/visibility` | A; creator only | Strict visibility | 200 `StationDetail` | AUTH, VALID, PARENT, RATE, FAIL | Station exclusive lock then owner; no-op keeps timestamps; grants preserved, no implicit grants | V2/V5: non-owner/grantee denied, concurrent feed/read ordered, repeat no rewrite, sensitive/regular transitions |
 | E08 `GET /feeding-stations/:id/access-grants` | A; creator only | ID and bounded list query | 200 active `Grant[]`, optional next header | AUTH, VALID, PARENT, RATE, FAIL | Shared station lock then owner; explicit minimal recipient projection | V5: owner-only, no email/contact/user spread, no revoked rows/global lookup; bounded cursor behavior |
 | E09 `POST /feeding-stations/:id/access-grants` | A; creator only before reference resolution | Strict recipient reference | 200 active `Grant` for new/duplicate/reactivated | AUTH, VALID, PARENT, RATE, FAIL | Exclusive station lock; post-wait proof expiry/recipient check; duplicate no rewrite, regrant same row | V2/V5: wrong owner first, token confusion, expiry while waiting, deleted/self recipient generic, duplicate/regrant concurrent ordering |
@@ -1882,14 +1906,15 @@ No staging/commit/push/merge/deploy follows automatically from a pass.
 
 ### 16.10 Remaining decisions and first-batch readiness
 
-These selected defaults are **PROPOSED**, not additional APPROVED product policy:
+These selected defaults remain **PROPOSED** except the explicit **C-03/C-04
+APPROVED** scope recorded below. No other product approval is implied:
 
 | ID / selected target | Remaining resolution / dependent batch |
 | --- | --- |
 | C-01 Self-issued reference consent | Product/privacy to accept or replace the 15-minute reusable identification reference, deliberate sharing as consent across holder-owned stations, no pending recipient acceptance/self-leave, no individual proof revocation, regrant after owner revoke while proof valid; first-name label. Required before 3B.4/7. PD-06 private references/no-directory stays approved. |
 | C-02 Grant lifecycle | Product/Engineering to confirm same-row duplicate/regrant behavior and persistence through regular/sensitive switches; revocation on regular does not remove regular audience access. Required before 3B.4/7. No change to PD-04 scope. |
-| C-03 Coordination and author edge | Product/care/privacy to confirm exact DTOs, six recency buckets/60s local freshness, bounded paging and parent-access requirement for station-scoped own history after sensitive revocation. Own rows remain preserved; no new redacted export in milestone. Required before 3B.2/6/7 behavior acceptance; PD-05 appropriate own access is not waived. |
-| C-04 Regular feeding writes | Product/care to confirm retaining current active regular viewer `canFeed`; sensitive-grant feed permission is already PD-04 APPROVED. Required before 3B.2/7. |
+| C-03 Coordination and author edge | APPROVED in SEC.1B-3B.2 by explicit owner reply: section 16.3 feeding contract, shared six buckets, separate author-only logs, parent-access-required station history (404 after sensitive revocation; stored rows preserved). No new redacted export. Client 60s freshness/presentation and paging mechanics remain engineering proposals requiring validation in 3B.6/7; no unspecified detail is approved. |
+| C-04 Regular feeding writes | APPROVED in SEC.1B-3B.2: every authenticated active regular viewer may record feedings; sensitive creator/active-grantee feeding remains PD-04. No administration or professional-role entitlement is added. |
 | C-05 Client persistence/compatibility | Engineering/Security to validate Web Locks + atomic envelope/CAS algorithm and supported-browser evidence; one-time legacy-key sign-in and retained credentials are proposed compatibility choices. Storage-failure recovery and remote-screen/server-JWT limits stay explicit. Required before 3B.5/6 acceptance; no new gate to approve the mandatory REV isolation invariant. |
 | C-06 API/retirement mechanics | Engineering/Operations to review exact endpoints/projections/paging/headers/error normalization and namespace refusal/cutover; selected conservative implementation targets, not proof of deployment. Legacy direction is PD-08 APPROVED. Required before 3B.2/3/8 reachability. |
 | C-07 Audit and retention | Product/privacy/Security/Operations to set event access/durability/duration, media/source/backup retention/removal and incident ownership. Latest-state grant table is not full audit. Unresolved before real users, not a reason to reset schema/data. |

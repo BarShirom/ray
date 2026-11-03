@@ -16,6 +16,7 @@ import { applyLocalMigrations } from "../../dist/db/migrate.js";
 import { createPostgresUserStore } from "../../dist/users/postgresUserStore.js";
 import { createPostgresFeedingStationStore } from "../../dist/feedingStations/postgresFeedingStationStore.js";
 import { createPostgresFeedingLogStore } from "../../dist/feedingLogs/postgresFeedingLogStore.js";
+import { createPostgresStationPrivacyStore } from "../../dist/feedingStations/postgresStationPrivacyStore.js";
 import { FeedingStationMissingError, FeedingStationInactiveError } from "../../dist/feedingLogs/feedingPersistenceErrors.js";
 import { serializeFeedingStation } from "../../dist/serializers/feedingStationResponse.js";
 import { serializeFeedingLog } from "../../dist/serializers/feedingLogResponse.js";
@@ -36,7 +37,7 @@ const isSafeFailure = (error) => {
   assert.deepEqual(Object.keys(error), ["name"]);
   return true;
 };
-const storesFor = (db) => ({ stations: createPostgresFeedingStationStore(db), logs: createPostgresFeedingLogStore(db) });
+const storesFor = (db) => ({ stations: createPostgresFeedingStationStore(db), logs: createPostgresFeedingLogStore(db), privacy: createPostgresStationPrivacyStore(db) });
 const json = (value) => JSON.parse(JSON.stringify(value));
 const stationKeys = ["_id", "name", "location", "estimatedCats", "estimatedKittens", "createdBy", "active", "createdAt", "updatedAt", "__v"];
 const logKeys = ["_id", "stationId", "userId", "fedAt", "food", "water", "createdAt", "updatedAt", "__v"];
@@ -118,7 +119,7 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
   const { stations, logs } = storesFor(db);
   const userStore = createPostgresUserStore(db);
   const user = await userStore.create({ firstName: "Synthetic", lastName: "Adapter", email: `${publicId()}@example.invalid`, passwordHash: "synthetic-existing-hash" });
-  const request = await startPostgresAuthApp(t, userStore, { stations, logs });
+  const request = await startPostgresAuthApp(t, userStore, storesFor(db));
   const counts = async () => (await pool.query(`SELECT
     (SELECT count(*)::integer FROM users) AS users,
     (SELECT count(*)::integer FROM feeding_stations) AS stations,
@@ -179,17 +180,15 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
   });
 
   for (const value of [undefined, null, "", "Stored text"]) {
-    await t.test(`historical station/log optional field presence ${JSON.stringify(value)} reaches unchanged HTTP serializers`, async () => {
+    await t.test(`historical station/log optional field presence ${JSON.stringify(value)} reaches retained adapter serializers`, async () => {
       const station = await stations.create(stationInput(user.publicId));
       const log = await logs.create({ stationId: station.publicId, userId: user.publicId });
       await db.update(feedingStations).set({ image: value ?? null, notes: value ?? null, imagePresent: value !== undefined, notesPresent: value !== undefined }).where(eq(feedingStations.publicId, station.publicId));
       // SQL enum forbids empty/arbitrary period strings; test each allowed presence state.
       const period = value === "" ? "morning" : value === "Stored text" ? "evening" : value;
       await db.update(feedingLogs).set({ note: value ?? null, notePresent: value !== undefined, period: period ?? null, periodPresent: period !== undefined }).where(eq(feedingLogs.publicId, log.publicId));
-      const detail = await request("GET", `${base}/${station.publicId}`);
-      const history = await request("GET", `${base}/${station.publicId}/feedings`);
-      assert.equal(detail.status, 200);
-      assert.equal(history.status, 200);
+      const detail = { body: json(serializeFeedingStation(await stations.findByPublicId(station.publicId))) };
+      const history = { body: (await logs.listForStation(station.publicId)).map(serializeFeedingLog).map(json) };
       for (const key of ["image", "notes"]) {
         assert.equal(detail.body[key], value);
         assert.equal(Object.hasOwn(detail.body, key), value !== undefined);
@@ -208,8 +207,8 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
       for (const [table, id] of [[feedingStations, station.publicId], [feedingLogs, log.publicId]]) {
         await db.update(table).set({ legacyVersion: version ?? null, legacyVersionPresent: version !== undefined }).where(eq(table.publicId, id));
       }
-      const detail = await request("GET", `${base}/${station.publicId}`);
-      const history = await request("GET", `${base}/${station.publicId}/feedings`);
+      const detail = { body: json(serializeFeedingStation(await stations.findByPublicId(station.publicId))) };
+      const history = { body: (await logs.listForStation(station.publicId)).map(serializeFeedingLog).map(json) };
       for (const row of [detail.body, history.body[0]]) {
         assert.equal(row.__v, version);
         assert.equal(Object.hasOwn(row, "__v"), version !== undefined);
@@ -289,7 +288,7 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
   });
 
   let a, b, httpStation, httpLog;
-  await t.test("register/login A and B, A creates station, public reads, B feeds A's station, public history", async () => {
+  await t.test("register/login A and B, A creates regular station, B feeds it, own history remains private", async () => {
     const registered = [];
     for (const firstName of ["User A", "User B"]) {
       const input = { firstName, lastName: "Synthetic", email: `${publicId()}@example.invalid`, password: "synthetic-feeding-password" };
@@ -301,32 +300,34 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
       registered.push({ id: login.body.user.id, bearer: `Bearer ${login.body.token}` });
     }
     [a, b] = registered;
-    const creation = await request("POST", base, { name: "  HTTP station  ", location, createdBy: b.id, active: false }, a.bearer);
+    const creation = await request("POST", base, { name: "  HTTP station  ", location, visibility: "regular", createdBy: b.id, active: false }, a.bearer);
     assert.equal(creation.status, 201);
     httpStation = creation.body;
-    keysAre(httpStation, stationKeys);
+    keysAre(httpStation, ["_id", "name", "location", "estimatedCats", "estimatedKittens", "visibility", "permissions", "active"]);
     assert.match(httpStation._id, /^[0-9a-f]{24}$/);
     assert.equal(httpStation.name, "HTTP station");
-    assert.equal(httpStation.createdBy, a.id);
+    assert.deepEqual(httpStation.permissions, { canManage: true, canFeed: true });
     assert.equal(httpStation.active, true);
-    assert.equal(httpStation.__v, 0);
+    assert.equal(Object.hasOwn(httpStation, "__v"), false);
     assert.deepEqual(httpStation.location, location);
-    const listing = await request("GET", base);
+    const listing = await request("GET", base, undefined, a.bearer);
     assert.equal(listing.status, 200);
     assert.ok(Array.isArray(listing.body));
-    assert.deepEqual(listing.body.find((row) => row._id === httpStation._id), httpStation);
-    assert.deepEqual(await request("GET", `${base}/${httpStation._id.toUpperCase()}`), { status: 200, body: httpStation });
+    const { active: _active, ...discovery } = httpStation;
+    assert.deepEqual(listing.body.find((row) => row._id === httpStation._id), discovery);
+    assert.deepEqual(await request("GET", `${base}/${httpStation._id.toUpperCase()}`, undefined, a.bearer), { status: 200, body: httpStation });
     const feeding = await request("POST", `${base}/${httpStation._id.toUpperCase()}/feedings`, {
       fedAt: "2024-04-03T09:08:07.456+03:00", food: false, water: false, period: "morning", note: "  Shared care  ",
     }, b.bearer);
     assert.equal(feeding.status, 201);
     httpLog = feeding.body;
-    keysAre(httpLog, [...logKeys, "period", "note"]);
-    assert.deepEqual([httpLog.stationId, httpLog.userId, httpLog.food, httpLog.water, httpLog.__v], [httpStation._id, b.id, false, false, 0]);
+    keysAre(httpLog, [...logKeys.filter(key => !["userId", "__v"].includes(key)), "period", "note"]);
+    assert.deepEqual([httpLog.stationId, httpLog.food, httpLog.water], [httpStation._id, false, false]);
     assert.equal(httpLog.fedAt, "2024-04-03T06:08:07.456Z");
     assert.equal(httpLog.note, "Shared care");
-    assert.deepEqual(await request("GET", `${base}/${httpStation._id}/feedings`), { status: 200, body: [httpLog] });
-    for (const value of [httpStation.createdAt, httpStation.updatedAt, httpLog.fedAt, httpLog.createdAt, httpLog.updatedAt]) iso(value);
+    assert.deepEqual(await request("GET", `${base}/${httpStation._id}/feedings`, undefined, b.bearer), { status: 200, body: [httpLog] });
+    assert.deepEqual(await request("GET", `${base}/${httpStation._id}/feedings`, undefined, a.bearer), { status: 200, body: [] });
+    for (const value of [httpLog.fedAt, httpLog.createdAt, httpLog.updatedAt]) iso(value);
     const sr = await stationRow(httpStation._id), lr = await logRow(httpLog._id);
     const rows = await db.select({ id: users.id, publicId: users.publicId }).from(users);
     assert.equal(sr.createdBy, rows.find((row) => row.publicId === a.id).id);
@@ -339,8 +340,8 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
     try {
       await assertDatabaseIdentity(fresh.pool, "test");
       const freshRequest = await startPostgresAuthApp(t, createPostgresUserStore(fresh.db), storesFor(fresh.db));
-      assert.deepEqual(await freshRequest("GET", `${base}/${httpStation._id}`), { status: 200, body: httpStation });
-      assert.deepEqual(await freshRequest("GET", `${base}/${httpStation._id}/feedings`), { status: 200, body: [httpLog] });
+      assert.deepEqual(await freshRequest("GET", `${base}/${httpStation._id}`, undefined, a.bearer), { status: 200, body: httpStation });
+      assert.deepEqual(await freshRequest("GET", `${base}/${httpStation._id}/feedings`, undefined, b.bearer), { status: 200, body: [httpLog] });
       const protectedResponse = await freshRequest("GET", "/protected", undefined, b.bearer);
       assert.equal(protectedResponse.status, 200);
       assert.equal(protectedResponse.body.user._id, b.id);
@@ -378,18 +379,18 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
     }
   });
 
-  await t.test("HTTP empty optionals/default feeding, station-specific history and inactive public reads", async () => {
-    const created = await request("POST", base, { name: "Optional HTTP", location, image: "", notes: "  " }, a.bearer);
+  await t.test("HTTP notes/default feeding, author-specific history and inactive authorized reads", async () => {
+    const created = await request("POST", base, { name: "Optional HTTP", location, visibility: "regular", notes: "  " }, a.bearer);
     assert.equal(created.status, 201);
-    assert.equal(created.body.image, "");
+    assert.equal(Object.hasOwn(created.body, "image"), false);
     assert.equal(created.body.notes, "  ");
     const path = `${base}/${created.body._id}`;
-    assert.deepEqual(await request("GET", `${path}/feedings`), { status: 200, body: [] });
+    assert.deepEqual(await request("GET", `${path}/feedings`, undefined, b.bearer), { status: 200, body: [] });
     const feedingTime = await observeDatabaseTime(db, () => request("POST", `${path}/feedings`, {}, b.bearer));
     const feeding = feedingTime.value;
     assert.equal(feeding.status, 201);
-    keysAre(feeding.body, logKeys);
-    assert.deepEqual([feeding.body.food, feeding.body.water, feeding.body.__v], [true, false, 0]);
+    keysAre(feeding.body, logKeys.filter(key => !["userId", "__v"].includes(key)));
+    assert.deepEqual([feeding.body.food, feeding.body.water], [true, false]);
     const persisted = await logRow(feeding.body._id);
     for (const field of ["fedAt", "createdAt", "updatedAt"]) {
       assertDatabaseTimestamp(persisted[field], feedingTime, "persisted log " + field);
@@ -398,17 +399,17 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
     const blankNote = await request("POST", `${path}/feedings`, { note: "  " }, b.bearer);
     assert.equal(blankNote.status, 201);
     assert.equal(blankNote.body.note, "");
-    const history = await request("GET", `${path}/feedings`);
+    const history = await request("GET", `${path}/feedings`, undefined, b.bearer);
     assert.equal(history.body.length, 2);
     assert.ok(history.body.every((row) => row.stationId === created.body._id));
-    assert.deepEqual(await request("GET", `${base}/${httpStation._id}/feedings`), { status: 200, body: [httpLog] });
+    assert.deepEqual(await request("GET", `${base}/${httpStation._id}/feedings`, undefined, b.bearer), { status: 200, body: [httpLog] });
     await db.update(feedingStations).set({ active: false }).where(eq(feedingStations.publicId, created.body._id));
     const before = await counts();
     assert.deepEqual(await request("POST", `${path}/feedings`, {}, b.bearer), { status: 409, body: { message: "Feeding station is inactive" } });
     assert.deepEqual(await counts(), before);
-    assert.equal((await request("GET", path)).body.active, false);
-    assert.deepEqual(await request("GET", `${path}/feedings`), history);
-    assert.equal((await request("GET", base)).body.some((row) => row._id === created.body._id), false);
+    assert.equal((await request("GET", path, undefined, b.bearer)).body.active, false);
+    assert.deepEqual(await request("GET", `${path}/feedings`, undefined, b.bearer), history);
+    assert.equal((await request("GET", base, undefined, b.bearer)).body.some((row) => row._id === created.body._id), false);
   });
 
   await t.test("real rejected SELECT/INSERT queries stay safe failures, never missing rows or empty arrays", async (t) => {
@@ -420,14 +421,16 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
       await assert.rejects(stations.listActive(), isSafeFailure);
       await assert.rejects(stations.findByPublicId(httpStation._id), isSafeFailure);
       await assert.rejects(stations.create(stationInput(a.id, { notes: "synthetic SQL parameter must not leak" })), isSafeFailure);
-      for (const path of [base, `${base}/${httpStation._id}`]) assert.deepEqual(await request("GET", path), { status: 500, body: safeFailure });
+      // Discovery deliberately does not select private notes. Detail still
+      // exercises the actual rejected protected SELECT.
+      assert.deepEqual(await request("GET", `${base}/${httpStation._id}`, undefined, a.bearer), { status: 500, body: safeFailure });
       assert.deepEqual(await request("POST", base, { name: "Synthetic", location, notes: "secret-synthetic-note" }, a.bearer), { status: 500, body: safeFailure });
     } finally { await pool.query("ALTER TABLE feeding_stations RENAME COLUMN hidden_test_notes TO notes"); }
     await pool.query("ALTER TABLE feeding_logs RENAME COLUMN note TO hidden_test_note");
     try {
       await assert.rejects(logs.listForStation(httpStation._id), isSafeFailure);
       await assert.rejects(logs.create({ stationId: httpStation._id, userId: b.id, note: "secret-synthetic-note" }), isSafeFailure);
-      assert.deepEqual(await request("GET", `${base}/${httpStation._id}/feedings`), { status: 500, body: safeFailure });
+      assert.deepEqual(await request("GET", `${base}/${httpStation._id}/feedings`, undefined, b.bearer), { status: 500, body: safeFailure });
       assert.deepEqual(await request("POST", `${base}/${httpStation._id}/feedings`, { note: "secret-synthetic-note" }, b.bearer), { status: 500, body: safeFailure });
     } finally { await pool.query("ALTER TABLE feeding_logs RENAME COLUMN hidden_test_note TO note"); }
     assert.deepEqual(messages, []);
@@ -476,7 +479,7 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
   };
 
   for (const action of ["deactivate", "delete"]) {
-    await t.test(`${action}-first after HTTP precheck waits on row lock, then returns ${action === "delete" ? 404 : 409} without inserting`, async (t) => {
+    await t.test(`${action}-first HTTP waits on station lock, then returns ${action === "delete" ? 404 : 409} without inserting`, async (t) => {
       const station = await stations.create(stationInput(a.id));
       const writer = await actor(t, action);
       const feeding = await actor(t, "waiting-feeding");
@@ -487,14 +490,14 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
         await client.query("BEGIN");
         if (action === "delete") await client.query("DELETE FROM feeding_stations WHERE public_id=$1", [station.publicId]);
         else await client.query("UPDATE feeding_stations SET active=false WHERE public_id=$1", [station.publicId]);
-        const response = track(pending, send("POST", `${base}/${station.publicId}/feedings`, {}, b.bearer));
+        const response = track(pending, send("POST", `${base}/${station.publicId}/feedings`, {}, a.bearer));
         await waitForBlock(feeding.name, pid, "for share");
         await client.query("COMMIT");
         assert.deepEqual(await response, action === "delete"
           ? { status: 404, body: { message: "Feeding station not found" } }
           : { status: 409, body: { message: "Feeding station is inactive" } });
         assert.deepEqual(await logs.listForStation(station.publicId), []);
-        t.diagnostic(`${action}-first: HTTP passed the unlocked precheck, feeding FOR SHARE was observed blocked by the writer, commit yielded the expected error and zero logs.`);
+        t.diagnostic(`${action}-first: the production feeding FOR SHARE was observed blocked by the writer, commit yielded the expected error and zero logs.`);
       } finally {
         try { await client.query("ROLLBACK"); }
         finally { release(); await Promise.allSettled(pending); }
@@ -513,7 +516,7 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
     try {
       await gate.client.query("BEGIN");
       await gate.client.query("LOCK TABLE feeding_logs IN SHARE MODE");
-      const response = track(pending, send("POST", `${base}/${station.publicId}/feedings`, {}, b.bearer));
+      const response = track(pending, send("POST", `${base}/${station.publicId}/feedings`, {}, a.bearer));
       const feedingPid = await waitForBlock(feeding.name, gate.pid, "insert into");
       // The insert is blocked on the table, after the adapter's station row lock.
       await update.client.query("BEGIN");
@@ -551,8 +554,8 @@ test("real PostgreSQL feeding adapters and complete production HTTP flow", async
     try {
       await gate.client.query("BEGIN");
       await gate.client.query("LOCK TABLE feeding_logs IN SHARE MODE");
-      const one = track(pending, sendFirst("POST", `${base}/${station.publicId}/feedings`, {}, b.bearer));
-      const two = track(pending, sendSecond("POST", `${base}/${station.publicId}/feedings`, {}, b.bearer));
+      const one = track(pending, sendFirst("POST", `${base}/${station.publicId}/feedings`, {}, a.bearer));
+      const two = track(pending, sendSecond("POST", `${base}/${station.publicId}/feedings`, {}, a.bearer));
       const pid1 = await waitForBlock(first.name, gate.pid, "insert into");
       const pid2 = await waitForBlock(second.name, gate.pid, "insert into");
       assert.notEqual(pid1, pid2);

@@ -271,7 +271,9 @@ test("real PostgreSQL UserStore and production auth HTTP flow", async (t) => {
     assert.deepEqual(messages, [["Login error"], ["Register error"]]);
     await pool.query("ALTER TABLE users RENAME COLUMN email TO hidden_test_email");
     try {
-      assert.deepEqual(await request("GET", "/protected", undefined, `Bearer ${registered.token}`), { status: 401, body: { error: "Invalid or expired token" } });
+      assert.deepEqual(await request("GET", "/protected", undefined, `Bearer ${registered.token}`), {
+        status: 500, body: { error: "Error", message: "Authentication service unavailable" },
+      });
       assert.deepEqual(await request("GET", "/optional", undefined, `Bearer ${registered.token}`), { status: 200, body: { user: null } });
     } finally { await pool.query("ALTER TABLE users RENAME COLUMN hidden_test_email TO email"); }
   });

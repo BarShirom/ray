@@ -11,6 +11,7 @@ const columns = {
   image: stations.image, imagePresent: stations.imagePresent,
   notes: stations.notes, notesPresent: stations.notesPresent,
   active: stations.active, createdAt: stations.createdAt, updatedAt: stations.updatedAt,
+  visibility: stations.visibility,
   legacyVersion: stations.legacyVersion, legacyVersionPresent: stations.legacyVersionPresent,
 };
 type Row = Pick<typeof stations.$inferSelect, keyof typeof columns> & { createdBy: string };
@@ -23,6 +24,7 @@ function record(row: Row): FeedingStationRecord {
     ...(row.imagePresent ? { image: row.image } : {}),
     ...(row.notesPresent ? { notes: row.notes } : {}),
     createdBy: row.createdBy, active: row.active,
+    visibility: row.visibility,
     createdAt: row.createdAt, updatedAt: row.updatedAt,
     ...(row.legacyVersionPresent ? { legacyVersion: row.legacyVersion } : {}),
   };
@@ -44,6 +46,7 @@ export function createPostgresFeedingStationStore(db: Pick<ReturnType<typeof cre
         image: input.image ?? null, imagePresent: input.image !== undefined,
         notes: input.notes ?? null, notesPresent: input.notes !== undefined,
         createdBy: creator.id, active: true, legacyVersion: 0, legacyVersionPresent: true,
+        visibility: input.visibility ?? "sensitive",
       }).returning(columns);
       return record({ ...row, createdBy: creator.publicId });
     }),

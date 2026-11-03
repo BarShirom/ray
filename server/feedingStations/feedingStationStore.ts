@@ -9,6 +9,7 @@ export interface FeedingStationRecord {
   notes?: string | null;
   createdBy?: string | null;
   active?: boolean | null;
+  visibility?: "sensitive" | "regular";
   createdAt?: Date | null;
   updatedAt?: Date | null;
   // Existing MongoDB __v is HTTP compatibility metadata, not a domain requirement.
@@ -24,6 +25,7 @@ export interface CreateFeedingStation {
   image?: string;
   notes?: string;
   createdBy: string;
+  visibility?: "sensitive" | "regular";
 }
 
 export interface FeedingStationStore {

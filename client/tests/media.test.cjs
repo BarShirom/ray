@@ -7,7 +7,7 @@ require.extensions['.ts'] = (module, filename) => {
   const source=fs.readFileSync(filename,'utf8').replace('import.meta.env.VITE_API_URL',JSON.stringify('http://127.0.0.1:4001')).replace('import.meta.env.MODE',JSON.stringify('postgres'));
   module._compile(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText,filename);
 };
-const { uploadImages, validateImages, mediaEnabled }=require('../src/api/media.ts');
+const { uploadImages, validateImages, mediaEnabled, stationAssetId, loadStationImage }=require('../src/api/media.ts');
 const { t: translate }=require('../src/i18n/index.ts');
 const { localizeError }=require('../src/i18n/errors.ts');
 const file=()=>new File(['SYNTHETIC image bytes; validation occurs on server'],'synthetic.png',{type:'image/png'});
@@ -29,6 +29,69 @@ test('capability fails closed for unavailable/disabled server',async t=>{
   let result=json({enabled:false});t.mock.method(global,'fetch',async()=>result);
   assert.equal(await mediaEnabled(new AbortController().signal),false);result=json({enabled:true});assert.equal(await mediaEnabled(new AbortController().signal),true);
   result=json({enabled:true},503);assert.equal(await mediaEnabled(new AbortController().signal),false);
+});
+const stationId='11111111-1111-4111-8111-111111111111';
+const stationSource=`http://127.0.0.1:4001/api/media/${stationId}/content`;
+test('station media extracts only a UUID at the configured API origin without credentials or extra URL authority',()=>{
+  assert.equal(stationAssetId(stationSource),stationId);
+  for(const source of [stationSource+'?retry=1',stationSource+'#x',stationSource.replace('127.0.0.1:4001','external.invalid'),stationSource.replace('http://','http://user:pass@'),stationSource.replace('/content','/read-url'),'/api/media/'+stationId+'/content',stationSource.replace(stationId,'not-a-uuid'),'javascript:alert(1)'])assert.equal(stationAssetId(source),null,source);
+});
+test('protected station image resolves with Bearer only at Ray then fetches credential-free bytes into memory',async t=>{
+  const calls=[];t.mock.method(global,'fetch',async(url,options)=>{
+    calls.push({url,options});
+    return calls.length===1?json({url:'https://synthetic-s3.invalid/image?signature=synthetic',expiresIn:60}):new Response('synthetic webp',{headers:{'Content-Type':'image/webp'}});
+  });
+  const blob=await loadStationImage(stationSource,'synthetic-ray-token',new AbortController().signal,()=>true);
+  assert.equal(blob.type,'image/webp');assert.equal(await blob.text(),'synthetic webp');assert.equal(calls.length,2);
+  assert.equal(calls[0].url,`http://127.0.0.1:4001/api/media/${stationId}/read-url`);
+  assert.equal(calls[0].options.headers.Authorization,'Bearer synthetic-ray-token');assert.equal(calls[0].options.body,'{}');
+  assert.equal(calls[0].options.redirect,'error');assert.equal(calls[0].options.signal,calls[1].options.signal,'one bounded lifetime covers resolution and bytes');
+  assert.equal(calls[1].options.headers,undefined);assert.equal(calls[1].options.credentials,'omit');assert.equal(calls[1].options.referrerPolicy,'no-referrer');assert.equal(calls[1].options.redirect,'error');
+  for(const call of calls){assert.equal(call.options.cache,'no-store');assert.ok(!call.url.includes('synthetic-ray-token'));}
+});
+test('station image denial, stale local identity and invalid capability fail without public fallback or automatic retry',async t=>{
+  let current=true,calls=0,mode='denied';t.mock.method(global,'fetch',async()=>{
+    calls++;
+    if(mode==='denied')return json({message:'hidden'},404);
+    if(mode==='stale')current=false;
+    if(mode==='invalid')return json({url:'http://untrusted.invalid/image',expiresIn:60});
+    return json({url:'https://synthetic-s3.invalid/image',expiresIn:60});
+  });
+  const signal=new AbortController().signal;
+  await assert.rejects(loadStationImage(stationSource,'token',signal,()=>current));assert.equal(calls,1);
+  mode='stale';await assert.rejects(loadStationImage(stationSource,'token',signal,()=>current));assert.equal(calls,2,'stale response never starts S3 fetch');
+  current=true;mode='invalid';await assert.rejects(loadStationImage(stationSource,'token',signal,()=>current));assert.equal(calls,3);
+  await assert.rejects(loadStationImage('https://external.invalid/image','token',signal,()=>true));assert.equal(calls,3,'stored external URLs receive no Bearer or fallback request');
+  const aborted=new AbortController();aborted.abort();await assert.rejects(loadStationImage(stationSource,'token',aborted.signal,()=>true));assert.equal(calls,3);
+});
+test('station byte-fetch failure remains an image failure and never automatically renews a capability',async t=>{
+  let calls=0;t.mock.method(global,'fetch',async()=>++calls===1?json({url:'https://synthetic-s3.invalid/expired',expiresIn:60}):new Response(null,{status:403}));
+  await assert.rejects(loadStationImage(stationSource,'token',new AbortController().signal,()=>true));await Promise.resolve();assert.equal(calls,2);
+});
+test('station image streaming stops at the byte cap and rejects empty normalized output',async t=>{
+  let calls=0,cancelled=false,empty=false;
+  t.mock.method(global,'fetch',async()=>{
+    if(++calls%2===1)return json({url:'https://synthetic-s3.invalid/image',expiresIn:60});
+    if(empty)return new Response('',{headers:{'Content-Type':'image/webp'}});
+    let chunks=0;
+    return new Response(new ReadableStream({
+      pull(controller){controller.enqueue(new Uint8Array(++chunks===1?8*1024*1024:1));},
+      cancel(){cancelled=true;},
+    }),{headers:{'Content-Type':'image/webp'}});
+  });
+  await assert.rejects(loadStationImage(stationSource,'token',new AbortController().signal,()=>true));assert.equal(cancelled,true);assert.equal(calls,2);
+  empty=true;await assert.rejects(loadStationImage(stationSource,'token',new AbortController().signal,()=>true));assert.equal(calls,4);
+});
+test('station image resolution and byte fetch share an abortable 60-second overall lifetime',async t=>{
+  const timeout=new AbortController();let calls=0,entered;
+  const fetching=new Promise(resolve=>{entered=resolve;});
+  t.mock.method(AbortSignal,'timeout',duration=>{assert.equal(duration,60000);return timeout.signal;});
+  t.mock.method(global,'fetch',async(_url,options)=>{
+    if(++calls===1)return json({url:'https://synthetic-s3.invalid/image',expiresIn:60});
+    return new Promise((_resolve,reject)=>{options.signal.addEventListener('abort',()=>reject(new DOMException('Synthetic timeout','AbortError')),{once:true});entered();});
+  });
+  const pending=loadStationImage(stationSource,'token',new AbortController().signal,()=>true);
+  await fetching;timeout.abort();await assert.rejects(pending);assert.equal(calls,2,'timeout cannot renew the capability');
 });
 test('raw File PUT has signed headers and no Ray token; IDs returned only after completion',async t=>{
   const selected=file(),steps=[],calls=[],cache=new WeakMap();

@@ -1,12 +1,10 @@
 // Run after npm run build: node --test tests/feedingLog.test.mjs
 import assert from "node:assert/strict";
 import test from "node:test";
-import { startApp, ids, document, json, assertEntity, assertValidation } from "./helpers/contracts.mjs";
-import { stubFeedingLogDatabase } from "./helpers/feedingLogDatabase.mjs";
+import { startApp, privacyFixture, ids, assertEntity, assertValidation } from "./helpers/contracts.mjs";
 import mongoose from "mongoose";
 import FeedingLog from "../dist/models/FeedingLogModel.js";
 import { createFeedingLogSchema } from "../dist/validation/feedingLogSchemas.js";
-import { createFeedingLog } from "../dist/controllers/feedingLogController.js";
 
 test("feeding log schema and model", async (t) => {
   await t.test("valid input converts fedAt and trims note", () => {
@@ -65,133 +63,41 @@ test("feeding log schema and model", async (t) => {
   });
 });
 
-test("feeding log endpoints with stubbed database calls", async (t) => {
-  const { request: httpRequest, token } = await startApp(t);
-  const stationId = ids.station;
-  const userId = new mongoose.Types.ObjectId(ids.user);
-  const forgedId = ids.other;
-  const state = {};
-  t.beforeEach(() => Object.assign(state, {
-    station: { _id: stationId, active: true }, events: [], created: undefined, history: [],
-  }));
-  stubFeedingLogDatabase(t, state, stationId);
-
-  async function request(method, body, id = stationId, authenticated = true) {
-    state.events = [];
-    return httpRequest(method, `/api/feeding-stations/${id}/feedings`, body, authenticated ? token : undefined);
-  }
-
-  await t.test("POST requires authentication", async () => {
-    assert.equal((await request("POST", {}, stationId, false)).status, 401);
-    assert.deepEqual(state.events, []);
-  });
-
-  await t.test("POST checks station before creating with trusted IDs and defaults", async () => {
-    const response = await request("POST", {});
+test("protected feeding endpoints preserve validation and trusted identity", async t => {
+  const f = privacyFixture(), { request, token } = await startApp(t, { stationStore: f.store });
+  const path = `/api/feeding-stations/${ids.station}/feedings`;
+  await t.test("default receipt has food/water and own timestamps without user identity", async () => {
+    const response = await request("POST", path, {}, token);
     assert.equal(response.status, 201);
-    assert.deepEqual(state.events, ["station", "create"]);
-    assert.equal(state.created.stationId, stationId);
-    assert.equal(String(state.created.userId), String(userId));
-    assert.equal(response.body.stationId, stationId);
-    assert.equal(response.body.userId, userId.toString());
     assert.equal(response.body.food, true);
     assert.equal(response.body.water, false);
-    assert.ok(Number.isFinite(Date.parse(response.body.fedAt)));
     assertEntity(response.body);
     assert.equal(Object.hasOwn(response.body, "period"), false);
     assert.equal(Object.hasOwn(response.body, "note"), false);
+    assert.equal(Object.hasOwn(response.body, "userId"), false);
+    assert.equal(f.state.calls.at(-1).identity._id, ids.user);
   });
-
-  await t.test("POST preserves explicit feeding details", async () => {
-    const response = await request("POST", {
-      fedAt: "2026-09-20T06:00:00Z", period: "noon", food: false, water: true, note: "  Water only  ",
-    });
+  await t.test("explicit period, Israel offset, water-only feeding and trimmed note survive", async () => {
+    const response = await request("POST", path, {
+      fedAt: "2026-09-20T09:00:00+03:00", period: "noon", food: false, water: true, note: "  Water only  ",
+    }, token);
     assert.equal(response.status, 201);
     assert.equal(response.body.fedAt, "2026-09-20T06:00:00.000Z");
-    assert.equal(response.body.food, false);
-    assert.equal(response.body.water, true);
-    assert.equal(response.body.period, "noon");
-    assert.equal(response.body.note, "Water only");
+    assert.deepEqual([response.body.food, response.body.water, response.body.period, response.body.note], [false, true, "noon", "Water only"]);
   });
-
-  for (const [field, value] of [["userId", forgedId], ["stationId", forgedId], ["period", "night"]]) {
-    await t.test(`POST rejects body ${field} before accessing stations or logs`, async () => {
-      const response = await request("POST", { [field]: value });
-      assert.equal(response.status, 400);
-      assert.equal(response.body.message, "Validation failed");
-      assertValidation(response, field === "period" ? "period" : "body");
-      assert.deepEqual(state.events, []);
+  for (const [field, value, issue] of [["userId", ids.other, "body"], ["stationId", ids.other, "body"],
+    ["period", "night", "period"], ["period", null, "period"], ["note", null, "note"], ["fedAt", null, "fedAt"]]) {
+    await t.test(`invalid ${field} ${value} never reaches storage`, async () => {
+      const before = f.state.calls.length;
+      assertValidation(await request("POST", path, { [field]: value }, token), issue);
+      assert.equal(f.state.calls.length, before);
     });
   }
-
-  for (const method of ["POST", "GET"]) {
-    await t.test(`${method} rejects malformed stationId before lookup`, async () => {
-      const response = await request(method, method === "POST" ? {} : undefined, "invalid");
-      assert.equal(response.status, 400);
-      assert.equal(response.body.message, "Validation failed");
-      assert.equal(response.body.errors[0].field, "stationId");
-      assert.deepEqual(state.events, []);
-    });
-    await t.test(`${method} returns 404 for missing station without accessing logs`, async () => {
-      state.station = null;
-      const response = await request(method, method === "POST" ? {} : undefined);
-      assert.equal(response.status, 404);
-      assert.equal(response.body.message, "Feeding station not found");
-      assert.deepEqual(state.events, ["station"]);
-      state.station = { _id: stationId, active: true };
-    });
-  }
-
-  await t.test("inactive station rejects creation but retains public history access", async () => {
-    state.station = { _id: stationId, active: false };
-    const response = await request("POST", {});
-    assert.equal(response.status, 409);
-    assert.equal(response.body.message, "Feeding station is inactive");
-    assert.deepEqual(state.events, ["station"]);
-    const historyResponse = await request("GET", undefined, stationId, false);
-    assert.equal(historyResponse.status, 200);
-    assert.deepEqual(historyResponse.body, []);
-    state.station = { _id: stationId, active: true };
-  });
-
-  await t.test("public GET queries only this station with newest-fedAt-first order", async () => {
-    state.history = [
-      document(FeedingLog, { stationId, userId, fedAt: "2026-09-20T10:00:00Z", createdAt: "2026-09-20T11:00:00Z" }).toObject(),
-      document(FeedingLog, { stationId, userId, fedAt: "2026-09-20T10:00:00Z", createdAt: "2026-09-20T10:00:00Z" }).toObject(),
-      document(FeedingLog, { stationId, userId, fedAt: "2026-09-19T10:00:00Z" }).toObject(),
-    ];
-    const response = await request("GET", undefined, stationId, false);
-    assert.equal(response.status, 200);
-    assert.deepEqual(response.body, json(state.history));
-    response.body.forEach(assertEntity);
-    assert.deepEqual(state.events, ["station", "logs"]);
-  });
-
-  await t.test("explicit false flags and empty trimmed note survive serialization", async () => {
-    const response = await request("POST", { food: false, water: false, note: "  " });
-    assert.equal(response.status, 201);
-    assert.equal(response.body.food, false);
-    assert.equal(response.body.water, false);
-    assert.equal(response.body.note, "");
-    assert.equal(Object.hasOwn(response.body, "period"), false);
-  });
-  for (const field of ["period", "note", "fedAt"]) {
-    await t.test(`POST rejects explicit null ${field}`, async () => {
-      assertValidation(await request("POST", { [field]: null }), field);
-      assert.deepEqual(state.events, []);
-    });
-  }
-
-  await t.test("controller independently ignores body IDs", async () => {
-    state.events = [];
-    let status;
-    const res = { status(code) { status = code; return this; }, json() {} };
-    await createFeedingLog({
-      params: { stationId }, user: { _id: userId.toString() }, body: { stationId: forgedId, userId: forgedId },
-    }, res, (err) => { throw err; });
-    assert.equal(status, 201);
-    assert.equal(state.created.stationId, stationId);
-    assert.equal(String(state.created.userId), String(userId));
-    assert.deepEqual(state.events, ["station", "create"]);
+  await t.test("inaccessible parent hides own history, summary and write with identical 404", async () => {
+    f.state.detail = null;
+    const expected = { status: 404, body: { message: "Feeding station not found" } };
+    assert.deepEqual(await request("POST", path, {}, token), expected);
+    assert.deepEqual(await request("GET", path, undefined, token), expected);
+    assert.deepEqual(await request("GET", `/api/feeding-stations/${ids.station}/feeding-summary`, undefined, token), expected);
   });
 });

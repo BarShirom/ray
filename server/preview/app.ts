@@ -3,14 +3,15 @@ import cors from "cors";
 import helmet from "helmet";
 import type { createPostgres } from "../db/connection.js";
 import { createPostgresUserStore } from "../users/postgresUserStore.js";
-import { createPostgresFeedingStationStore } from "../feedingStations/postgresFeedingStationStore.js";
-import { createPostgresFeedingLogStore } from "../feedingLogs/postgresFeedingLogStore.js";
+import { createPostgresStationPrivacyStore } from "../feedingStations/postgresStationPrivacyStore.js";
+import { createRetiredStationRouter } from "../feedingStations/retiredStationRoutes.js";
 import { createPostgresReportStore } from "../reports/postgresReportStore.js";
 import { createAuthRouter } from "../routes/authRoutes.js";
 import { createFeedingStationRouter } from "../routes/feedingStationRoutes.js";
 import { createReportRouter } from "../routes/reportRoutes.js";
-import { createAuthMiddleware } from "../middleware/authMiddleware.js";
+import { createAuthMiddleware, createStrictOptionalAuthMiddleware } from "../middleware/authMiddleware.js";
 import { createOptionalAuthMiddleware } from "../middleware/optionalAuthMiddleware.js";
+import { privateResponse } from "../middleware/privateResponse.js";
 
 import { createMediaService } from "../media/service.js";
 import { createMediaRouter } from "../media/routes.js";
@@ -23,11 +24,11 @@ import { createAbuseProtection, type AbuseOptions } from "../security/abuseProte
 export function createPreviewApp(connection: ReturnType<typeof createPostgres>, secret: string, storage?: MediaStorage, mediaPrefix = "dev/", abuseOptions?: AbuseOptions) {
   const media = storage ? createMediaService(connection.db, storage, mediaPrefix) : undefined;
   const users = createPostgresUserStore(connection.db);
-  const stations = media?.stations ?? createPostgresFeedingStationStore(connection.db);
-  const logs = createPostgresFeedingLogStore(connection.db);
+  const stations = createPostgresStationPrivacyStore(connection.db, media?.createStationInTransaction);
   const reports = media?.reports ?? createPostgresReportStore(connection.db);
   const getSecret = () => secret;
   const auth = createAuthMiddleware(users, getSecret);
+  const strictOptionalAuth = createStrictOptionalAuthMiddleware(users, getSecret);
   const app = express();
   app.set("trust proxy", false);
   const abuse = createAbuseProtection(abuseOptions);
@@ -39,9 +40,12 @@ export function createPreviewApp(connection: ReturnType<typeof createPostgres>, 
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    exposedHeaders: ["Retry-After"],
+    exposedHeaders: ["Retry-After", "X-Next-Cursor"],
   }));
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+  // Protect parser, ingress and forwarded error responses as well as route output.
+  app.use(["/api/feeding-stations", "/api/station-access", "/api/media"], privateResponse);
+  app.use("/api/station-access", createRetiredStationRouter());
   // Refuse before parsing multipart bodies; this composition never imports uploads.
   app.use("/api/upload", (_req, res) => {
     res.status(503).json({ message: "uploads unavailable in local preview" });
@@ -51,10 +55,10 @@ export function createPreviewApp(connection: ReturnType<typeof createPostgres>, 
   app.use(abuse.ingress);
   app.use(requestParsers());
   app.get("/api/media/capabilities", abuse.publicRead, (_req, res) => { res.set("Cache-Control", "no-store").json({ enabled: !!media, maxBytes: 8388608, stationImages: 1, reportImages: 3 }); });
-  if (media) app.use("/api/media", createMediaRouter(media, auth, abuse));
+  if (media) app.use("/api/media", createMediaRouter(media, auth, strictOptionalAuth, abuse));
   else app.use("/api/media", (_req, res) => { res.status(503).json({ message: "Image uploads are disabled in local preview" }); });
   app.use("/api/auth", createAuthRouter(users, getSecret, abuse));
-  app.use("/api/feeding-stations", createFeedingStationRouter(stations, logs, auth, media ? mediaStationSchema : undefined, abuse));
+  app.use("/api/feeding-stations", createFeedingStationRouter(stations, auth, media ? mediaStationSchema : undefined, abuse));
   app.use("/api/reports", createReportRouter(reports, auth, createOptionalAuthMiddleware(users, getSecret), media ? mediaReportSchema : undefined, abuse));
   app.get("/readyz", abuse.publicRead, async (_req, res) => {
     try {

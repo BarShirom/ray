@@ -47,6 +47,7 @@ test('actual offline SDK presigning binds PUT length, checksum, MIME, conditiona
   const changed=new URL((await storage.signUpload(key,{...intent,byteLength:intent.byteLength+1})).url);
   assert.notEqual(changed.searchParams.get('X-Amz-Signature'),url.searchParams.get('X-Amz-Signature'));
   const read=new URL(await storage.signRead(output)); assert.equal(read.searchParams.get('X-Amz-Expires'),'60'); assert.equal(read.searchParams.get('response-content-type'),'image/webp');
+  assert.equal(read.searchParams.get('response-cache-control'),'private, no-store','new GET capabilities override retained object cache metadata');
   for(const invalid of ['prod/incoming/'+key.split('/').at(-1),'dev/../secret',output]) await assert.rejects(storage.signUpload(invalid,intent),e=>e.status===503&&!e.message.includes('synthetic-secret'));
   await assert.rejects(storage.signRead(key),e=>e.status===503);
   const scoped='dev/test-runs/22222222-2222-4222-8222-222222222222/ready/11111111-1111-4111-8111-111111111111.webp';
@@ -67,7 +68,7 @@ test('bounded storage download checks HEAD, conditional GET, bytes and checksum;
 });
 test('immutable output retry accepts only the exact existing normalized object',async()=>{
   const normalized=await normalizeImage(bytes,'image/png');let matching=true;
-  const storage=createS3Storage({send:async command=>{if(command.constructor.name==='PutObjectCommand'){assert.equal(command.input.IfNoneMatch,'*');assert.equal(command.input.ContentType,'image/webp');throw Object.assign(new Error(),{name:'PreconditionFailed'});}return {ChecksumSHA256:matching?normalized.checksum:'bad',ContentLength:normalized.data.length,ContentType:'image/webp'};}},config);
+  const storage=createS3Storage({send:async command=>{if(command.constructor.name==='PutObjectCommand'){assert.equal(command.input.IfNoneMatch,'*');assert.equal(command.input.ContentType,'image/webp');assert.equal(command.input.CacheControl,'private, no-store');throw Object.assign(new Error(),{name:'PreconditionFailed'});}return {ChecksumSHA256:matching?normalized.checksum:'bad',ContentLength:normalized.data.length,ContentType:'image/webp'};}},config);
   await storage.putOutput(output,normalized.data,normalized.checksum);matching=false;await assert.rejects(storage.putOutput(output,normalized.data,normalized.checksum),e=>e.status===503);
 });
 test('synthetic JPEG/PNG/WebP normalize orientation, dimensions and strip metadata',async()=>{
