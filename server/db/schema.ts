@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, doublePrecision, geometry, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, doublePrecision, geometry, index, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 const identity = () => ({
   id: uuid("id").defaultRandom().primaryKey(),
@@ -70,6 +70,8 @@ export const feedingStations = pgTable("feeding_stations", {
   legacyVersionPresent: boolean("legacy_version_present").notNull().default(false),
   createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "restrict" }),
   active: boolean("active").notNull().default(true),
+  // Classification alone does not protect the existing HTTP/media routes.
+  visibility: text("visibility").$type<"sensitive" | "regular">().notNull().default("sensitive"),
   ...timestamps(),
 }, (t) => [
   check("feeding_stations_public_id_hex", sql`${t.publicId} ~ '^[0-9a-f]{24}$'`),
@@ -77,9 +79,26 @@ export const feedingStations = pgTable("feeding_stations", {
   check("feeding_stations_cats_nonnegative", sql`${t.estimatedCats} >= 0`),
   check("feeding_stations_kittens_nonnegative", sql`${t.estimatedKittens} >= 0`),
   check("feeding_stations_location_valid", sql`NOT ST_IsEmpty(${t.location}) AND ST_X(${t.location}) BETWEEN -180 AND 180 AND ST_Y(${t.location}) BETWEEN -90 AND 90`),
+  check("feeding_stations_visibility_allowed", sql`${t.visibility} IN ('sensitive', 'regular')`),
   index("feeding_stations_created_by_idx").on(t.createdBy),
   index("feeding_stations_active_created_at_idx").on(t.createdAt.desc()).where(sql`${t.active} = true`),
   index("feeding_stations_location_geography_idx").using("gist", sql`(${t.location}::geography)`),
+]);
+
+// Latest explicit care-grant state, not an invitation or a complete audit ledger.
+export const stationAccessGrants = pgTable("station_access_grants", {
+  stationId: uuid("station_id").notNull().references(() => feedingStations.id, { onDelete: "restrict" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  // The application must verify this is the immutable station creator.
+  grantedBy: uuid("granted_by").notNull().references(() => users.id, { onDelete: "restrict" }),
+  // Require a fresh admission instant after the station lock, not a now() default.
+  grantedAt: timestamp("granted_at", { withTimezone: true, precision: 3 }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true, precision: 3 }),
+}, (t) => [
+  primaryKey({ columns: [t.stationId, t.userId] }),
+  check("station_access_grants_not_self", sql`${t.userId} <> ${t.grantedBy}`),
+  check("station_access_grants_revocation_order", sql`${t.revokedAt} IS NULL OR ${t.revokedAt} >= ${t.grantedAt}`),
+  index("station_access_grants_active_user_station_idx").on(t.userId, t.stationId).where(sql`${t.revokedAt} IS NULL`),
 ]);
 
 export const feedingLogs = pgTable("feeding_logs", {

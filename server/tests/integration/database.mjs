@@ -1,6 +1,24 @@
 import { createPostgres } from "../../dist/db/connection.js";
 import { assertDatabaseIdentity, localConfig, localConfigFromEnv } from "../../dist/db/local-config.js";
 
+// The caller must already hold the guarded suite advisory lock. Keeping this
+// probe separate lets a suite-owned sentinel exercise real refusal without
+// releasing that lock or adopting an unexpected pre-existing table.
+export async function assertNoExistingRayObjects(pool) {
+  const existing = await pool.query(`
+    SELECT to_regclass('public.media_assets') AS media, to_regclass('public.users') AS users,
+      to_regclass('public.reports') AS reports,
+      to_regclass('public.feeding_stations') AS stations,
+      to_regclass('public.feeding_logs') AS logs,
+      to_regclass('public.station_access_grants') AS station_grants,
+      to_regnamespace('drizzle') AS migrations,
+      to_regproc('public.ray_set_updated_at') AS trigger_function
+  `);
+  if (Object.values(existing.rows[0]).some((value) => value !== null)) {
+    throw new Error("Refusing existing Ray objects. Recreate only the disposable test-db service; see setup documentation.");
+  }
+}
+
 export async function cleanupTestDatabase(connection, url) {
   // Validate before ANY query, including identity lookup or destructive SQL.
   localConfig("test", url);
@@ -9,6 +27,7 @@ export async function cleanupTestDatabase(connection, url) {
   await connection.pool.query(`
     DROP TABLE IF EXISTS public.media_assets;
     DROP TABLE IF EXISTS public.feeding_logs;
+    DROP TABLE IF EXISTS public.station_access_grants;
     DROP TABLE IF EXISTS public.feeding_stations;
     DROP TABLE IF EXISTS public.reports;
     DROP TABLE IF EXISTS public.users;
@@ -35,17 +54,7 @@ export async function openTestDatabase(t) {
   lock = await connection.pool.connect();
   const { rows } = await lock.query("SELECT pg_try_advisory_lock(1010, 10) AS acquired");
   if (!rows[0].acquired) throw new Error("Another Ray integration suite is running");
-  const existing = await connection.pool.query(`
-    SELECT to_regclass('public.media_assets') AS media, to_regclass('public.users') AS users,
-      to_regclass('public.reports') AS reports,
-      to_regclass('public.feeding_stations') AS stations,
-      to_regclass('public.feeding_logs') AS logs,
-      to_regnamespace('drizzle') AS migrations,
-      to_regproc('public.ray_set_updated_at') AS trigger_function
-  `);
-  if (Object.values(existing.rows[0]).some((value) => value !== null)) {
-    throw new Error("Refusing existing Ray objects. Recreate only the disposable test-db service; see setup documentation.");
-  }
+  await assertNoExistingRayObjects(connection.pool);
   ownsObjects = true;
   return { ...connection, url: config.connectionString };
 }

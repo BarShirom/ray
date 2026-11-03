@@ -4,6 +4,19 @@ Assessment: **2026-10-26, Asia/Jerusalem**. Branch: **`ray-2-postgres`**. Review
 
 **Decision: NOT ready for a closed pilot with real users or public production.** Applicable BLOCKER items below require resolution and evidence before launch. Local development and guarded synthetic demonstrations have useful evidence; they do not establish readiness for real identities, animal locations or images.
 
+**SEC.1B-3B.1 local follow-up, 2026-11-03:** the
+[station privacy foundation](security/sec-1b-3b-1-foundation.md) adds migration
+`0007_station_visibility` and internal transaction-bound authorization helpers.
+Verified on disposable PostgreSQL only: full old-row/geometry/media/journal
+preservation, constraints, policy matrix and five lock-order cases; backend
+**240/240**, PostgreSQL **143/143**, frontend **88/88** tests, both frontend builds
+and backend build passed. Historical migrations remain unchanged. The persistent
+preview was not migrated or queried. **Existing station JSON/media routes and
+Mongo station routes remain unprotected by this new ACL.** No frontend privacy
+control is enabled; this partial rollout is not deployable. Complete JSON/media/
+legacy authorization, client fencing and all real-pilot blockers remain open.
+The separate independent critical read-only review is still required before a commit.
+
 This is the current snapshot. The [Release Quality Gate](RELEASE_QUALITY_GATE.md) defines the permanent standard, release levels and change-based verification. [SEC.1B-2](security/sec-1b-2-abuse-protection.md) adds verified scoped local API limits and durable per-owner media issuance reservations. Distributed API enforcement, global retained-media budgets and distributed processing remain unresolved. Its verification is distinguished below from reused historical evidence; no live AWS/Cloudinary operation was performed.
 
 ## Application modes and release levels

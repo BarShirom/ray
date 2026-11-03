@@ -87,9 +87,10 @@ test("feeding compatibility migration upgrades 0000-0003 synthetic rows and repl
     for (const { station, log } of before) {
       const currentStation = (await pool.query("SELECT * FROM feeding_stations WHERE id=$1", [station.id])).rows[0];
       const currentLog = (await pool.query("SELECT * FROM feeding_logs WHERE id=$1", [log.id])).rows[0];
-      const { image_present, notes_present, legacy_version: sv, legacy_version_present: sp, ...oldStation } = currentStation;
+      const { image_present, notes_present, legacy_version: sv, legacy_version_present: sp, visibility, ...oldStation } = currentStation;
       const { period_present, note_present, legacy_version: lv, legacy_version_present: lp, ...oldLog } = currentLog;
       assert.deepEqual(oldStation, station);
+      assert.equal(visibility, "sensitive");
       assert.deepEqual(oldLog, log);
       assert.deepEqual([image_present, notes_present, period_present, note_present], [true, true, true, true]);
       assert.deepEqual([sv, lv, sp, lp], [null, null, false, false]);
