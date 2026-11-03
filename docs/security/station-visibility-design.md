@@ -1,5 +1,15 @@
 # SEC.1B-3A - Hybrid feeding-station privacy and authorization design
 
+**SEC.1B-3C.0, 2026-11-03: first-beta policy APPROVED; NOT IMPLEMENTED.**
+[Section 17](#17-sec1b-3c0-approved-first-beta-policy-and-implementation-plan)
+is authoritative for the first real-user beta. The hybrid audience, classification
+and invitation/grant roadmap in sections 1-16 are **SUPERSEDED FOR BETA** where
+identified below; their dated decisions, contracts and evidence remain historical.
+The committed application still enforces the hybrid model. This documentation-only
+revision neither changes access nor clears the real-user release gates.
+
+Historical SEC.1B-3A/3B design status follows:
+
 Date: **2026-11-03, Asia/Jerusalem**. Status: **nine product decisions APPROVED;
 engineering design revised after independent critical review; SEC.1B-3B.0
 contracts retained; SEC.1B-3B.2 implementation evidence recorded separately**.
@@ -80,6 +90,9 @@ the work. No staging, commit, push, merge, branch switch or deployment is author
 Source inspection is evidence of current code, not runtime proof of the proposed policy.
 
 ## 2. Product policy and recommended defaults
+
+**Historical hybrid policy:** the following audience/defaults are superseded for
+the first beta by section 17. Preserved security/privacy requirements remain applicable.
 
 ### Approved policy supplied for this milestone
 
@@ -1060,25 +1073,26 @@ Unspecified technical, lifecycle and operating details are separately OPEN/PROPO
 do not promote them through association with an approved principle. Responsible
 roles remain TBD, not assigned people or application roles.
 
-### APPROVED product decision register
+### Historical approved product decisions and first-beta disposition
 
 | ID / decision | Status | Exact approved scope |
 | --- | --- | --- |
-| PD-01 New-station default | APPROVED | New stations are sensitive by default; creators may deliberately publish them as regular. |
-| PD-02 Existing-station preservation/classification | APPROVED | Preserve existing stations and protect them as sensitive until explicitly published as regular. No destructive rewrite/reset. |
-| PD-03 Hybrid station audience | APPROVED | Guests cannot access stations; authenticated accounts may access regular stations; sensitive access requires creator ownership or an explicit per-station grant. |
-| PD-04 Sensitive grant scope | APPROVED | A sensitive-station grant permits viewing and recording feedings, not station administration. |
+| PD-01 New-station default | Historical APPROVED; SUPERSEDED FOR BETA | New stations are sensitive by default; creators may deliberately publish them as regular. |
+| PD-02 Existing-station preservation/classification | Historical APPROVED; classification restriction SUPERSEDED FOR BETA; preservation retained | Preserve existing stations and protect them as sensitive until explicitly published as regular. No destructive rewrite/reset. |
+| PD-03 Hybrid station audience | Historical APPROVED; hybrid restriction SUPERSEDED FOR BETA; guest denial retained | Guests cannot access stations; authenticated accounts may access regular stations; sensitive access requires creator ownership or an explicit per-station grant. |
+| PD-04 Sensitive grant scope | Historical APPROVED; grant requirement SUPERSEDED FOR BETA; creator-only administration retained | A sensitive-station grant permits viewing and recording feedings, not station administration. |
 | PD-05 Shared feeding privacy and author access | APPROVED | Minimized useful coordination summaries; no automatic disclosure of other feeders' identities, precise timestamps or personal notes. Authors retain appropriate access to their own logs. |
-| PD-06 Private recipient references | APPROVED | Identify recipients through private, purpose-specific invitation references; no public user directory or email disclosure. |
+| PD-06 Private recipient references | Historical APPROVED; invitation requirement SUPERSEDED FOR BETA; no directory/email disclosure retained | Identify recipients through private, purpose-specific invitation references; no public user directory or email disclosure. |
 | PD-07 External station images | APPROVED | Suppress unsupported legacy external station image URLs from protected presentation without destructively rewriting records; reject new arbitrary external station URLs. |
 | PD-08 Legacy Mongo station-route direction | APPROVED | Do not extend Mongo stations with a duplicate authorization system; plan explicit safe retirement of legacy station routes. |
 | PD-09 Coordination scope | APPROVED | Summary-only ongoing coordination is sufficient for this milestone; station-note editing is out of scope. |
 
 ### Remaining details - not approved by PD-01 through PD-09
 
-Section 16 selects concrete **PROPOSED** targets for these open details, rather
-than silently accepting them. Its decision ledger identifies the dependent batch;
-the APPROVED register above is unchanged.
+Section 16 preserves the historical **PROPOSED** targets for those details.
+For the first beta, section 17 removes the invitation/grant lifecycle dependency
+and supersedes the old audience constraints; remaining client/operating details
+are not implicitly approved. Original approval scopes above are retained verbatim.
 
 | Detail | Status | Required resolution / secure current recommendation | Owner role |
 | --- | --- | --- | --- |
@@ -1906,6 +1920,9 @@ No staging/commit/push/merge/deploy follows automatically from a pass.
 
 ### 16.10 Remaining decisions and first-batch readiness
 
+Historical 3B ledger: section 17 supersedes C-01/C-02 and the grant-specific parts
+of C-03/C-04 for beta. It retains the applicable client, media and operating gates.
+
 These selected defaults remain **PROPOSED** except the explicit **C-03/C-04
 APPROVED** scope recorded below. No other product approval is implied:
 
@@ -1969,3 +1986,179 @@ git add -- docs/security/station-visibility-design.md
 Suggested commit message: `docs: finalize station privacy implementation contracts`.
 Wait for review and explicit Git-write authorization. No staging, commit, push,
 merge, deployment, database or cloud operation is authorized by this document.
+
+## 17. SEC.1B-3C.0 approved first-beta policy and implementation plan
+
+### 17.1 Authority, baseline and historical disposition
+
+**APPROVED product revision, 2026-11-03; implementation NOT_STARTED in this task.**
+Preflight: clean `ray-2-postgres` at
+`ea63a0ddf02cb3cb2f146ddd65685a4279ba953b`
+(`feat: enforce station and media privacy in PostgreSQL API`), local tracking
+0 ahead / 0 behind without fetch; index empty. SEC.1B-3B.2 is committed.
+The [foundation](sec-1b-3b-1-foundation.md) and
+[endpoint report](sec-1b-3b-2-endpoint-privacy.md) describe the implemented hybrid
+boundary and its dated verification. Their test passes establish that boundary,
+not this newly approved beta audience. Only this design and readiness change here.
+
+| Decision | First-beta status and retained scope |
+| --- | --- |
+| All station locations accessible to current authenticated accounts | **APPROVED**; guests cannot discover/view stations, images, summaries or logs, or record feedings. Registration is not a trust certification. |
+| Feeding and management | **APPROVED**; every authenticated viewer may feed an active station. Only its creator retains any implemented management authority. No professional/company/municipal privilege. No new management endpoint is approved or claimed implemented. |
+| Feeding privacy | **APPROVED, retained PD-05/C-03**; six independent food/water recency buckets, author-only detailed history, no other-feeder identity/exact time/private note. `no-record` describes Ray records, not whether cats were fed. Own history still requires current account/parent access; preserve stored records on denial. Personal-data access/deletion remains separate release work. |
+| Media and Report boundary | **APPROVED, retained**; authenticated station access, authoritative original parent, private S3 and short signed capabilities. Preserve external station URL suppression/rejection (PD-07), legacy refusal (PD-08), summary-only scope/no note editing (PD-09). Report audience/workflows remain separate. No private inspector/trapper/care-provider phone numbers or invented professional roles. |
+| Hybrid restrictions and invitations | **SUPERSEDED FOR BETA:** PD-01; PD-02's classification restriction; PD-03's hybrid audience; PD-04's grant dependency; PD-06's reference workflow. Preservation, guest denial, creator-only administration and no directory/email disclosure survive. No sensitive/regular selector, publishing, references, grants, redemption, revocation or owner invitations are beta dependencies. |
+
+Historical C-01/C-02 invitation/grant lifecycle and C-03's sensitive-grant-revocation
+edge are **SUPERSEDED FOR BETA**, not silently implemented or resolved for future
+use. C-04 expands from regular viewers to all active stations. C-05 client fencing,
+C-06 endpoint safety, C-07 general audit/retention, C-08 capability/external/Report
+risks and C-09 release gates remain applicable; grant-specific proposals are dormant.
+Sections 1-16 remain the historical roadmap; their grant branch/old audience does
+not override this section or require deletion of retained infrastructure.
+
+### 17.2 Resulting authorization and API contracts
+
+The following is the approved audience translated into a **planned** endpoint
+contract. “ALL” includes active and inactive stations; inactive status restricts
+feeding, not discovery/viewing. Collection access is bounded and paginated, not an
+unbounded response or automatic client download of the entire dataset.
+
+| Endpoint, with `/api` prefix | Planned first-beta behavior |
+| --- | --- |
+| `GET/HEAD /feeding-stations` | Required current authentication; all stored stations across both historical classifications, including inactive rows. Retain bounded SQL pagination/server order and cursor checks; expose `active` and `permissions.canFeed`, false for inactive. Guests 401. |
+| `GET/HEAD /feeding-stations/:id` | Required current account and existing parent; same audience as collection. Malformed ID 400 after auth; missing parent generic 404. Authorized inactive detail remains viewable. |
+| `POST /feeding-stations` | Required authentication, server-derived creator, existing validation/account limits and atomic image attachment. No user-selectable audience. Reject explicit `visibility` with bounded 400 rather than accepting a misleading sensitive-access promise; omitted field uses unchanged internal storage default. |
+| `POST /feeding-stations/:id/feedings` | Every current authenticated account, subject to existing parent/activity validation. Same-transaction station lock, fresh policy, active check and author-derived INSERT. Guest 401, missing parent 404, inactive existing parent 409, no denied INSERT. |
+| `GET/HEAD /feeding-stations/:id/feedings` | Current account/parent access plus SQL author filter; never another author's history, including to creator. Preserve approved own-log fields, nullable/presence behavior and paging. |
+| `GET/HEAD /feeding-stations/:id/feeding-summary` | Same parent audience; exactly the approved food/water recency buckets. Keep post-lock time, independent flags, future-event exclusion and saved-receipt semantics. |
+| `GET/HEAD /media/:assetId/content`; `POST /media/:assetId/read-url` | Every current authenticated station viewer may receive a capability for an actual ready attached station asset. Stable content guest denial remains non-enumerating 404; read-url requires auth (401). Supplied invalid credentials 401. Keep strict empty read body, no client parent override, pre-sign and fresh post-sign parent/account/attachment checks. Report content retains its independent existing audience; station-only read-url still rejects Report assets. |
+| Unsupported station children/methods; legacy routes | Preserve protected unknown-method behavior and generic errors. Mongo `/feeding-stations` and `/station-access` namespaces remain fixed 503 before parser/auth/storage; earlier CORS preflight may answer 204. No compatibility fallback. No new grant/visibility endpoints. |
+
+**Recommended engineering DTO choice:** omit dormant `visibility` from discovery,
+detail and creation receipts; add `active` to discovery alongside existing counts,
+coordinates and caller-relative permissions. Detail still adds permitted station
+instructions and the authoritative image reference; no creator/contact/time fields
+are added. The old strings remain stored, never fabricated as `regular` or shown
+as restricted. An old client sending `sensitive` must receive a validation failure,
+not silent successful publication. These mechanics are implementation targets,
+not additional product approvals or current behavior.
+
+### 17.3 Minimal schema and preservation strategy
+
+| Option | Assessment |
+| --- | --- |
+| A. Retain dormant schema, simplify shared policy | **RECOMMENDED.** Keep visibility values/default/CHECK and grant rows/FKs/indexes intact. Stop consulting them for beta viewing/feeding/management; current account and creator remain authoritative. No migration, backfill or record rewrite is needed. |
+| B. Small additive migration | Unnecessary for this audience change: no constraint prevents the new policy or DTO. Consider only if later implementation demonstrates a genuine storage need, with its own reviewed additive migration. No invented beta visibility value or blanket UPDATE. |
+| C. Remove obsolete columns/table | Not justified for first beta. Drops introduce needless data/history/compatibility risk. Defer optional cleanup to separately scoped migration work; do not edit or reverse applied 0007. |
+
+Existing `sensitive` rows become visible to every registered account **through the
+new policy**, without relabeling them. New rows may retain the SQL `sensitive`
+default solely as dormant historical metadata. It no longer promises restricted
+access; no grant or owner action is needed to publish beta rows. Preserve every
+record, log, owner, geometry, timestamp, attachment and object, including all
+synthetic persistent preview data. No database action is authorized in this task.
+
+The later cutover must keep JSON and both media issuers on the same policy/build,
+retain migration readiness checks and legacy refusal, close obsolete clients and
+verify classification-free DTO/UI behavior before exposure. Failure keeps the
+station boundary unavailable for forward repair; never restore public readers.
+
+### 17.4 Exact implementation impact and regression targets
+
+| Actual boundary | Planned changes / retained guarantees |
+| --- | --- |
+| [stationAuthorization.ts](../../server/feedingStations/stationAuthorization.ts) | `stationViewPredicate`: transaction-bound current-account predicate, without visibility/creator/grant branches. `lockAndAuthorizeStation` management: current account plus immutable creator. Preserve opaque principal binding, READ COMMITTED, station-first lock and fresh post-wait query. Dormant classification/grant changes must not alter beta rights. |
+| [postgresStationPrivacyStore.ts](../../server/feedingStations/postgresStationPrivacyStore.ts), [stationPrivacyStore.ts](../../server/feedingStations/stationPrivacyStore.ts) | Remove visibility from HTTP selection/projection/type; include activity in discovery; remove collection's `active=true` filter from both rows and cursor scope. All detail/history/summary/feed operations continue through the centralized helper and live transaction. Keep SQL-author filtering, bounded pages, exact stored-millisecond/tie ordering and DTO allowlists. |
+| [station schema](../../server/validation/feedingStationSchemas.ts), [media schema](../../server/media/validation.ts), [station controller](../../server/controllers/feedingStationController.ts), [store types](../../server/feedingStations/feedingStationStore.ts) | Reject explicit audience input and stop forwarding it; distinguish HTTP create type from retained internal metadata if necessary. The media schema inherits the same contract. [Internal PG defaults](../../server/feedingStations/postgresFeedingStationStore.ts), [schema](../../server/db/schema.ts) and [0007](../../server/db/migrations/0007_station_visibility.sql) can remain unchanged. |
+| [media service](../../server/media/service.ts), [routes](../../server/media/routes.ts), [preview](../../server/preview/app.ts) | `authorizeStationAsset`/`readCapability` consume the shared policy; do not replace parent checks with a token-only signer. Preserve signing outside locks, final state/FK/output-key/account recheck, conservative 60-second receipt, private/no-store/no ETag and expiry rejection. Retain upload ownership, constrained PUT, normalization, leases and durable budgets. Keep [legacy refusal](../../server/feedingStations/retiredStationRoutes.ts) and Report composition. |
+| [station thunks](../../client/src/features/feedingStations/feedingStationsThunks.ts), [types](../../client/src/features/feedingStations/types.ts), [slice](../../client/src/features/feedingStations/feedingStationsSlice.ts); [log thunks](../../client/src/features/feedingLogs/feedingLogsThunks.ts), [types](../../client/src/features/feedingLogs/types.ts), [slice](../../client/src/features/feedingLogs/feedingLogsSlice.ts) | Add authenticated reads/detail/summary, new DTOs, arrays plus `X-Next-Cursor`, server order and scoped replacement. Stop requiring creator/creation time or log `userId`; current client has no summary/detail fetch. Implement typed bounded failures, accepted-session/request fences and draft/receipt preservation. |
+| [MapPage](../../client/src/pages/mapPage/MapPage.tsx), [details](../../client/src/components/feedingStationDetails/FeedingStationDetails.tsx), [creation](../../client/src/components/createFeedingStation/CreateFeedingStation.tsx), [picker](../../client/src/components/createFeedingStation/StationLocationPicker.tsx), [markers](../../client/src/components/feedingStationMarker/FeedingStationMarker.tsx) | Guest gating; authorized detail instead of treating discovery as full detail; independent shared food/water buckets and clearly labelled own history; inactive presentation/no feed action. No classification/invitation controls. Preserve Hebrew, keyboard/focus, RTL and mobile accessibility. |
+| [auth thunks](../../client/src/features/auth/authThunks.ts), [slice](../../client/src/features/auth/authSlice.ts), [selectors](../../client/src/features/auth/authSelectors.ts), [store](../../client/src/app/store.ts), [main](../../client/src/main.tsx), [Login](../../client/src/pages/login/Login.tsx), [Register](../../client/src/pages/register/Register.tsx) | REV-01 accepted auth-attempt/session generation across dispatch, reducer, persistence, navigation, restore and cross-tab transitions remains mandatory. Section 16.6's coordinator mechanism remains PROPOSED until implemented/validated; the proposed session-validation route is absent from [current auth routes](../../server/routes/authRoutes.ts). No password/session policy redesign is implied. |
+| [media client](../../client/src/api/media.ts), [StationMediaImage](../../client/src/components/media/StationMediaImage.tsx), protected [Report thunks](../../client/src/features/reports/reportsThunks.ts) and [MyReports](../../client/src/pages/myReports/MyReports.tsx) | Join shared session fencing without changing Report audiences. Bearer stays on Ray; S3 fetch is credential-free/bounded. Clear decoded nodes/object URLs and reject stale upload/read/complete/blob callbacks. Existing local token/actor checks do not establish full isolation. |
+
+Update the actual [policy unit tests](../../server/tests/stationAuthorization.test.mjs),
+[PG policy tests](../../server/tests/integration/postgresStationAuthorization.test.mjs),
+[endpoint tests](../../server/tests/integration/postgresStationPrivacy.test.mjs),
+[media PG tests](../../server/tests/integration/postgresMedia.test.mjs),
+[station contracts](../../server/tests/feedingStations.contract.test.mjs) and their
+[fixtures](../../server/tests/helpers/contracts.mjs). Update explicit regular-create
+payloads in [feeding](../../server/tests/integration/postgresFeeding.test.mjs) and
+[Report integration](../../server/tests/integration/postgresReports.test.mjs).
+Preserve historical [0007 preservation/constraint tests](../../server/tests/integration/postgresStationPrivacyMigration.test.mjs),
+legacy/parser/abuse/lease/budget/Report regressions and existing privacy allowlists.
+
+Required new expectations: owner, unrelated account and revoked/wrong-grantor
+fixtures all view both classifications without gaining administration; inactive
+rows appear and feed returns 409; guest/deleted/forged principal denial remains.
+Keep independent-connection lock tests: dormant grants/classification have no
+policy effect; active-to-inactive commit/rollback and feeding-first ordering still
+serialize. Keep pending/unattached/guest media denial and zero signer calls;
+account loss/parent attachment changes during signing and expired receipts must
+discard results. Add exact beta DTO/input and all-page/inactive ordering checks.
+
+### 17.5 Simplified implementation sequence and release gates
+
+| Batch | Scope and acceptance |
+| --- | --- |
+| 3C.1 Backend and schema decision | Implement option A, shared account/creator policy and beta input/DTO/list changes. JSON, feeds and both media issuers must agree; no schema/data operation required. |
+| 3C.2 Authorization/media regressions | Run the actual guest/account/creator matrix, inactive behavior, own-author/summary/privacy, fresh parent/account signing, true PG lock tests and preservation checks. Full relevant backend/PG regressions; storage doubles are not live S3 evidence. |
+| 3C.3 Client security and compatibility | Authentication generation/cross-tab persistence and typed errors first; then Bearer reads, beta DTO/paging, protected Redux/component/media isolation, actual Leaflet center/zoom/bounds/fit/picker/overlay reset and neutral repaint. Current 401 purges only captured session; parent 404 and asset failures stay distinct; 429/network failures preserve permitted drafts/confirmed receipts. |
+| 3C.4 Integrated local acceptance and independent review | Relevant builds/tests plus actual synthetic-data browser, two-tab/BFCache, deferred auth/request races, authenticated-image CORS/render/cleanup, Hebrew RTL, keyboard/reader and 320/390px checks. Independent critical code/security review of the final coherent change. |
+| 3C.5 Fixes, revalidation and Git handoff | Correct confirmed findings; rerun affected checks, record evidence tiers/limitations, then request explicit staging/commit approval for exact reviewed paths. Deployment/provider operations remain separately scoped; none follows from Git approval. |
+
+Old 3B.4 reference/grant/visibility-management work and those parts of 3B.7 UX
+are removed from the beta dependency chain. REV-01/02/03, privacy-minimized
+coordination, media ownership and the relevant 3B.5/6/8 evidence remain mandatory,
+mapped into 3C.3/4. No organization roles, station-note editor or Report workflow
+is added. Invitation lifecycle is not a beta blocker; general privacy/security
+auditing and retention still require their own operating decisions.
+
+After beta rollout, a malicious self-registered account could collect **all precise
+station coordinates and attached images**, including formerly sensitive rows. Registration
+does not establish trust, prevent copying, collusion, scraping or location misuse.
+Summary buckets still reveal activity. Existing process-local/reset-on-restart
+limits and per-owner media reservations do not establish sufficient multi-account/
+distributed abuse, enrollment, moderation, global resource or incident controls.
+Those controls and intended beta load/enrollment choices remain release gates;
+this policy does not prescribe an unapproved invitation-only enrollment scheme.
+
+Real-data notices must accurately explain the all-registered audience for locations,
+images and creation instructions, minimized shared activity, author-only logs,
+third-party map/media handling, copies and preissued capability limits. Qualified
+privacy review, contact/removal/access/deletion processes and operating ownership
+remain unresolved. Synthetic preview records are not evidence of real contributors'
+informed notice. Creator authority and private phone numbers remain protected.
+
+The [readiness blockers](../RELEASE_READINESS.md) still prevent a real-user beta:
+auth/session/password policy, client isolation/accessibility/welfare, distributed
+abuse, Report audience/legacy claim risks, retention/personal-data operations,
+dependencies, remaining live S3 acceptance, production identity/origin/TLS, backup/
+restore/recovery, monitoring and incident response. No immediate revocation of
+old signed URLs, cached/saved images or manually copied data is promised (REV-04).
+
+### 17.6 Documentation-only evidence and handoff
+
+Evidence in SEC.1B-3C.0 is **source/document inspection only, 2026-11-03**.
+No application build/test, browser, database, migration or provider operation is
+run for this prose change. Earlier dated results remain attributed to their
+milestones; new beta enforcement/acceptance is **NOT_IMPLEMENTED / NOT_TESTED**.
+Validate links/anchors, policy status, historical preservation, two-file scope,
+UTF-8/formatting, selected credential patterns and `git diff --check` before handoff.
+
+Executed **2026-11-03**, local documentation/source tier:
+
+| Check | Actual result / limit |
+| --- | --- |
+| Read-only `node -` validator over the two edited documents | PASS: 207 local links, 44 source line bounds, 19 Markdown anchors, 34 tables, balanced fences, valid UTF-8, final LF, no trailing whitespace/NUL/replacement character or selected credential/capability pattern. This bounded scan is not a repository/history secret audit. |
+| Historical policy/invariant comparison with `git show HEAD:<design>` | PASS: all nine original PD scope texts retained verbatim; only the relevant status cells/precedence change. All four REV disposition rows unchanged. New approved audience and recommended mechanisms remain distinct from implementation evidence. |
+| Backend and policy read-only draft reviews | No blocking source/policy contradiction found; dormant-schema option, inactive discovery, creator authority, server/media parity, preserved history and remaining release gates align. No application/browser/provider proof added. |
+| `git --no-optional-locks -c safe.directory=C:/Users/97254/Desktop/projects-2025/ray -c core.safecrlf=false diff --check`; read-only status/HEAD/tracking/index checks | PASS; only this design and `docs/RELEASE_READINESS.md` modified, no new/deleted/staged files. Branch/HEAD/local 0/0 tracking unchanged from preflight. Command-scoped Git options only; no configuration write. |
+
+Reviewed staging command, **shown only, not executed**:
+
+```powershell
+git add -- docs/security/station-visibility-design.md docs/RELEASE_READINESS.md
+```
+
+No staging, commit, push, merge, deployment or database/cloud operation is authorized.
