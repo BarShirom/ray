@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Ray: אב־טיפוס למפת הקהילה</title>
+  <style>
+    :root { --ink:#20353c; --muted:#596b70; --blue:#2466cf; --blue-soft:#eaf1ff; --line:#dce3e1; --paper:#fff; --green:#256c55; --red:#a94434; --shadow:0 8px 32px #20353c14; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#eff2ed; color:var(--ink); font:16px/1.55 system-ui,-apple-system,"Segoe UI",Arial,sans-serif; }
+    button,input,select,textarea { font:inherit; color:inherit; }
+    button,a,input,select,textarea,summary { -webkit-tap-highlight-color:transparent; scroll-margin-block:16px; }
+    button { cursor:pointer; }
+    button:disabled { cursor:not-allowed; opacity:.65; }
+    :focus-visible { outline:3px solid #124db0; outline-offset:4px; }
+    [hidden] { display:none !important; }
+    bdi { overflow-wrap:anywhere; }
+    h1,h2,h3,p { margin:0; }
+    h1 { font-size:18px; letter-spacing:-.3px; }
+    h2 { font-size:23px; line-height:1.35; letter-spacing:-.5px; }
+    h3 { font-size:17px; }
+    svg { display:block; flex-shrink:0; }
+    .icon { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    .sr-only { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+    .skip { position:fixed; inset-block-start:8px; inset-inline-start:8px; z-index:50; transform:translateY(-160%); padding:12px; background:white; color:var(--blue); border-radius:12px; }
+    .skip:focus { transform:none; }
+    .app { width:100%; max-width:1280px; height:100vh; height:100svh; min-height:620px; margin:auto; display:flex; flex-direction:column; background:var(--paper); box-shadow:0 0 60px #20353c0c; }
+    .prototype-notice { flex-shrink:0; padding:4px 12px; background:#f7ebcf; color:#64502c; font-size:12px; text-align:center; font-weight:650; }
+    .header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:8px; border:0; padding:0; background:none; min-height:44px; text-align:start; }
+    .brand-mark { width:36px; height:36px; border-radius:12px; display:grid; place-items:center; color:var(--blue); background:var(--blue-soft); }
+    .wordmark { display:block; font-size:28px; font-weight:850; letter-spacing:-1.4px; line-height:1; }
+    .tagline { display:block; margin-top:4px; font-size:11px; color:var(--muted); }
+    .demo-button { min-height:44px; padding:8px 10px; border:1px solid var(--line); border-radius:30px; background:white; display:flex; align-items:center; gap:6px; font-size:12px; font-weight:650; }
+    .demo-dot { width:7px; height:7px; border-radius:50%; background:#87948d; }
+    .demo-dot.member { background:var(--blue); }
+    .toolbar { padding:12px 16px 10px; display:grid; gap:12px; }
+    .toolbar-top,.toolbar-bottom { display:flex; align-items:center; justify-content:space-between; gap:10px; min-width:0; }
+    .scope { display:flex; gap:4px; background:#f0f3f5; padding:4px; border-radius:14px; flex:1; min-width:0; }
+    .scope button { min-height:44px; flex:1; border:0; border-radius:10px; background:none; padding:7px 8px; font-size:14px; font-weight:650; display:flex; align-items:center; justify-content:center; gap:6px; }
+    .scope button[aria-pressed="true"] { background:white; box-shadow:0 1px 6px #18344d10; color:var(--blue); }
+    .scope .icon { width:18px; height:18px; }
+    .icon-button { min-width:44px; min-height:44px; border:1px solid var(--line); border-radius:12px; background:white; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .filter-button { position:relative; }
+    .filter-dot { width:8px; height:8px; border-radius:50%; background:var(--blue); position:absolute; top:6px; right:6px; }
+    .view-control { display:flex; border:1px solid var(--line); border-radius:10px; padding:2px; }
+    .view-control button { display:flex; align-items:center; gap:4px; border:0; background:none; min-height:44px; padding:5px 9px; border-radius:7px; font-size:12px; }
+    .view-control button[aria-pressed="true"] { background:var(--blue-soft); color:var(--blue); font-weight:700; }
+    .view-control .icon { width:16px; height:16px; }
+    .subheading { font-size:12px; color:var(--muted); }
+    .workspace { position:relative; flex:1; min-height:0; background:#e9edde; border-block:1px solid #d5decf; isolation:isolate; }
+    .map-pane { position:absolute; inset:0; overflow:hidden; }
+    .map-pane:focus-visible { outline-offset:-5px; }
+    .map-world { position:absolute; inset:0; transform-origin:50% 45%; }
+    .cartography { position:absolute; width:100%; height:100%; }
+    .map-label { font:500 13px system-ui,sans-serif; fill:#61785c; }
+    .map-caption { position:absolute; top:12px; right:12px; max-width:calc(100% - 76px); padding:5px 9px; background:#ffffffed; border:1px solid #d6dfd1; border-radius:9px; font-size:10px; color:#455a4b; pointer-events:none; }
+    .map-tools { position:absolute; top:12px; left:12px; display:grid; border:1px solid #cdd7c7; border-radius:12px; background:white; box-shadow:0 3px 12px #20353c0b; overflow:hidden; }
+    .map-tools button { display:grid; place-items:center; width:44px; height:44px; border:0; background:white; }
+    .map-tools button + button { border-top:1px solid var(--line); }
+    .marker { position:absolute; left:var(--x); top:var(--y); transform:translate(-50%,-50%); min-width:48px; min-height:48px; padding:7px 9px; border:2px solid white; border-radius:15px 15px 15px 3px; background:white; box-shadow:0 3px 10px #273a3030; display:flex; align-items:center; justify-content:center; gap:5px; color:#374d50; font-size:12px; font-weight:750; z-index:2; }
+    .marker.emergency { color:#9c3a2d; background:#fff2e9; }
+    .marker.food { color:#705a17; background:#fff7d9; }
+    .marker.station { border-radius:50%; color:#37644e; background:#f8fff6; min-width:56px; min-height:56px; flex-direction:column; gap:0; font-size:10px; }
+    .marker.inactive { border:2px dashed #84928a; background:#f3f3ef; color:#53605b; }
+    .marker[aria-pressed="true"] { outline:3px solid var(--blue); outline-offset:5px; box-shadow:0 0 0 8px #ffffffc2,0 5px 16px #20353c35; z-index:4; }
+    .marker .icon { width:21px; height:21px; }
+    .legend { position:absolute; bottom:14px; right:14px; background:#ffffffed; border-radius:10px; padding:7px 10px; color:#4f6054; font-size:11px; pointer-events:none; }
+    .selection-open .legend { display:none; }
+    .scene-panel { position:absolute; inset:70px 16px auto; max-width:380px; margin-inline:auto; border:1px solid var(--line); padding:20px; border-radius:20px; background:#fffffffa; box-shadow:var(--shadow); text-align:center; }
+    .scene-panel p { color:var(--muted); margin:8px 0 14px; font-size:14px; }
+    .scene-panel h2 { font-size:19px; }
+    .scene-panel .icon { margin:0 auto 8px; width:28px; height:28px; color:var(--blue); }
+    .skeleton { height:10px; background:#e9edf0; border-radius:6px; margin:12px auto; width:85%; }
+    .skeleton.short { width:55%; }
+    .list-pane { position:absolute; inset:0; background:#f6f8f5; overflow:auto; padding:16px; overscroll-behavior:contain; }
+    .results-list { list-style:none; margin:0 auto; padding:0; display:grid; gap:10px; max-width:700px; }
+    .list-item { width:100%; display:flex; align-items:center; gap:12px; border:1px solid var(--line); background:white; padding:14px; border-radius:16px; text-align:start; min-height:90px; }
+    .list-icon { background:#edf2fa; color:var(--blue); width:44px; height:44px; display:grid; place-items:center; border-radius:13px; flex-shrink:0; }
+    .list-content { min-width:0; flex:1; }
+    .list-content strong { display:block; font-size:16px; margin:4px 0; }
+    .list-content small { color:var(--muted); font-size:12px; }
+    .list-pane.selection-open { padding-bottom:260px; }
+    .compact { position:absolute; z-index:6; bottom:12px; right:12px; left:12px; max-width:440px; padding:16px; background:white; border:1px solid #d6dfdf; border-radius:22px; box-shadow:0 10px 40px #1b303322; }
+    .compact-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:7px; }
+    .compact .icon-button { border:0; background:#f2f5f4; min-width:44px; min-height:44px; }
+    .badges { display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
+    .badge { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:7px; font-size:11px; font-weight:650; background:#f0f3f3; }
+    .badge.need { color:#98402d; background:#fff0e7; }
+    .badge.active { color:#255b45; background:#e9f4ea; }
+    .badge.progress { color:#785719; background:#fff4d8; }
+    .compact h2 { font-size:19px; }
+    .compact-desc { color:#53656b; font-size:13px; margin:6px 0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .updated { display:block; font-size:11px; color:#65757b; margin:8px 0; }
+    .compact-footer { display:flex; align-items:center; gap:12px; justify-content:space-between; margin-top:10px; }
+    .compact-footer small { color:var(--muted); font-size:11px; }
+    .button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:46px; border:1px solid var(--line); border-radius:12px; padding:10px 15px; background:white; font-weight:650; font-size:14px; text-align:center; }
+    .button.primary { color:white; background:var(--blue); border-color:var(--blue); }
+    .button.soft { color:#174c9d; border-color:#cedcf3; background:#f0f5ff; }
+    .button.wide { width:100%; }
+    .button.link-like { border:0; color:var(--blue); background:none; text-decoration:underline; padding-inline:4px; }
+    .bottom-bar { flex-shrink:0; padding:10px 16px max(10px,env(safe-area-inset-bottom)); background:white; display:grid; gap:4px; }
+    .care-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .care-actions .button { min-width:0; min-height:48px; border-radius:14px; padding-inline:8px; box-shadow:0 3px 9px #2466cf22; }
+    .welfare-link { min-height:44px; border:0; background:none; color:#245694; font-size:12px; text-decoration:underline; }
+    .welfare-card { padding:16px; border:1px solid var(--line); border-radius:16px; }
+    .welfare-card p { margin:8px 0 12px; font-size:14px; }
+    .future-badge { display:inline-block; margin-bottom:8px; padding:4px 8px; border-radius:7px; background:#f1eaf9; color:#62447e; font-size:12px; font-weight:700; }
+    .live-message { flex-shrink:0; padding:5px 16px; color:#30593f; background:#edf6eb; font-size:12px; border-top:1px solid #dce8d9; }
+    dialog { color:var(--ink); border:0; padding:0; width:calc(100% - 16px); max-width:560px; max-height:calc(100vh - 24px); max-height:calc(100dvh - 24px); margin:auto auto 8px; border-radius:26px; box-shadow:0 20px 100px #152b3a44; overflow:hidden; }
+    dialog::backdrop { background:#172f3a70; }
+    .sheet { display:flex; flex-direction:column; max-height:calc(100vh - 24px); max-height:calc(100dvh - 24px); }
+    .sheet-header { padding:16px 20px 12px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-shrink:0; }
+    .eyebrow { display:block; color:var(--muted); font-size:11px; margin-bottom:7px; }
+    .sheet-header h2 { font-size:22px; }
+    .sheet-scroll { padding:18px 20px; overflow:auto; overscroll-behavior:contain; min-height:0; }
+    .sheet-scroll > * + * { margin-top:18px; }
+    .sheet-footer { padding:12px 20px max(14px,env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:#fff; flex-shrink:0; }
+    .sheet-footer p { margin-bottom:8px; }
+    .sheet-copy { font-size:15px; line-height:1.8; overflow-wrap:anywhere; }
+    .muted { color:var(--muted); font-size:13px; }
+    .image-placeholder { min-height:130px; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:8px; padding:18px; border-radius:16px; background:linear-gradient(135deg,#eef3e7,#e0ebeb); color:#5c7569; text-align:center; font-size:12px; }
+    .image-placeholder .icon { width:46px; height:46px; stroke-width:1.25; }
+    .image-unavailable { background:#f4f5f3; color:var(--muted); }
+    .location-box { display:flex; gap:12px; padding:14px; border:1px solid var(--line); border-radius:14px; }
+    .location-box .icon { color:var(--blue); }
+    .location-box strong,.location-box small { display:block; }
+    .summary-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:12px 0 0; }
+    .summary-grid > div { padding:14px 12px; border:1px solid #dce7db; border-radius:15px; background:#f6faf3; }
+    .summary-grid dt { color:#4c6655; font-size:12px; display:flex; gap:5px; align-items:center; margin-bottom:5px; }
+    .summary-grid dd { margin:0; font-weight:700; font-size:17px; }
+    .summary-grid .icon { width:18px; height:18px; }
+    .hint-box { background:#f3f6f9; border-radius:12px; padding:12px; color:#50626c; font-size:13px; }
+    .inactive-note { background:#f8f0df; color:#725620; border-radius:12px; padding:12px; font-size:14px; }
+    details { border:1px solid var(--line); border-radius:14px; padding:2px 14px; }
+    summary { cursor:pointer; min-height:48px; padding-block:12px; font-weight:650; font-size:14px; }
+    .history { list-style:none; padding:0; margin:0; }
+    .history li { padding:12px 0; border-top:1px solid var(--line); font-size:13px; }
+    .history strong,.history time { display:block; }
+    .history time { color:var(--muted); font-size:12px; }
+    .history p { overflow-wrap:anywhere; }
+    .field { display:grid; gap:6px; }
+    .field > label,.field legend { font-size:14px; font-weight:650; }
+    select,textarea,input[type="text"] { width:100%; min-width:0; min-height:46px; padding:11px; background:white; border:1px solid #bdc9cf; border-radius:10px; }
+    textarea { resize:vertical; min-height:100px; }
+    fieldset { min-width:0; border:0; padding:0; margin:0; }
+    .choices { display:flex; flex-wrap:wrap; gap:8px; }
+    .choice { display:flex; gap:8px; align-items:center; padding:12px; min-height:48px; border:1px solid var(--line); border-radius:12px; flex:1; }
+    input[type="checkbox"] { width:20px; height:20px; accent-color:var(--blue); }
+    .form-message { padding:12px; border-radius:10px; font-size:14px; }
+    .form-message--success { background:#eef5ec; color:#315c38; }
+    .form-message--error { color:#903b2e; background:#fff0e9; }
+    .inline-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .inline-actions > * { flex:1; }
+    .section-rule { padding-top:16px; border-top:1px solid var(--line); }
+    @media(min-width:760px) {
+      .app { padding-inline:20px; }
+      .prototype-notice { margin-inline:-20px; }
+      .header { padding:14px 6px; }
+      .tagline { font-size:12px; }
+      .toolbar { display:flex; justify-content:space-between; align-items:center; padding:16px 6px; }
+      .toolbar-top { min-width:360px; }
+      .toolbar-bottom { min-width:300px; }
+      .workspace { border-radius:22px; border:1px solid #d5decf; }
+      .compact { bottom:20px; right:20px; left:auto; width:420px; }
+      .bottom-bar { padding-inline:6px; }
+      dialog { margin:auto; }
+      .marker { font-size:13px; }
+    }
+    @media(max-width:350px) {
+      .header,.toolbar,.bottom-bar { padding-inline:12px; }
+      .tagline { font-size:10px; }
+      .demo-button { font-size:11px; padding-inline:8px; }
+      .scope button { font-size:12px; padding-inline:5px; }
+      .compact { padding:12px; }
+      .compact h2 { font-size:18px; }
+      .sheet-header,.sheet-scroll,.sheet-footer { padding-inline:16px; }
+      .summary-grid dd { font-size:15px; }
+      .care-actions { gap:8px; }
+      .care-actions .button { font-size:12px; }
+    }
+    @media(max-height:620px) { .app { height:auto; min-height:100svh; } .workspace { flex:none; min-height:380px; } }
+    @media(prefers-reduced-motion:no-preference) { button { transition:background-color .15s,box-shadow .15s; } }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs>
+    <symbol id="i-cat" viewBox="0 0 24 24"><path d="m5 10-1-7 6 4h4l6-4-1 7c4 9-1 11-7 11S2 19 5 10Z"/><path d="M8 13h.01M16 13h.01M10 16l2 1 2-1M3 15l4 1M17 16l4-1"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="m12 3 10 18H2L12 3Z"/><path d="M12 9v5M12 17h.01"/></symbol>
+    <symbol id="i-bowl" viewBox="0 0 24 24"><path d="M3 12h18c0 6-3 8-9 8s-9-2-9-8ZM6 5v3M12 4v4M18 5v3"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2s-7 8-7 13a7 7 0 0 0 14 0c0-5-7-13-7-13Z"/><path d="M9 15c0 2 1 3 3 3"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M7 6h14M7 12h14M7 18h14M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="m2 5 7-3 6 3 7-3v17l-7 3-6-3-7 3V5ZM9 2v17M15 5v17"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/><circle cx="8" cy="6" r="2" fill="white"/><circle cx="16" cy="12" r="2" fill="white"/><circle cx="9" cy="18" r="2" fill="white"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6M8 12h12"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+    <symbol id="i-picture" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="8" r="2"/><path d="m3 18 5-5 4 4 4-6 5 7"/></symbol>
+  </defs></svg>
+  <a class="skip" href="#workspace">דילוג למפה ולרשימה</a>
+  <main class="app" id="app">
+    <div class="prototype-notice">אב־טיפוס: נתונים סינתטיים</div>
+    <header class="header">
+      <button class="brand" type="button" data-action="home" aria-label="Ray: חזרה למפה">
+        <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#i-cat"/></svg></span>
+        <span><bdi class="wordmark" dir="ltr">Ray</bdi><span class="tagline">בשביל חתולי הקהילה</span></span>
+      </button>
+      <button class="demo-button" id="demo-button" type="button" data-action="demo" aria-haspopup="dialog"><span class="demo-dot" id="demo-dot"></span><span id="actor-label">הדגמה: אורח</span><span aria-hidden="true">⌄</span></button>
+    </header>
+    <nav class="toolbar" aria-label="תצוגת מפת הקהילה">
+      <div class="toolbar-top">
+        <div class="scope" role="group" aria-label="מה להציג">
+          <button id="scope-all" type="button" data-action="scope" data-value="all" aria-pressed="true">הכול</button>
+          <button id="scope-stations" type="button" data-action="scope" data-value="stations" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-cat"/></svg>תחנות</button>
+          <button id="scope-reports" type="button" data-action="scope" data-value="reports" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-pin"/></svg>דיווחים</button>
+        </div>
+        <button class="icon-button filter-button" id="filter-button" type="button" data-action="filters" aria-label="פתיחת סינון" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#i-filter"/></svg><span class="filter-dot" id="filter-dot" hidden></span></button>
+      </div>
+      <div class="toolbar-bottom">
+        <div><h1 id="page-heading">מפת רווחת החתולים</h1><p class="subheading" id="results-count">דיווחים ציבוריים; תחנות אחרי התחברות</p></div>
+        <div class="view-control" role="group" aria-label="אופן התצוגה">
+          <button id="view-map" type="button" data-action="view" data-value="map" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#i-map"/></svg>מפה</button>
+          <button id="view-list" type="button" data-action="view" data-value="list" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg>רשימה</button>
+        </div>
+      </div>
+    </nav>
+    <section class="workspace" id="workspace" aria-labelledby="page-heading" tabindex="-1">
+      <div class="map-pane" id="map-pane" role="region" aria-label="מפת הדגמה סכמטית, לא מפה אמיתית" aria-describedby="map-help" tabindex="0">
+        <span class="sr-only" id="map-help">אפשר לבחור סמן עם Tab ו־Enter, או להשתמש ברשימה. מקשי החצים מזיזים את מפת ההדגמה בלבד.</span>
+        <div class="map-world" id="map-world">
+          <svg class="cartography" viewBox="0 0 600 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <rect width="600" height="700" fill="#e9edde"/>
+            <path d="M-40 155Q130 110 215 180T640 135M-30 520Q170 460 310 510T640 480" fill="none" stroke="#d6e1cc" stroke-width="110"/>
+            <path d="M-20 635Q135 570 168 390T400-20" fill="none" stroke="#c7dce0" stroke-width="52"/>
+            <g fill="#dce3d0" stroke="#cad6c0" stroke-width="1.5"><rect x="325" y="110" width="105" height="60" rx="14" transform="rotate(-12 325 110)"/><rect x="355" y="370" width="122" height="85" rx="15" transform="rotate(8 355 370)"/><rect x="80" y="65" width="107" height="60" rx="12"/><rect x="30" y="260" width="103" height="92" rx="17"/><rect x="230" y="555" width="138" height="88" rx="16"/></g>
+            <g fill="none" stroke-linecap="round"><path d="M-30 215 630 300M285-40 235 730" stroke="#d8d9cb" stroke-width="34"/><path d="M-30 215 630 300M285-40 235 730" stroke="#fcfcf5" stroke-width="27"/><path d="m-20 425 640-85M50 750 480-25M-30 70 620 540" stroke="#fbfbf1" stroke-width="14"/><path d="M420 750Q460 540 410 280T500-30" stroke="#f8f8ed" stroke-width="8" stroke-dasharray="2 12"/></g>
+            <g fill="#c4d4b5"><circle cx="340" cy="75" r="14"/><circle cx="364" cy="64" r="19"/><circle cx="465" cy="590" r="25"/><circle cx="490" cy="615" r="19"/><circle cx="95" cy="425" r="18"/><circle cx="72" cy="442" r="23"/><circle cx="544" cy="205" r="18"/><circle cx="510" cy="188" r="24"/></g>
+            <g class="map-label" text-anchor="middle"><text x="380" y="210">גן לדוגמה</text><text x="130" y="560">שביל ההדגמה</text><text x="444" y="515">אזור דמיוני</text></g>
+          </svg>
+          <div id="markers"></div>
+        </div>
+        <p class="map-caption">מפת הדגמה סכמטית · ללא GPS · לא לניווט</p>
+        <div class="map-tools" role="group" aria-label="כלי מפת ההדגמה">
+          <button type="button" data-action="zoom" data-value="in" aria-label="התקרבות במפת ההדגמה"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          <button type="button" data-action="zoom" data-value="out" aria-label="התרחקות במפת ההדגמה"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+          <button type="button" data-action="recenter" aria-label="מרכוז מפת ההדגמה, ללא איתור מיקום"><svg class="icon" aria-hidden="true"><use href="#i-target"/></svg></button>
+        </div>
+        <p class="legend">◇ דיווח &nbsp; ◯ תחנת האכלה</p>
+      </div>
+      <div class="list-pane" id="list-pane" role="region" aria-label="רשימת פריטים כחלופה למפה" hidden><ul class="results-list" id="results-list"></ul></div>
+      <div id="scene-panel" class="scene-panel" hidden></div>
+      <article class="compact" id="compact" aria-labelledby="compact-title" hidden></article>
+    </section>
+    <p class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true"></p>
+    <p class="live-message" id="live-message" hidden></p>
+    <footer class="bottom-bar">
+      <div class="care-actions" role="group" aria-label="תחנות ודיווחים: תחומי טיפול משלימים">
+        <button class="button primary" id="station-care" type="button" data-action="station-care"><svg class="icon" aria-hidden="true"><use href="#i-bowl"/></svg>תחנות והאכלה</button>
+        <button class="button primary" id="new-report" type="button" data-action="new-report" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>דיווח חדש</button>
+      </div>
+      <button class="welfare-link" id="welfare-button" type="button" data-action="welfare" aria-haspopup="dialog">כל צורכי חתולי הקהילה: טיפול, סיוע ומבט לעתיד</button>
+    </footer>
+  </main>
+  <dialog id="overlay" aria-labelledby="dialog-title"></dialog>
+  <noscript><p>האב־טיפוס דורש JavaScript לצורך הדגמת האינטראקציות. אין חיבור לשרת ואין שמירת נתונים.</p></noscript>
+  <script>
+    'use strict';
+    // Synthetic, fictional fixtures only. Client-side gating is a demonstration,
+    // never an authorization boundary. No storage, network, device GPS or timers.
+    const seedReports = [
+      { domain:'report', id:'report-1', type:'emergency', status:'new', title:'חתול מתקשה לדרוך', description:'דוגמה בלבד: חתול נראה מתקשה לדרוך ליד השביל. כדאי לתאר מה רואים בלי לקבוע אבחנה. המקום והמצב מומצאים לצורך בחינת הממשק.', place:'ליד השביל המזרחי בגן לדוגמה', x:70, y:26, updated:'2026-11-05T10:10:00+02:00', assignee:null },
+      { domain:'report', id:'report-2', type:'general', status:'in-progress', title:'גורים ליד פינת ישיבה', description:'דוגמה בלבד: כמה גורים נמצאים ליד פינת ישיבה דמיונית. טקסט ארוך לבדיקת קריאות: חתולי הקהילה נעזרים בתשומת לב משותפת, ובתיאור ברור אפשר להבין מה נראה במקום. Mixed text: Kitten Кот 42: כל התוכן סינתטי.', place:'פינת הישיבה הדמיונית', x:34, y:57, updated:'2026-11-05T09:20:00+02:00', assignee:'member-a' },
+      { domain:'report', id:'report-3', type:'food', status:'resolved', title:'עדכון מזון לדוגמה', description:'דיווח מזון ציבורי סינתטי. זהו דיווח כללי במערכת, ולא רשומת האכלה בתחנה. המצב ״טופל״ מתאר סימון בחשבון, לא תוצאה רפואית מאומתת.', place:'השביל הדרומי הדמיוני', x:59, y:79, updated:'2026-11-04T17:00:00+02:00', assignee:'member-b' }
+    ];
+    const stations = [
+      { domain:'station', id:'station-1', title:'תחנת גן לדוגמה', active:true, x:30, y:31, food:'לפני 2–6 שעות', water:'אין רישום ב־Ray', place:'הפינה המוצלת בגן הדמיוני' },
+      { domain:'station', id:'station-2', title:'תחנת השביל לדוגמה', active:false, x:79, y:62, food:'לפני יותר מיממה', water:'לפני 12–24 שעות', place:'ליד השביל הדמיוני' }
+    ];
+    const typeText = { emergency:'דחוף', food:'מזון', general:'כללי' };
+    const statusText = { new:'חדש', 'in-progress':'בטיפול', resolved:'טופל' };
+    const actorText = { guest:'אורח', 'member-a':'חשבון א׳', 'member-b':'חשבון ב׳' };
+    const futureExamples = {
+      kittens:{title:'סיוע ייעודי לגורים: דוגמה עתידית',example:'דוגמת עתיד: ריכוז תצפיות ומעקב ייעודי אחר צרכים של גורים לאורך זמן.',boundary:'כיום אפשר לתאר גורים בדיווח כללי או דחוף. קטגוריה ייעודית ותהליך תיאום טיפול בגורים עדיין אינם קיימים ביישום.'},
+      sterilization:{title:'צורך בעיקור או בסירוס: דוגמה עתידית',example:'דוגמת עתיד: ציון צורך בעיקור או בסירוס ומעקב אחר בקשת סיוע בהמשך.',boundary:'קטגוריה ותהליך ייעודיים לעיקור ולסירוס אינם קיימים ביישום. אין כאן הזמנת טיפול, תיאום לכידה או התחייבות של נותן שירות.'},
+      coordination:{title:'תיאום עם גורמי סיוע: דוגמה עתידית',example:'דוגמת עתיד: בקשת תיאום המשך טיפול והצגת מצב פנייה לגורם מסייע, אם יפותח תהליך כזה.',boundary:'אין ביישום תהליך עבודה עם נותני טיפול, חשבונות עירוניים או אישור קבלה מגורם מקצועי. לקיחה לטיפול וסימון כטופל כיום הם פעולות חשבון בדיווח, ללא אימות רפואי.'}
+    };
+    const state = { actor:'guest', epoch:0, scope:'all', view:'map', selected:null, opener:null, scene:'ready', details:'ready', media:'placeholder', filter:'all', stationFilter:'all', status:'all', futureExample:null, camera:{x:0,y:0,zoom:1}, reports:seedReports.map(r=>({...r})), ownLog:[], feedingDraft:{food:true,water:true,note:''} };
+    const $ = id => document.getElementById(id);
+    const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+    const escapeHTML = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const dateText = value => new Intl.DateTimeFormat('he-IL',{dateStyle:'short',timeStyle:'short',timeZone:'Asia/Jerusalem'}).format(new Date(value));
+    const member = () => state.actor !== 'guest';
+    const currentItem = () => state.selected && [...state.reports,...(member()?stations:[])].find(r=>r.id===state.selected);
+    let dialogKind = null, returnFocus = null;
+
+    function announce(message) { $('announcer').textContent=message; $('live-message').textContent=message; $('live-message').hidden=!message; }
+    function focus(id) { const target=$(id); if (target && !target.closest('[hidden]')) target.focus(); else $(`view-${state.view}`).focus(); }
+    function visibleItems() {
+      const reports=state.scope==='stations'?[]:state.reports.filter(r=>(state.filter==='all'||r.type===state.filter)&&(state.status==='all'||r.status===state.status));
+      const care=state.scope==='reports'||!member()?[]:stations.filter(s=>state.stationFilter==='all'||(state.stationFilter==='active'?s.active:!s.active));
+      // Schematic top-to-bottom order, never a domain priority or real distance.
+      return [...reports,...care].sort((a,b)=>a.y-b.y);
+    }
+    function itemBadge(item) { return item.domain==='station' ? `<span class="badge">תחנת האכלה</span><span class="badge ${item.active?'active':''}">${item.active?'פעילה':'לא פעילה'}</span>` : `<span class="badge need">דיווח · ${typeText[item.type]}</span><span class="badge ${item.status==='in-progress'?'progress':''}">${statusText[item.status]}</span>`; }
+    function itemIcon(item) { return item.domain==='station'?'cat':item.type==='emergency'?'alert':item.type==='food'?'bowl':'pin'; }
+    function camera() { $('map-world').style.transform=`translate(${state.camera.x}px,${state.camera.y}px) scale(${state.camera.zoom})`; }
+    function resetSelection() { state.selected=null; state.opener=null; $('compact').replaceChildren(); $('compact').hidden=true; }
+
+    function render() {
+      const items=visibleItems(), blocked=state.scope==='stations'&&!member(), ready=state.scene==='ready'&&!blocked;
+      $('actor-label').textContent=`הדגמה: ${actorText[state.actor]}`;
+      $('demo-dot').className=`demo-dot${member()?' member':''}`;
+      for(const name of ['all','stations','reports']) $(`scope-${name}`).setAttribute('aria-pressed',String(state.scope===name));
+      for(const name of ['map','list']) $(`view-${name}`).setAttribute('aria-pressed',String(state.view===name));
+      $('filter-dot').hidden=state.filter==='all'&&state.status==='all'&&state.stationFilter==='all';
+      $('results-count').textContent=blocked?'תחנות זמינות לאחר התחברות':state.scene==='loading'?'טוענים תצוגת הדגמה…':state.scene==='error'?'שגיאה מדומה: אפשר לנסות שוב':state.scope==='all'&&!member()?'דיווחים ציבוריים; תחנות אחרי התחברות':`${state.scene==='empty'?0:items.length} ${state.scope==='all'?'דוגמאות: תחנות ודיווחים':state.scope==='reports'?'דיווחים לדוגמה':'תחנות לדוגמה'}`;
+      $('map-pane').hidden=state.view!=='map'; $('list-pane').hidden=state.view!=='list';
+      $('markers').innerHTML=ready?items.map(item=>`<button type="button" class="marker ${item.domain==='station'?'station '+(!item.active?'inactive':''):item.type}" id="marker-${item.id}" style="--x:${item.x}%;--y:${item.y}%" data-action="select" data-id="${item.id}" aria-pressed="${state.selected===item.id}" aria-label="${escapeHTML((item.domain==='station'?'תחנת האכלה, ':'דיווח '+typeText[item.type]+', ')+item.title+', '+(item.domain==='station'?(item.active?'פעילה':'לא פעילה'):statusText[item.status]))}">${icon(itemIcon(item))}<span>${item.domain==='station'?(item.active?'תחנה':'לא פעילה'):typeText[item.type]}</span></button>`).join(''):'';
+      $('results-list').innerHTML=ready?items.map(item=>`<li><button type="button" class="list-item" id="list-${item.id}" data-action="select" data-id="${item.id}"><span class="list-icon">${icon(itemIcon(item))}</span><span class="list-content"><span class="badges">${itemBadge(item)}</span><strong dir="auto">${escapeHTML(item.title)}</strong><small>${item.domain==='report'?'עדכון אחרון שנרשם: '+dateText(item.updated):'מידע סינתטי לתיאום האכלה'}</small></span>${icon('arrow')}</button></li>`).join(''):'';
+      const panel=$('scene-panel'); panel.hidden=true;
+      if(blocked) { panel.hidden=false; panel.innerHTML=`${icon('lock')}<h2>תחנות האכלה זמינות אחרי התחברות</h2><p>דיווחים ציבוריים פתוחים לכולם. כאן אפשר לעבור לחשבון הדגמה כדי לראות תחנות.</p><button type="button" class="button primary" data-action="demo">בחירת חשבון הדגמה</button>`; }
+      else if(state.scene==='loading') { panel.hidden=false; panel.innerHTML='<h2>טוענים את תצוגת ההדגמה</h2><p role="status">דוגמה למצב טעינה, ללא חיבור לשרת.</p><div class="skeleton"></div><div class="skeleton short"></div><button type="button" class="button soft" data-action="ready">סיום טעינה בהדגמה</button>'; }
+      else if(state.scene==='error') { panel.hidden=false; panel.innerHTML='<h2>התצוגה לא נטענה</h2><p role="alert">שגיאה מדומה. הבחירה בסינון נשמרה ואפשר לנסות שוב.</p><button type="button" class="button primary" data-action="ready">ניסיון נוסף בהדגמה</button>'; }
+      else if(state.scene==='empty'||!items.length) { panel.hidden=false; panel.innerHTML='<h2>אין פריטים בתצוגה הזו</h2><p>אפשר להסיר את הסינון או לחזור לנתוני ההדגמה.</p><button type="button" class="button soft" data-action="clear-filters">הצגת כל הדוגמאות</button>'; }
+      if(!ready||!items.some(r=>r.id===state.selected)) resetSelection();
+      renderCompact(); camera();
+      $('map-pane').classList.toggle('selection-open',!!state.selected);
+      $('list-pane').classList.toggle('selection-open',!!state.selected);
+    }
+    function renderCompact() {
+      const item=currentItem(), card=$('compact'); card.hidden=!item;
+      if(!item) { card.replaceChildren(); return; }
+      const station=item.domain==='station';
+      const summary=station?`מזון: ${item.food} · מים: ${item.water}${item.active?'':' · התחנה אינה פעילה; צפייה בלבד.'}`:item.description;
+      card.innerHTML=`<div class="compact-top"><div class="badges">${itemBadge(item)}</div><button type="button" class="icon-button" data-action="close-card" aria-label="סגירת כרטיס וחזרה לפריט שנבחר">${icon('close')}</button></div><h2 id="compact-title" tabindex="-1" dir="auto">${escapeHTML(item.title)}</h2><p class="compact-desc" dir="auto">${escapeHTML(summary)}</p>${station?'':`<time class="updated" datetime="${item.updated}">עדכון אחרון שנרשם: <bdi>${dateText(item.updated)}</bdi></time>`}<div class="compact-footer"><small>דוגמה סינתטית בלבד</small><button type="button" class="button soft" id="expand-current" data-action="expand" aria-haspopup="dialog">${station?'פרטי התחנה':'לפרטים המלאים'}${icon('arrow')}</button></div>`;
+    }
+    function finishOverlay() { const opener=returnFocus; $('overlay').replaceChildren(); dialogKind=null; returnFocus=null; focus(opener||'demo-button'); }
+    function closeOverlay() { if($('overlay').open) { $('overlay').close(); finishOverlay(); } }
+    function sheet(title,body,footer='') { return `<div class="sheet"><header class="sheet-header"><div><span class="eyebrow">אב־טיפוס: נתונים סינתטיים</span><h2 id="dialog-title" tabindex="-1">${title}</h2></div><button type="button" class="icon-button" data-action="close-overlay" aria-label="סגירה וחזרה לתצוגה הקודמת">${icon('close')}</button></header><p class="sr-only" id="dialog-announcer" role="status" aria-live="polite" aria-atomic="true"></p><p class="sr-only" id="dialog-alert" role="alert" aria-atomic="true"></p><div class="sheet-scroll">${body}</div>${footer?`<footer class="sheet-footer">${footer}</footer>`:''}</div>`; }
+    function openOverlay(kind,opener) {
+      if((kind==='detail'||kind==='feed')&&!currentItem()) return;
+      if(kind==='feed'&&(!member()||currentItem().domain!=='station'||!currentItem().active)) return;
+      if(typeof $('overlay').showModal!=='function') { announce('התצוגה המורחבת דורשת דפדפן שתומך בחלונית מודאלית. אפשר להמשיך בכרטיס וברשימה.'); return; }
+      dialogKind=kind; returnFocus=opener||document.activeElement?.id||'demo-button';
+      renderOverlay(); if(!$('overlay').open) $('overlay').showModal(); focus('dialog-title');
+    }
+    function imageArea() {
+      if(state.media==='empty') return `<div class="image-placeholder image-unavailable">${icon('picture')}<p>לא צורפה תמונה לדוגמה.</p></div>`;
+      if(state.media==='loading') return '<div class="image-placeholder"><p role="status">טעינת תמונה לדוגמה…</p><button type="button" class="button" data-action="image-ready">סיום הטעינה בהדגמה</button></div>';
+      if(state.media==='unavailable') return `<div class="image-placeholder image-unavailable">${icon('picture')}<p role="status">התמונה אינה זמינה בדוגמה הזו.</p><button type="button" class="button" data-action="image-ready">ניסיון נוסף בהדגמה</button></div>`;
+      return `<div class="image-placeholder" role="img" aria-label="איור מקומי במקום תמונה, לא צילום אמיתי">${icon('cat')}<span>מקום לתמונה · איור בלבד</span></div>`;
+    }
+    function locationArea(item) { return `<div class="location-box">${icon('pin')}<div><strong>${escapeHTML(item.place)}</strong><small class="muted">מקום דמיוני, ללא קואורדינטות אמיתיות</small></div></div><button type="button" class="button wide" data-action="navigate">${icon('arrow')}מקום לכפתור ניווט: הדגמה בלבד</button>`; }
+    function detailBody(item) {
+      if(state.details==='loading') return '<p role="status">טעינת פרטים: הדגמה בלבד.</p><div class="skeleton"></div><div class="skeleton short"></div><button type="button" class="button" data-action="detail-ready">הצגת פרטי הדוגמה</button>';
+      if(state.details==='error') return '<div class="hint-box" role="alert">הפרטים לא נטענו בדוגמה הזו. הבחירה והמפה נשמרו.</div><button type="button" class="button primary" data-action="detail-ready">ניסיון נוסף בהדגמה</button>';
+      if(item.domain==='report') return `<div class="badges">${itemBadge(item)}</div>${imageArea()}<p class="sheet-copy" dir="auto">${escapeHTML(item.description)}</p><p class="muted">עדכון אחרון שנרשם: <time datetime="${item.updated}"><bdi>${dateText(item.updated)}</bdi></time> · מועד סינתטי</p>${locationArea(item)}<p class="hint-box">סימון ״טופל״ מציין פעולה של חשבון במערכת, ולא טיפול מקצועי מאומת או אישור שגורם כלשהו קיבל את הדיווח.</p>`;
+      const history=state.actor==='member-a'&&item.id==='station-1'?[{label:'מים בלבד',note:'הערה אישית סינתטית: הודגמה מילוי קערת מים.',time:'2026-11-05T08:30:00+02:00'}]:[];
+      const own=history.concat(state.ownLog.filter(r=>r.stationId===item.id));
+      return `<div class="badges">${itemBadge(item)}<span class="badge">צפייה לחשבונות מחוברים</span></div>${imageArea()}${!item.active?'<p class="inactive-note">התחנה אינה פעילה. אפשר לצפות במידע, אך אי אפשר לרשום בה האכלה.</p>':''}<section><h3>תיאום משותף</h3><dl class="summary-grid"><div><dt>${icon('bowl')}מזון</dt><dd>${item.food}</dd></div><div><dt>${icon('drop')}מים</dt><dd>${item.water}</dd></div></dl><p class="muted" style="margin-top:10px">״אין רישום״ פירושו שלא נרשמה האכלה ב־Ray, ולא שלא ניתן אוכל לחתולים.</p></section><details><summary>ההיסטוריה שלי: רשומות אישיות</summary><p class="muted">רק רשומות של חשבון ההדגמה הנוכחי. פרטי מאכילים אחרים אינם מוצגים.</p>${own.length?`<ul class="history">${own.map(row=>`<li><strong>${escapeHTML(row.label)}</strong><time datetime="${row.time}"><bdi>${dateText(row.time)}</bdi> · מועד סינתטי</time><p dir="auto">${escapeHTML(row.note)}</p></li>`).join('')}</ul>`:'<p class="muted" style="padding-block:12px">אין רשומות אישיות לחשבון זה בדוגמה.</p>'}</details>${locationArea(item)}<p class="hint-box">התחברות מאפשרת צפייה ורישום האכלה בתחנות פעילות; היא אינה מעניקה הרשאת ניהול. אין כאן עריכה או מחיקה של תחנות.</p>`;
+    }
+    function detailFooter(item) {
+      if(state.details!=='ready') return '<button type="button" class="button wide" data-action="close-overlay">חזרה למפה ולכרטיס</button>';
+      if(item.domain==='station') return `<button type="button" class="button primary wide" data-action="feed" ${item.active?'':'disabled'}>${icon('bowl')}${item.active?'הדגמת רישום האכלה':'התחנה לא פעילה: הרישום אינו זמין'}</button><button type="button" class="button link-like wide" data-action="logout">התנתקות מדומה ובדיקת ניקוי התצוגה</button>`;
+      let action='';
+      if(!member()&&item.status==='new') action='<button type="button" class="button primary wide" data-action="demo">התחברות לדוגמה כדי לקחת לטיפולי</button>';
+      else if(member()&&item.status==='new') action='<button type="button" class="button primary wide" data-action="claim">הדגמת לקיחה לטיפולי</button>';
+      else if(member()&&item.status==='in-progress'&&item.assignee===state.actor) action='<button type="button" class="button primary wide" data-action="resolve">הדגמת סימון כטופל</button>';
+      else action=`<p class="muted">${item.status==='resolved'?'הדיווח סומן כטופל בדוגמה.':'הדיווח בטיפול חשבון אחר בדוגמה; אין כאן פעולה זמינה.'}</p><button type="button" class="button wide" data-action="close-overlay">חזרה למפה ולכרטיס</button>`;
+      return `${action}<p class="muted" style="margin:8px 0 0">הדגמה בלבד: שום פעולה אינה נשלחת או נשמרת במערכת Ray.</p>`;
+    }
+    function options(values,selected) { return values.map(([value,label])=>`<option value="${value}" ${value===selected?'selected':''}>${label}</option>`).join(''); }
+    function filterBody() {
+      const care=state.scope!=='reports', reports=state.scope!=='stations';
+      return `<p class="muted">תחנות ודיווחים הם תחומי טיפול משלימים. כל קבוצת סינון משפיעה רק על התחום שלה.</p><form id="filter-form">${care?`<fieldset class="field"><legend>תחנות והאכלה</legend><label for="filter-station">מצב התחנה</label><select id="filter-station" name="station">${options([['all','כל התחנות'],['active','פעילות'],['inactive','לא פעילות']],state.stationFilter)}</select>${member()?'':'<p class="muted">הצגת תחנות דורשת התחברות; לא מוצגים כאן פרטי תחנות.</p>'}</fieldset>`:''}${reports?`<fieldset class="field" style="margin-top:16px"><legend>דיווחים ומעקב</legend><label for="filter-kind">סוג הדיווח הקיים</label><select id="filter-kind" name="kind">${options([['all','כל סוגי הדיווח'],['emergency','דחוף'],['food','מזון'],['general','כללי']],state.filter)}</select><label for="filter-status">מצב הדיווח</label><select id="filter-status" name="status">${options([['all','כל המצבים'],['new','חדש'],['in-progress','בטיפול'],['resolved','טופל']],state.status)}</select></fieldset>`:''}<button type="submit" class="button primary wide" style="margin-top:20px">הצגת התוצאות</button></form>`;
+    }
+    function welfareBody() {
+      return `<p class="sheet-copy">רווחת חתולי הקהילה משלבת תזונה, בריאות, סיוע ומעקב. תחנות האכלה ודיווחים הם שני תחומי ליבה משלימים, באותה חשיבות.</p>
+        <section class="welfare-card"><h3>מזון, מים וטיפול מתמשך</h3><p>תחנות פעילות ולא פעילות, תיאום מזון ומים ורשומות האכלה אישיות. הצגת תחנות דורשת התחברות.</p><button type="button" class="button soft wide" data-action="station-care">למפת תחנות והאכלה</button></section>
+        <section class="welfare-card"><h3>חתולים פצועים, חולים או במצוקה</h3><p>אפשר לתאר את מה שנראה במקום בדיווח כללי או דחוף. דיווח אינו אבחנה או הבטחה שסיוע מקצועי יגיע.</p><button type="button" class="button soft wide" data-action="new-report">לדיווח חדש בהדגמה</button></section>
+        <section class="welfare-card"><h3>גורים הזקוקים לסיוע</h3><p>כיום אפשר לתאר גורים בדיווח כללי או דחוף. תהליך ייעודי לתיאום ומעקב אחר טיפול בגורים הוא דוגמה עתידית בלבד.</p><span class="future-badge">מסלול ייעודי עתידי: לא קיים ביישום</span><button type="button" class="button wide" data-action="future" data-value="kittens">דוגמת עתיד: סיוע ייעודי לגורים</button></section>
+        <section class="welfare-card"><h3>צרכים של עיקור וסירוס</h3><span class="future-badge">עתידי: לא קיים ביישום</span><p>מקום לבחינת צורך עתידי בתיאום ומעקב, ללא קטגוריה או פעולה ייעודית במוצר הנוכחי.</p><button type="button" class="button wide" data-action="future" data-value="sterilization">דוגמת עתיד: צורך בעיקור או בסירוס</button></section>
+        <section class="welfare-card"><h3>דיווח, מעקב ותיאום המשך טיפול</h3><p>כיום: מצב דיווח, לקיחה לטיפול וסימון כטופל לפי הרשאה, לצד תיאום האכלה והיסטוריה אישית. תהליך מול נותני טיפול עדיין אינו קיים.</p><span class="future-badge">תיאום עם גורמי סיוע: עתידי בלבד</span><button type="button" class="button wide" data-action="future" data-value="coordination">דוגמת עתיד: תיאום עם גורמי סיוע</button></section>`;
+    }
+    function renderOverlay() {
+      const item=currentItem(); let html='';
+      if(dialogKind==='detail') { if(!item) { closeOverlay(); return; } html=sheet(escapeHTML(item.title),detailBody(item),detailFooter(item)); }
+      if(dialogKind==='demo') html=sheet('כלי הדגמה',`<p class="muted">כל הנתונים מומצאים. בחירת חשבון אינה התחברות אמיתית, והחלפתו מאפסת בחירה, חלוניות ונתוני חשבון.</p><form id="demo-form"><div class="field"><label for="demo-actor">זהות מדומה</label><select id="demo-actor" name="actor">${options([['guest','אורח'],['member-a','חשבון הדגמה א׳'],['member-b','חשבון הדגמה ב׳']],state.actor)}</select></div><div class="field" style="margin-top:16px"><label for="demo-scene">מצב המפה או הרשימה</label><select id="demo-scene" name="scene">${options([['ready','דוגמאות רגילות'],['loading','טעינה'],['empty','ללא תוצאות'],['error','שגיאה שאפשר לנסות אחריה שוב']],state.scene)}</select></div><div class="field" style="margin-top:16px"><label for="demo-details">מצב פרטים מורחבים</label><select id="demo-details" name="details">${options([['ready','פרטים זמינים'],['loading','טעינת פרטים'],['error','שגיאת פרטים']],state.details)}</select></div><div class="field" style="margin-top:16px"><label for="demo-media">מצב התמונה</label><select id="demo-media" name="media">${options([['empty','ללא תמונה'],['placeholder','איור במקום תמונה'],['loading','טעינת תמונה'],['unavailable','תמונה אינה זמינה']],state.media)}</select></div><button type="submit" class="button primary wide" style="margin-top:20px">עדכון ההדגמה</button></form>`);
+      if(dialogKind==='filters') html=sheet('סינון התצוגה',filterBody());
+      if(dialogKind==='welfare') html=sheet('כל צורכי חתולי הקהילה',welfareBody(),'<button type="button" class="button wide" data-action="close-overlay">חזרה למפה</button>');
+      if(dialogKind==='future') {
+        const example=futureExamples[state.futureExample];
+        if(!example) { closeOverlay(); return; }
+        html=sheet(escapeHTML(example.title),`<span class="future-badge">דוגמה עתידית בלבד: לא קיים ביישום</span><p class="sheet-copy">${escapeHTML(example.example)}</p><p class="hint-box">${escapeHTML(example.boundary)}</p><p class="muted">זהו רעיון לבחינת צרכים. אין כאן תהליך פעיל, שליחת פנייה, הזמנת טיפול או אישור שסיוע התקבל.</p>`,'<button type="button" class="button wide" data-action="welfare">חזרה לתחומי הרווחה</button>');
+      }
+      if(dialogKind==='feed') {
+        if(!member()||item?.domain!=='station'||!item.active) { closeOverlay(); return; }
+        html=sheet('הדגמת רישום האכלה',`<p class="muted">${escapeHTML(item.title)} · לא נשלח דבר ל־Ray. נא להשתמש בטקסט מומצא בלבד.</p><form id="feeding-form" novalidate><fieldset><legend>מה ניתן בהדגמה?</legend><div class="choices"><label class="choice"><input type="checkbox" name="food" ${state.feedingDraft.food?'checked':''}>${icon('bowl')}מזון</label><label class="choice"><input type="checkbox" name="water" ${state.feedingDraft.water?'checked':''}>${icon('drop')}מים</label></div></fieldset><div class="field" style="margin-top:16px"><label for="feeding-note">הערה אישית: בדוגמה בלבד</label><textarea id="feeding-note" name="note" dir="auto" maxlength="4000">${escapeHTML(state.feedingDraft.note)}</textarea></div><p class="muted" style="margin-top:10px">הערה זו אינה מתווספת לתיאום המשותף.</p><div id="feeding-message" hidden></div><button type="button" class="button link-like wide" data-action="feed-error">הצגת שגיאה לדוגמה בלי לאבד את הטיוטה</button></form>`,'<button type="submit" form="feeding-form" class="button primary wide">אישור בהדגמה בלבד</button><button type="button" class="button link-like wide" data-action="back-detail">חזרה לפרטי התחנה</button>');
+      }
+      if(dialogKind==='new-report') html=sheet('דיווח חדש: הדגמה',`<p class="muted">דיווחים על חתולי הקהילה. אין כאן שליחה אמיתית; נא להזין תוכן מומצא בלבד.</p><form id="report-form" novalidate><div class="field"><label for="report-type">סוג הדיווח</label><select id="report-type" name="type">${options([['general','כללי'],['emergency','דחוף'],['food','מזון']],'general')}</select></div><div class="field" style="margin-top:16px"><label for="report-description">מה נראה במקום?</label><textarea id="report-description" name="description" dir="auto" maxlength="10000" placeholder="תיאור סינתטי בלבד"></textarea></div><fieldset class="section-rule" style="margin-top:16px"><legend>בחירת מקום ידנית: ללא GPS</legend><p id="manual-point" class="muted" role="status">טרם נבחרה נקודת הדגמה.</p><div class="inline-actions" style="margin-top:10px"><button type="button" class="button soft" data-action="choose-point">בחירת נקודת הדגמה</button><button type="button" class="button" data-action="clear-point">ניקוי הבחירה</button></div></fieldset><p class="hint-box" style="margin-top:16px">${member()?'תמונות אינן מועלות באב־טיפוס.':'אפשר לדווח ללא תמונה גם בלי להתחבר. צירוף תמונות במוצר דורש התחברות.'}</p><div id="report-message" hidden></div></form>`, '<button type="submit" form="report-form" class="button primary wide">הדגמת שליחת דיווח ללא תמונה</button>');
+      $('overlay').innerHTML=html;
+    }
+    function switchActor(actor) {
+      closeOverlay(); $('overlay').replaceChildren(); dialogKind=null; returnFocus='demo-button';
+      state.actor=actor; state.epoch++; resetSelection();
+      state.scope='all'; state.view='map'; state.scene='ready'; state.details='ready'; state.media='placeholder'; state.filter='all'; state.stationFilter='all'; state.status='all'; state.futureExample=null; state.camera={x:0,y:0,zoom:1};
+      state.reports=seedReports.map(r=>({...r})); state.ownLog=[]; state.feedingDraft={food:true,water:true,note:''};
+      render(); announce('מצב ההדגמה הוחלף. הבחירה, החלוניות, הטיוטות ומיקום המפה אופסו.'); focus('demo-button');
+    }
+    function feedingDraft() { const form=$('feeding-form'); if(form) state.feedingDraft={food:form.elements.namedItem('food').checked,water:form.elements.namedItem('water').checked,note:form.elements.namedItem('note').value}; }
+    function feedback(id,message,error=false) { const node=$(id); node.hidden=false; node.className=error?'form-message form-message--error':'form-message form-message--success'; node.textContent=message; $(error?'dialog-announcer':'dialog-alert').textContent=''; $(error?'dialog-alert':'dialog-announcer').textContent=message; node.scrollIntoView({block:'nearest'}); }
+
+    document.addEventListener('click',event=>{
+      const button=event.target.closest('[data-action]'); if(!button||button.disabled) return;
+      const action=button.dataset.action, value=button.dataset.value;
+      if(action==='scope'||action==='station-care') { closeOverlay(); resetSelection(); state.scope=action==='station-care'?'stations':value; state.filter='all'; state.stationFilter='all'; state.status='all'; render(); announce(state.scope==='stations'&&!member()?'יש לבחור חשבון הדגמה כדי להציג תחנות והאכלה.':state.scope==='stations'?'תחנות והאכלה: יש לבחור תחנה במפה או ברשימה.':'התצוגה עודכנה.'); }
+      if(action==='view'||action==='home') { state.view=action==='home'?'map':value; render(); announce(state.view==='list'?'הרשימה מציגה את אותם פריטים כמו המפה.':'מפת ההדגמה מוצגת.'); }
+      if(action==='select') { state.selected=button.dataset.id; state.opener=button.id; render(); focus('compact-title'); }
+      if(action==='close-card') { const opener=state.opener; resetSelection(); render(); focus(opener||`view-${state.view}`); }
+      if(action==='expand') openOverlay('detail','expand-current');
+      if(action==='close-overlay') closeOverlay();
+      if(action==='demo') openOverlay('demo',button.id||'demo-button');
+      if(action==='welfare') openOverlay('welfare','welfare-button');
+      if(action==='future'&&Object.hasOwn(futureExamples,value)) { state.futureExample=value; openOverlay('future','welfare-button'); }
+      if(action==='filters') openOverlay('filters','filter-button');
+      if(action==='new-report') openOverlay('new-report','new-report');
+      if(action==='logout') switchActor('guest');
+      if(action==='zoom') { state.camera.zoom=Math.max(.9,Math.min(1.4,state.camera.zoom+(value==='in'?.1:-.1))); camera(); announce('קנה המידה של האיור השתנה. זו אינה מפה גאוגרפית.'); }
+      if(action==='recenter') { state.camera={x:0,y:0,zoom:1}; camera(); announce('מפת ההדגמה מורכזה. לא נבדק מיקום המכשיר.'); }
+      if(action==='ready') { state.scene='ready'; render(); announce('נתוני ההדגמה מוצגים. לא נשלחה בקשת רשת.'); focus(`view-${state.view}`); }
+      if(action==='clear-filters') { state.scene='ready'; state.filter='all'; state.stationFilter='all'; state.status='all'; render(); announce('כל דוגמאות התצוגה מוצגות.'); focus('filter-button'); }
+      if(action==='navigate') feedbackMessage('זהו מקום לכפתור ניווט. באב־טיפוס לא נפתח שירות חיצוני.');
+      if(action==='image-ready') { state.media='placeholder'; renderOverlay(); focus('dialog-title'); }
+      if(action==='detail-ready') { state.details='ready'; renderOverlay(); focus('dialog-title'); }
+      if(action==='claim'||action==='resolve') {
+        const item=currentItem(); if(!member()||item?.domain!=='report') return;
+        if(action==='claim'&&item.status==='new') { item.status='in-progress'; item.assignee=state.actor; }
+        else if(action==='resolve'&&item.status==='in-progress'&&item.assignee===state.actor) item.status='resolved'; else return;
+        item.updated='2026-11-05T12:10:00+02:00'; render(); renderOverlay(); focus('dialog-title'); feedbackMessage('מצב הדיווח השתנה בהדגמה בלבד. הפעולה לא נשמרה ולא נשלחה.');
+      }
+      if(action==='feed') { state.feedingDraft={food:true,water:true,note:''}; openOverlay('feed','expand-current'); }
+      if(action==='back-detail') { feedingDraft(); dialogKind='detail'; renderOverlay(); focus('dialog-title'); }
+      if(action==='feed-error') { feedingDraft(); feedback('feeding-message','שגיאה לדוגמה. המזון, המים וההערה נשארו בטיוטה; אפשר לאשר שוב.',true); }
+      if(action==='choose-point'||action==='clear-point') { $('report-form').dataset.point=action==='choose-point'?'demo-point':''; $('manual-point').textContent=action==='choose-point'?'נבחרה נקודת הדגמה דמיונית ליד השביל.':'טרם נבחרה נקודת הדגמה.'; }
+    });
+    function feedbackMessage(message) { const body=$('overlay').querySelector('.sheet-scroll'); if(body) { let node=$('overlay-feedback'); if(!node) { node=document.createElement('p'); node.id='overlay-feedback'; body.append(node); } node.className='form-message form-message--success'; node.textContent=message; $('dialog-announcer').textContent=message; node.scrollIntoView({block:'nearest'}); } }
+    document.addEventListener('submit',event=>{
+      event.preventDefault(); const form=event.target;
+      if(form.id==='demo-form') {
+        const value=name=>form.elements.namedItem(name).value;
+        const next={actor:value('actor'),scene:value('scene'),details:value('details'),media:value('media')};
+        if(!Object.hasOwn(actorText,next.actor)) return;
+        if(next.actor!==state.actor) switchActor(next.actor); else { closeOverlay(); resetSelection(); }
+        state.scene=next.scene; state.details=next.details; state.media=next.media; render(); announce('ההדמיה עודכנה. כל הפעולות נשארות בזיכרון הדף בלבד.');
+      }
+      if(form.id==='filter-form') { state.filter=form.elements.namedItem('kind')?.value||'all'; state.status=form.elements.namedItem('status')?.value||'all'; state.stationFilter=form.elements.namedItem('station')?.value||'all'; closeOverlay(); render(); announce('הסינון עודכן לכל תחום בנפרד.'); }
+      if(form.id==='feeding-form') {
+        const item=currentItem(); if(!member()||item?.domain!=='station'||!item.active) return;
+        feedingDraft(); const draft=state.feedingDraft;
+        if(!draft.food&&!draft.water) { feedback('feeding-message','יש לבחור מזון, מים או את שניהם לצורך ההדגמה.',true); form.elements.namedItem('food').focus(); return; }
+        state.ownLog.push({stationId:item.id,label:draft.food&&draft.water?'מזון ומים':draft.food?'מזון בלבד':'מים בלבד',note:draft.note||'ללא הערה בדוגמה',time:'2026-11-05T12:10:00+02:00'});
+        dialogKind='detail'; renderOverlay(); focus('dialog-title'); feedbackMessage('נוספה רשומה להיסטוריה האישית בהדגמה בלבד. לא נרשמה האכלה במערכת Ray.');
+      }
+      if(form.id==='report-form') {
+        if(!form.elements.namedItem('description').value.trim()) { feedback('report-message','יש להוסיף תיאור מומצא לצורך ההדגמה.',true); form.elements.namedItem('description').focus(); return; }
+        if(!form.dataset.point) { feedback('report-message','יש לבחור נקודת הדגמה ידנית. לא נעשה שימוש ב־GPS.',true); return; }
+        feedback('report-message','הודגמה שליחה בלבד. הדיווח לא נשמר, לא נשלח ולא נוסף למפה. הטיוטה נשארה פתוחה.');
+      }
+    });
+    $('map-pane').addEventListener('keydown',event=>{
+      if(event.target!==$('map-pane')) return;
+      const moves={ArrowLeft:[14,0],ArrowRight:[-14,0],ArrowUp:[0,14],ArrowDown:[0,-14]}; const move=moves[event.key]; if(!move) return;
+      event.preventDefault(); state.camera.x=Math.max(-60,Math.min(60,state.camera.x+move[0])); state.camera.y=Math.max(-60,Math.min(60,state.camera.y+move[1])); camera();
+    });
+    document.addEventListener('keydown',event=>{ if(event.key==='Escape'&&!$('overlay').open&&state.selected) { event.preventDefault(); const opener=state.opener; resetSelection(); render(); focus(opener||`view-${state.view}`); } });
+    $('overlay').addEventListener('cancel',event=>{ event.preventDefault(); closeOverlay(); });
+    // close events can be queued after another view has opened. Never clear a
+    // replacement modal; normal explicit close already disposes synchronously.
+    $('overlay').addEventListener('close',()=>{ if(!$('overlay').open&&dialogKind!==null) finishOverlay(); });
+    render();
+  </script>
+</body>
+</html>

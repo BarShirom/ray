@@ -37,11 +37,12 @@ import type {
 } from "../../features/reports/reportsSlice";
 import { t } from "../../i18n";
 import { localizeError } from "../../i18n/errors";
-import { reportTypeLabel, statusLabel } from "../../i18n/formatters";
+import { formatNumber, reportTypeLabel, statusLabel } from "../../i18n/formatters";
 import { DEFAULT_STATION_VIEW, stationViewport } from "./stationViewport";
 import "./MapPage.css";
 
 type LegendKey = TypeKey | StatusKey;
+type MapScope = "all" | "reports" | "stations";
 
 const ALL_TYPES: TypeKey[] = ["emergency", "food", "general"];
 const ALL_STATUSES: StatusKey[] = ["new", "in-progress", "resolved"];
@@ -60,6 +61,9 @@ function StationViewport({ stations }: { stations: FeedingStation[] }) {
   const viewport = useRef<ReturnType<typeof stationViewport> | null>(null);
 
   useEffect(() => {
+    const container = map.getContainer();
+    container.setAttribute("role", "region");
+    container.setAttribute("aria-label", t("map.mapSurface"));
     const current = stationViewport(map);
     viewport.current = current;
     return () => { current.dispose(); viewport.current = null; };
@@ -97,6 +101,8 @@ function SessionMap() {
   const [reportsError, setReportsError] = useState("");
   const [reportsLoading, setReportsLoading] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [scope, setScope] = useState<MapScope>("all");
+  const [stationActivity, setStationActivity] = useState({ active: true, inactive: true });
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -176,6 +182,20 @@ function SessionMap() {
     [reports, activeTypes, activeStatuses]
   );
 
+  const visibleReports = scope === "stations" ? [] : filteredReports;
+  const visibleStations = token && scope !== "reports"
+    ? stations.filter(station => station.active ? stationActivity.active : stationActivity.inactive)
+    : [];
+  const visibleLoading = (scope !== "stations" && reportsLoading) || (token && scope !== "reports" && stationsLoading);
+  const visibleError = (scope !== "stations" && reportsError) || (token && scope !== "reports" && stationsError);
+  // Alternate domains in the list so a long collection cannot bury the other
+  // domain. Order within each API collection is preserved; no distance inferred.
+  const results: ({ kind: "report"; report: Report } | { kind: "station"; station: FeedingStation })[] = [];
+  for (let index = 0; index < Math.max(visibleReports.length, visibleStations.length); index++) {
+    if (visibleReports[index]) results.push({ kind: "report", report: visibleReports[index] });
+    if (visibleStations[index]) results.push({ kind: "station", station: visibleStations[index] });
+  }
+
 
   const onPrimary = async (id: string, status: StatusKey) => {
     const session = instanceSession.current;
@@ -188,99 +208,73 @@ function SessionMap() {
   };
 
   return (
-    <div className="map-layout">
-      <aside className="panel side-left">
-        <div className="feeding-stations-summary">
-          <div className="section-title">{t("map.stations")}</div>
-          <p>{t(token ? "map.stationMarkers" : "map.stationSignInRequired")}</p>
-          {token && stationsLoading && <p role="status">{t("map.loadingStations")}</p>}
-          {token && stationsError && (
-            <div role="alert">
-              <p>{localizeError(stationsError, "station")}</p>
-              <button type="button" disabled={retryBlocked} onClick={() => dispatch(fetchFeedingStations())}>{t("map.retry")}</button>
-            </div>
-          )}
-          {token && !stationsLoading && !stationsError && (
-            <p role="status">{t("map.stationCount", { count: stations.length })}</p>
-          )}
+    <div className="map-layout" dir="rtl">
+      <header className="map-shell-header">
+        <div className="map-heading-row">
+          <h1>{t("map.title")}</h1>
+          <a className="btn map-list-link" href="#map-results">{t("map.listAlternative")}</a>
         </div>
-        <div className="section-title">{t("map.reportFilters")}</div>
+        <div className="map-domain-controls" role="group" aria-label={t("map.scopeLabel")}>
+          <button type="button" aria-pressed={scope === "all"} onClick={() => setScope("all")}>{t("map.scopeAll")}</button>
+          <button type="button" aria-pressed={scope === "reports"} onClick={() => setScope("reports")}>{t("map.scopeReports")}</button>
+          <button type="button" aria-pressed={scope === "stations"} onClick={() => setScope("stations")}>{t("map.scopeStations")}</button>
+        </div>
+        <div className="map-care-actions">
+          <Link className="btn btn-brand" to="/">{t("shell.newReport")}</Link>
+          {token ? <button className="btn btn-brand" type="button" disabled={creationMode} onClick={() => {
+            dispatch(clearStationCreateError());
+            setCreatedStation(null);
+            setCreationMode(true);
+            setPickingLocation(true);
+          }}>{t("map.addStation")}</button> : <Link className="btn btn-brand" to="/login">{t("map.stationCareSignIn")}</Link>}
+        </div>
+        <details className="map-filter-panel">
+          <summary>{t("map.filtersAndLegend")}</summary>
+          <div className="map-filter-groups">
+            <fieldset>
+              <legend>{t("map.reportFilters")}</legend>
+              <div className="map-filter-options">
+                {ALL_TYPES.map(type => <label key={type}><input type="checkbox" checked={activeTypes.has(type)} onChange={onTypeChange(type)} />{reportTypeLabel(type)}</label>)}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>{t("map.status")}</legend>
+              <div className="map-filter-options">
+                {ALL_STATUSES.map(status => <label key={status}><input type="checkbox" checked={activeStatuses.has(status)} onChange={onStatusChange(status)} />{statusLabel(status)}</label>)}
+              </div>
+            </fieldset>
+            <fieldset disabled={!token}>
+              <legend>{t("map.stationActivity")}</legend>
+              <div className="map-filter-options">
+                <label><input type="checkbox" checked={stationActivity.active} onChange={event => setStationActivity(previous => ({ ...previous, active: event.target.checked }))} />{t("map.activeStations")}</label>
+                <label><input type="checkbox" checked={stationActivity.inactive} onChange={event => setStationActivity(previous => ({ ...previous, inactive: event.target.checked }))} />{t("map.inactiveStations")}</label>
+              </div>
+            </fieldset>
+          </div>
+          <Legend counts={counts} compact />
+        </details>
+        <p className="map-result-status" role="status" aria-atomic="true">
+          {t("map.visibleReports", { count: visibleReports.length })}
+          {token && <>, {t("map.visibleStations", { count: visibleStations.length })}</>}
+        </p>
+        {!token && scope !== "reports" && <div className="map-access-notice">
+          <p>{t("map.stationSignInRequired")}</p>
+          <div className="station-auth-links"><Link to="/login">{t("map.login")}</Link><Link to="/register">{t("map.register")}</Link></div>
+        </div>}
+        <div className="map-data-status">
+          {scope !== "stations" && reportsLoading && <p role="status">{t("map.loadingReports")}</p>}
+          {scope !== "stations" && reportsError && <div role="alert"><p>{reportsError}</p><button className="btn" type="button" onClick={() => void loadReports()}>{t("map.retry")}</button></div>}
+          {token && scope !== "reports" && stationsLoading && <p role="status">{t("map.loadingStations")}</p>}
+          {token && scope !== "reports" && stationsError && <div role="alert"><p>{localizeError(stationsError, "station")}</p><button className="btn" type="button" disabled={retryBlocked} onClick={() => dispatch(fetchFeedingStations())}>{t("map.retry")}</button></div>}
+          {actionError && <p role="alert">{actionError}</p>}
+        </div>
+      </header>
 
-        <div className="filters" style={{ marginBottom: 10 }}>
-          <label>
-            <input
-              type="checkbox"
-              checked={activeTypes.has("emergency")}
-              onChange={onTypeChange("emergency")}
-            />{" "}
-            {reportTypeLabel("emergency")}
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={activeTypes.has("food")}
-              onChange={onTypeChange("food")}
-            />{" "}
-            {reportTypeLabel("food")}
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={activeTypes.has("general")}
-              onChange={onTypeChange("general")}
-            />{" "}
-            {reportTypeLabel("general")}
-          </label>
-        </div>
-
-        <div className="legend-title" style={{ marginTop: 6 }}>
-          {t("map.status")}
-        </div>
-        <div className="filters">
-          <label>
-            <input
-              type="checkbox"
-              checked={activeStatuses.has("new")}
-              onChange={onStatusChange("new")}
-            />{" "}
-            {statusLabel("new")}
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={activeStatuses.has("in-progress")}
-              onChange={onStatusChange("in-progress")}
-            />{" "}
-            {statusLabel("in-progress")}
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={activeStatuses.has("resolved")}
-              onChange={onStatusChange("resolved")}
-            />{" "}
-            {statusLabel("resolved")}
-          </label>
-        </div>
-
-        <div className="legend-wrap">
-          <Legend counts={counts} />
-        </div>
-      </aside>
-
-      <section className="panel map-center">
+      <section className="map-center" aria-labelledby="community-map-title" id="community-map">
+        <h2 className="map-section-heading" id="community-map-title" tabIndex={-1}>{t("map.mapSurface")}</h2>
         <div className="station-map-toolbar">
-          {creationMode && token ? (
-            <><p role="status">{t(pickingLocation ? "map.chooseStationLocation" : "map.stationLocationSelected")}</p>
-              <button className="btn" type="button" onClick={cancelCreation}>{t("map.cancelCreation")}</button></>
-          ) : token ? (
-            <button className="btn btn-brand" type="button" onClick={() => {
-              dispatch(clearStationCreateError());
-              setCreatedStation(null);
-              setCreationMode(true);
-              setPickingLocation(true);
-            }}>{t("map.addStation")}</button>
-          ) : <div><p>{t("map.stationSignInRequired")}</p><div className="station-auth-links"><Link to="/login">{t("map.login")}</Link><Link to="/register">{t("map.register")}</Link></div></div>}
+          {creationMode && token && <><p role="status">{t(pickingLocation ? "map.chooseStationLocation" : "map.stationLocationSelected")}</p>
+            <button className="btn" type="button" onClick={cancelCreation}>{t("map.cancelCreation")}</button></>}
           {createdStation && <p role="status">{t("map.createdStation")} <bdi>{createdStation.name}</bdi> <button className="btn" type="button" onClick={() => setSelectedStation(createdStation)}>{t("map.viewStation")}</button></p>}
         </div>
         <MapContainer
@@ -294,35 +288,41 @@ function SessionMap() {
             attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <StationViewport stations={token ? stations : []} />
+          <StationViewport stations={visibleStations} />
           <LocalizedMapControls />
           {creationMode && token && <StationLocationPicker enabled={pickingLocation} location={creationLocation} onSelect={(location) => {
             setCreationLocation(location);
             setPickingLocation(false);
           }} />}
-          {token && stations.map((station) => (
-            <FeedingStationMarker key={station._id} station={station} onSelect={setSelectedStation} />
-          ))}
-          {filteredReports.map((report) => (
-            <ReportMarker key={report._id} report={report} />
-          ))}
+          {visibleStations.map(station => <FeedingStationMarker key={station._id} station={station} onSelect={setSelectedStation} />)}
+          {visibleReports.map(report => <ReportMarker key={report._id} report={report} />)}
         </MapContainer>
       </section>
 
-      <aside className="panel side-right">
-        <div className="list-header">
-          <span>{t("map.reports")}</span>
+      <section className="map-results" id="map-results" aria-labelledby="map-results-title" tabIndex={-1}>
+        <div className="map-heading-row">
+          <h2 id="map-results-title">{t("map.listTitle")}</h2>
+          <a className="btn" href="#community-map-title">{t("map.returnToMap")}</a>
         </div>
-        {reportsLoading && <p role="status">{t("map.loadingReports")}</p>}
-        {reportsError && <div role="alert"><p>{reportsError}</p><button type="button" onClick={() => void loadReports()}>{t("map.retry")}</button></div>}
-        {actionError && <p role="alert">{actionError}</p>}
-        {!reportsLoading && !reportsError && !filteredReports.length && <p>{t("map.noReports")}</p>}
-        <div className="report-list">
-          {filteredReports.map((r) => (
-            <ReportCard key={r._id} report={r} onPrimary={onPrimary} />
-          ))}
-        </div>
-      </aside>
+        {!results.length && !visibleLoading && !visibleError && (token || scope !== "stations") && <p>{t("map.noResults")}</p>}
+        <ul className="map-result-list" aria-label={t("map.listTitle")}>
+          {results.map(result => result.kind === "report" ? <li key={`report:${result.report._id}`} data-report-id={result.report._id}>
+            <span className="map-result-kind">{t("map.scopeReports")}</span>
+            <ReportCard report={result.report} onPrimary={onPrimary} />
+          </li> : <li key={`station:${result.station._id}`} data-station-id={result.station._id}>
+            <span className="map-result-kind">{t("map.scopeStations")}</span>
+            <article className="map-station-card">
+              <h3 dir="auto">{result.station.name}</h3>
+              <p className="map-station-activity">{t(result.station.active ? "map.activeStation" : "map.inactiveStation")}</p>
+              <p>{t("stations.catsCount", { number: formatNumber(result.station.estimatedCats) })}<br />{t("stations.kittensCount", { number: formatNumber(result.station.estimatedKittens) })}</p>
+              <button className="btn" type="button" aria-label={t("map.stationDetails", { name: result.station.name })} onClick={event => {
+                event.currentTarget.focus({ preventScroll: true });
+                setSelectedStation(result.station);
+              }}>{t("stations.details")}</button>
+            </article>
+          </li>)}
+        </ul>
+      </section>
       {token && selectedStation && (
         <FeedingStationDetails key={selectedStation._id} station={selectedStation} onClose={() => setSelectedStation(null)} />
       )}
