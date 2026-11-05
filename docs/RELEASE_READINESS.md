@@ -1,12 +1,53 @@
 # Ray release readiness
 
-Current assessment: **2026-11-03, Asia/Jerusalem**, SEC.1B-3C.2 client session and
-protected station integration, uncommitted. Branch `ray-2-postgres`, baseline/current HEAD
+Current assessment: **2026-11-05, Asia/Jerusalem**, SEC.1B-3C.3B browser-blocker
+remediation, uncommitted. Branch `ray-2-postgres`, verified baseline HEAD
+`57db448149f091634dcb011b920fd20c24f5ebbe`; working tree/index were clean and local
+tracking was **0 ahead / 0 behind**, without fetch. SEC.1B-3C.2 is committed at
+`5fa5cc73e7d7ec06885c706364c59862f86301af`; the independently approved
+[3C.3A read-only recovery correction](security/sec-1b-3c-3a-session-recovery.md)
+is committed at the current baseline. Its dated 199/199 frontend and 68/68 focused
+results remain evidence for that stage, not new native-browser acceptance.
+
+**Actual browser acceptance was attempted and rejected:** the user-supplied Work
+review exercised Windows Chrome against local PostgreSQL preview at `57db448...`
+and returned **REJECT / REVISE**. C3B-R01 is a Leaflet `_leaflet_pos` teardown
+exception/blank screen during navigation or session changes. C3B-R02 is the lack
+of an initial keyboard-only manual Report location without geolocation. These
+are observed pre-fix failures, distinct from the earlier unavailable browser
+tooling. The findings were supplied for this 2026-11-05 task; no separate browser
+run timestamp or additional passes are inferred.
+
+The [3C.3B remediation report](security/sec-1b-3c-3b-browser-remediation.md) records
+the lifecycle correction, keyboard center/clear controls, valid-location guard,
+geolocation cancellation and current evidence. Post-fix native acceptance remains
+**NOT_TESTED**: this task's browser inventory again reports the browser access
+host unavailable. Automated/simulated checks do not overturn the Work rejection
+or establish an actual browser pass. The existing real-user release decision
+and all applicable blockers below remain open.
+
+**SEC.1B-3C.3B local verification, 2026-11-05:** focused map/report regressions
+**40/40**, full frontend **218/218**, both frontend builds, both no-emit TypeScript
+checks and targeted lint/syntax pass. The new map tests execute installed React,
+React Leaflet, Leaflet, actual MapPage/router and Redux against a bounded DOM
+double; the Report tests use controlled production callbacks/hooks/HTTP. The
+original viewport fails six of the final map tests when substituted in memory;
+the missing Report center button also failed before correction. These results
+support local remediation, not native layout, keyboard, two-tab scheduling or
+screen-reader acceptance. Backend/PG code is unchanged and not rerun; no provider
+or database operation occurred. The existing bundle-size warning remains.
+The separate independent read-only code review returned **APPROVE** for the scoped
+local change after a map region-role correction and revalidation. No confirmed
+Level A commit blocker remains. This does not overturn Work's native rejection,
+close real-user gates or authorize Git writes.
+
+Historical SEC.1B-3C.2 assessment, **2026-11-03**, then-uncommitted client session
+and protected station integration on `ray-2-postgres`, baseline
 `2363ac511c6c4be5ca445c389d06e895e3cd1310`; SEC.1B-3C.1 and its reviewed
 runbook correction are committed. Initial implementation preflight was clean;
 the corrective follow-up preserved 55 intentional paths and an empty index.
-Local tracking remains **0 ahead / 0 behind** without fetch. The
-[client implementation report](security/sec-1b-3c-2-client-integration.md) records current
+Local tracking then remained **0 ahead / 0 behind** without fetch. The
+[client implementation report](security/sec-1b-3c-2-client-integration.md) records its
 automated/HTTP/PG evidence, the independent **REVISE BEFORE COMMIT** verdict and
 its five corrections, plus blocked browser acceptance. Historical 3C.1 wording
 below describes its implementation stage.
@@ -56,7 +97,7 @@ verification, remaining S3 checks, distributed abuse, accessibility/welfare,
 dependencies, production configuration, backup/restore/monitoring and all applicable
 real-data blockers remain open. No deployment readiness is granted.
 
-**SEC.1B-3C.2 current evidence, 2026-11-03:** client auth-generation, guarded
+**Historical SEC.1B-3C.2 evidence, 2026-11-03:** client auth-generation, guarded
 identity-only persistence, cross-tab event/focus checks, session/request fencing,
 typed failures, all-page station reads, separate feeding summaries/own history and
 keyed Leaflet/media cleanup are implemented. Corrective revalidation passes
@@ -93,7 +134,7 @@ dependency or schema files changed. The disposable test service was stopped;
 persistent dev/preview services remained stopped. Its subsequent independent
 read-only review returned **APPROVE WITH CHANGES**; the R-01 S3 opening-notice
 correction was incorporated before the committed 3C.1 baseline. That review does
-not cover this uncommitted 3C.2 client implementation.
+not cover the then-uncommitted 3C.2 client implementation.
 
 **SEC.1B-3B.1 local follow-up, 2026-11-03:** the
 [station privacy foundation](security/sec-1b-3b-1-foundation.md) adds migration
@@ -170,6 +211,7 @@ Status describes the evidence for the **actual result**, not an overall pass: `V
 | --- | --- | --- | --- | --- | --- |
 | Safe request parsing, bounded validation, retired anonymous upload | Actual-app child survival, schemas, HTTP regressions; [SEC.1B-1](security/sec-1b-1-remediation.md) | VERIFIED | SEC-001/004 and anonymous exposure SEC-002 remediated. Parser/shared error-handler portion of SEC-013 fixed. | — | Preserve regression coverage; Engineering. |
 | Correct auth, assigned isolation, report transitions and feeding persistence | Contract/real-PG tests; UX.1/UX.2 browser evidence above | VERIFIED | Tested PG ownership, concurrency, timestamps, direct refresh and retry paths held. This does not grant private access or certify production. | — | Recheck affected boundaries when code/configuration changes; Engineering. |
+| Map teardown and initial keyboard Report location | User-supplied Work Chrome/local-PG review at `57db448...`; [3C.3B correction and evidence](security/sec-1b-3c-3b-browser-remediation.md) | VERIFIED pre-fix failures; post-fix native acceptance NOT_TESTED | Work verdict REJECT / REVISE: C3B-R01 blank-screen Leaflet cleanup crash; C3B-R02 no initial keyboard manual point without geolocation. Source fixes and focused simulated regressions are present; they do not prove native reacceptance. | BLOCKER for critical real-user navigation/location workflows until environment-relevant verification | Rerun actual navigation, session changes, keyboard selection/change/clear, mobile and assistive-technology cases; Engineering, Accessibility. |
 | Scoped local API rejection and recoverable Hebrew feedback | Controlled-clock core/HTTP and frontend callback/store tests; [SEC.1B-2](security/sec-1b-2-abuse-protection.md) | VERIFIED | Separate ingress/auth/registration/guest/account/read limits, bounded maps, socket-only attribution and positive Retry-After; forms retain drafts and do not retry automatically. General counters are local to each app instance and reset on restart. | — for verified local scope | Preserve regressions; review shared-IP thresholds against intended deployment; Engineering, Product. |
 | Durable per-owner media issuance reservations | Independent-pool/lock-wait/rolling-window tests on disposable PG; [SEC.1B-2 media budgets](security/sec-1b-2-abuse-protection.md#durable-media-issuance-reservations) | VERIFIED | Existing six outstanding/ten per minute plus 120 intents and 256 MiB declared source bytes per rolling 24 hours, all states counted under the existing owner lock. No insert/sign after rejection; no schema change. Not actual retained/output/global storage accounting. | — for verified reservation scope | Preserve SQL admission/ownership/transaction tests; size historical aggregate queries for production; Engineering. |
 | Distributed abuse/resource bounds before exposed pilot APIs | [SEC-003/007](security/pre-pilot-security-audit.md#findings--missing-protections-with-demonstrated-risk) and [SEC.1B-2 limitations](security/sec-1b-2-abuse-protection.md#remaining-release-gates-and-follow-up) | VERIFIED | Local API limits and durable owner issuance controls improve the system, but shared API enforcement, reviewed proxy attribution, pagination, global/cross-account retained-byte budgets and distributed completion capacity remain open. | BLOCKER for intended exposed APIs/paid media | Define enrollment/moderation, shared atomic quotas/edge enforcement, retention/output/global budgets and production identity; enforce and verify across processes; Product, Engineering, Operations. |
@@ -182,7 +224,7 @@ Status describes the evidence for the **actual result**, not an overall pass: `V
 | Effective S3 and production identity/configuration | Prior restricted dev SDK identity; [SEC-016/017](security/pre-pilot-security-audit.md#verification-gaps-and-operations) | UNKNOWN | Effective out-of-prefix permissions and production compute role/TLS/origin/proxy/DB-TLS/secret configuration unverified. Templates and local results do not establish deployed controls. | BLOCKER for real-user deployment | Establish intended PG/S3 composition, least privilege and configuration failure tests; Operations, Security. |
 | Backup, restore, rollback, monitoring and incident response | Runbook/repository inspection; [SEC-016](security/pre-pilot-security-audit.md#sec-016--production-postgresqls3-operating-controls-are-not-established) | NOT_TESTED | No demonstrated production restore, coordinated DB/object recovery, migration recovery, alert response, retention enforcement or credential-revocation exercise. | BLOCKER before real data | Assign operational ownership/recovery objectives; demonstrate synthetic restore/recovery and alarms in intended environment; Operations, Engineering. |
 | Secrets/credential lifecycle and log handling | SEC.1A selected tracked-file patterns and SEC.1B-1 error regressions | UNKNOWN | No selected-source secret match was found historically; comprehensive history/runtime secret review, production rotation and full client/storage/log inspection are not established. | BLOCKER for credential-bearing deployment | Perform scoped secret/config/log review without disclosing values; document rotation/revocation; Security, Operations. |
-| Accessible critical workflows and mobile use | Historical UX.1/UX.2 keyboard/layout observations and SEC.1B-2 login alert/recovery; current 3C.2 browser attempt blocked | NOT_TESTED | Selected focus/320px/390px and SEC.1B-2 keyboard login 429/recovery checks passed at their recorded historical stages. No current 3C.2 browser acceptance is claimed. Screen-reader journey, full keyboard map/forms/error recovery, zoom/contrast and physical-device coverage remain incomplete. | BLOCKER for inaccessible critical pilot actions; other defects SHOULD_FIX | Verify critical journeys with assistive technology and record findings; Accessibility, Engineering. |
+| Accessible critical workflows and mobile use | Historical UX.1/UX.2 keyboard/layout observations and SEC.1B-2 login alert/recovery; Work rejection and [3C.3B evidence](security/sec-1b-3c-3b-browser-remediation.md) | VERIFIED pre-fix keyboard-location failure; post-fix native acceptance NOT_TESTED | Selected focus/320px/390px and SEC.1B-2 checks passed at their recorded historical stages. Work found C3B-R02; a keyboard center/clear path and Hebrew live status now have simulated regressions. Full native keyboard/screen-reader, 320/390px, zoom/contrast and physical-device acceptance remain incomplete. | BLOCKER for inaccessible critical pilot actions; other defects SHOULD_FIX | Verify critical journeys and the new location controls with assistive technology; Accessibility, Engineering. |
 | Privacy notice, accessibility statement and applicable obligations | [Route inspection](../client/src/App.tsx), [heading-only About](../client/src/pages/about/About.tsx), qualified scope/content review | EXTERNAL_DEPENDENCY | No privacy/accessibility/terms routes or publication evidence established; qualified determination of applicable obligations is outstanding. Code/automation cannot certify compliance. | BLOCKER where applicable to pilot/production | Obtain qualified scope review and prepare accurate notices, contact and statement; Product/privacy, qualified reviewer. |
 | Animal-welfare wording and trustworthy care status | [Rendered emergency option](../client/src/components/reportForm/ReportForm.tsx), [Hebrew resources](../client/src/i18n/locales/he.ts), [localization semantics](localization.md) | VERIFIED | Emergency reporting is offered without rendered emergency-service limitations/escalation guidance. No monitoring/dispatch/municipal acceptance integration exists. Feeding/water copy distinguishes recorded actions, but full welfare acceptance is outstanding. | BLOCKER before real-user emergency reporting | Add truthful reporting-versus-response guidance and appropriate escalation information, reviewed for intended service; verify statuses and advice; Product/domain or qualified reviewer, Engineering. No legal violation is asserted. |
 | Performance, navigation and public discovery | Representative-device/data checks; browser link/deep-link/error routes; metadata/social-preview review | NOT_TESTED | Existing builds warn about a >500-kB bundle. No representative load/performance budget or complete navigation/broken-link/SEO/social audit; only a client template README and SPA rewrite exist. | SHOULD_FIX; critical failures become BLOCKER | Measure intended scale/device behavior; inspect public routes/metadata/share cards and links; Engineering, Product. SEO is inapplicable to private views. |

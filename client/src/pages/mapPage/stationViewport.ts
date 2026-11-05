@@ -22,6 +22,9 @@ export function stationViewport(camera: Camera) {
       });
       fitted = true;
     },
-    dispose() { disposed = true; camera.stop(); camera.closePopup(); },
+    // MapContainer removes the map before this child's passive cleanup. Leaflet
+    // remove() already stops motion and removes layers/popups; public camera
+    // methods such as stop() are unsafe once it has deleted the map pane.
+    dispose() { disposed = true; },
   };
 }

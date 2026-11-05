@@ -36,6 +36,10 @@ textarea.control{ min-height: 120px; resize: vertical; }
 .status{ display:flex; align-items:center; gap:6px; color: var(--muted); font-size: 12px; }
 .status-dot{ width:8px; height:8px; border-radius:999px; background:#ef4444; }
 .status-dot.is-ready{ background:#10b981; }
+.report-location-picker{ display:grid; gap:8px; min-width:0; }
+.report-location-actions{ display:flex; flex-wrap:wrap; gap:8px; }
+.report-location-actions .btn{ max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.report-location-map:focus-visible{ outline:3px solid var(--brand-900); outline-offset:3px; }
 
 /* Type chips */
 .chip-group{ display: flex; flex-wrap: wrap; gap: 8px; }

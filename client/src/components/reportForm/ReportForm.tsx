@@ -1,9 +1,10 @@
 import { isPostgresPreview } from "../../preview";
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 import { validateImages } from "../../api/media";
 import { FilePreview } from "../media/Media";
 import type { ReportType } from "../../features/reports/reportsSlice";
 import MapPreview from "../mapPreview/MapPreview";
+import { isValidMapLocation, type MapLocation } from "../mapPreview/location";
 import { t } from "../../i18n";
 import { localizeError } from "../../i18n/errors";
 import "./ReportForm.css";
@@ -16,9 +17,8 @@ interface ReportFormProps {
   setDescription: (value: string) => void;
   handleSubmit: React.FormEventHandler<HTMLFormElement>; 
   useLocation: () => void;
-  locationReady: boolean;
-  location: { lat: number; lng: number } | null;
-  setLocation: (value: { lat: number; lng: number }) => void;
+  location: MapLocation | null;
+  setLocation: (value: MapLocation | null) => void;
   type: ReportType;
   setType: (value: ReportType) => void;
   mediaFiles: File[];
@@ -34,7 +34,6 @@ export default function ReportForm({
   setDescription,
   handleSubmit,
   useLocation,
-  locationReady,
   location,
   setLocation,
   type,
@@ -42,6 +41,9 @@ export default function ReportForm({
   mediaFiles,
   setMediaFiles,
 }: ReportFormProps) {
+  const locationLabelId = useId();
+  const locationHintId = useId();
+  const locationReady = isValidMapLocation(location);
   const [fileError, setFileError] = useState("");
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
@@ -105,21 +107,22 @@ export default function ReportForm({
       </div>
 
       {/* Location */}
-      <div className="field">
-        <label className="label">{t("reports.location")}</label>
+      <div className="field" role="group" aria-labelledby={locationLabelId}>
+        <span className="label" id={locationLabelId}>{t("reports.location")}</span>
         <div className="row">
           <button type="button" className="btn" onClick={useLocation}>
             📍 {t(locationReady ? "reports.locationAdded" : "reports.useLocation")}
           </button>
-          <span className="status">
-            <span className={`status-dot ${locationReady ? "is-ready" : ""}`} />
+          <span className="status" role="status" aria-live="polite" aria-atomic="true">
+            <span aria-hidden="true" className={`status-dot ${locationReady ? "is-ready" : ""}`} />
             {t(locationReady ? "reports.locationReady" : "reports.locationMissing")}
+            {locationReady && <bdi dir="ltr">{location.lat.toFixed(5)}, {location.lng.toFixed(5)}</bdi>}
           </span>
         </div>
-        <p className="hint-text">
+        <p className="hint-text" id={locationHintId}>
           {t("reports.chooseLocationHint")}
         </p>
-        <MapPreview selectedLocation={location} onSelect={setLocation} />
+        <MapPreview selectedLocation={location} onSelect={setLocation} disabled={pending} describedBy={locationHintId} />
       </div>
 
       {/* Media */}

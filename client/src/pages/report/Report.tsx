@@ -9,6 +9,7 @@ import { invalidateSession } from "../../features/auth/authSlice";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { createReport } from "../../features/reports/reportsThunks";
 import ReportForm from "../../components/reportForm/ReportForm";
+import { isValidMapLocation, type MapLocation as LatLng } from "../../components/mapPreview/location";
 import { type ReportType } from "../../features/reports/reportsSlice";
 import { isPostgresPreview } from "../../preview";
 import { uploadImages, type ImageUploads } from "../../api/media";
@@ -17,8 +18,6 @@ import { selectToken, selectSessionId, selectUserId, selectAuthLoading } from ".
 import { t } from "../../i18n";
 import { localizeError } from "../../i18n/errors";
 import "./Report.css";
-
-type LatLng = { lat: number; lng: number };
 
 const ReportContent = () => {
   const navigate = useNavigate();
@@ -36,40 +35,57 @@ const ReportContent = () => {
 
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState<LatLng | null>(null);
-  const [watchId, setWatchId] = useState<number | null>(null);
+  const watchId = useRef<number | null>(null);
+  const locationIntent = useRef(0);
   const [type, setType] = useState<ReportType>("general");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const stopWatchingLocation = useCallback(() => {
+    locationIntent.current++;
+    if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+    watchId.current = null;
+  }, []);
+  useEffect(() => stopWatchingLocation, [stopWatchingLocation]);
+
+  const handleSelectLocation = useCallback((next: LatLng | null) => {
+    if (!current() || locked.current) return;
+    stopWatchingLocation();
+    setError(null);
+    if (next !== null && !isValidMapLocation(next)) {
+      setError(t("reports.locationInvalid"));
+      return;
+    }
+    setLocation(next);
+  }, [current, stopWatchingLocation]);
+
   const handleUseLocation = useCallback(() => {
+    if (!current() || locked.current) return;
+    stopWatchingLocation();
+    const intent = locationIntent.current;
     setError(null);
     if (!navigator.geolocation) {
       setError(t("reports.locationUnavailable"));
       return;
     }
-    const id = navigator.geolocation.watchPosition(
+    watchId.current = navigator.geolocation.watchPosition(
       (pos) => {
-        if (!current()) return;
+        if (!current() || intent !== locationIntent.current) return;
         const { latitude, longitude } = pos.coords;
-        setLocation({ lat: latitude, lng: longitude });
+        const next = { lat: latitude, lng: longitude };
+        if (isValidMapLocation(next)) setLocation(next);
+        else setError(t("reports.locationInvalid"));
       },
       (err) => {
-        if (!current()) return;
+        if (!current() || intent !== locationIntent.current) return;
         setError(
           t(err.code === 1 ? "reports.locationDenied" : "reports.locationFailed")
         );
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
-    setWatchId(id);
-  }, [current]);
-
-  useEffect(() => {
-    return () => {
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-    };
-  }, [watchId]);
+  }, [current, stopWatchingLocation]);
 
   const submitReport = useCallback(async () => {
     if (locked.current || !current()) return;
@@ -79,8 +95,8 @@ const ReportContent = () => {
       setError(t("reports.descriptionRequired"));
       return;
     }
-    if (!location) {
-      setError(t("reports.locationRequired"));
+    if (!isValidMapLocation(location)) {
+      setError(t(location ? "reports.locationInvalid" : "reports.locationRequired"));
       return;
     }
     if (isPostgresPreview && mediaFiles.length && !mediaEnabled) {
@@ -88,6 +104,7 @@ const ReportContent = () => {
       return;
     }
 
+    stopWatchingLocation();
     locked.current = true;
     setSubmitting(true);
     try {
@@ -114,7 +131,7 @@ const ReportContent = () => {
       locked.current = false;
       if (current()) setSubmitting(false);
     }
-  }, [description, location, type, mediaFiles, dispatch, navigate, token, mediaEnabled, current]);
+  }, [description, location, type, mediaFiles, dispatch, navigate, token, mediaEnabled, current, stopWatchingLocation]);
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
@@ -133,9 +150,8 @@ const ReportContent = () => {
           setDescription={setDescription}
           handleSubmit={handleSubmit}
           useLocation={handleUseLocation}
-          locationReady={!!location}
           location={location}
-          setLocation={setLocation}
+          setLocation={handleSelectLocation}
           type={type}
           setType={setType}
           mediaFiles={mediaFiles}
