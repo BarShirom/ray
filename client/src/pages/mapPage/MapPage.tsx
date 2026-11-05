@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useSelector, useStore } from "react-redux";
 import { Link } from "react-router-dom";
 import { useAppDispatch } from "../../app/hooks";
@@ -98,6 +98,10 @@ function SessionMap() {
   const [pickingLocation, setPickingLocation] = useState(false);
   const [creationLocation, setCreationLocation] = useState<FeedingStation["location"] | null>(null);
   const [createdStation, setCreatedStation] = useState<FeedingStation | null>(null);
+  const creationOpener = useRef<HTMLButtonElement | null>(null);
+  const pickerControl = useRef<HTMLButtonElement | null>(null);
+  const creationActive = useRef(false);
+  const returnCreationFocus = useRef(false);
   const [reportsError, setReportsError] = useState("");
   const [reportsLoading, setReportsLoading] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -108,6 +112,25 @@ function SessionMap() {
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
+
+  useLayoutEffect(() => {
+    const current = mounted.current && isSessionCurrent(store.getState(), instanceSession.current);
+    if (!current) {
+      returnCreationFocus.current = false;
+      creationOpener.current = null;
+      return;
+    }
+    if (creationMode && pickingLocation) {
+      pickerControl.current?.focus();
+    } else if (!creationMode && returnCreationFocus.current) {
+      // React has now re-enabled the surviving trigger. No queued work may
+      // restore a previous account's opener or focus a detached control.
+      returnCreationFocus.current = false;
+      const opener = creationOpener.current;
+      creationOpener.current = null;
+      if (opener?.isConnected && !opener.disabled) opener.focus();
+    }
+  }, [creationMode, pickingLocation, store]);
 
   const loadReports = useCallback(async () => {
     // The first StrictMode effect owns the existing request and its callbacks.
@@ -121,6 +144,9 @@ function SessionMap() {
   }, [dispatch, store]);
 
   const cancelCreation = () => {
+    if (!creationActive.current || !mounted.current || !isSessionCurrent(store.getState(), instanceSession.current)) return;
+    creationActive.current = false;
+    returnCreationFocus.current = true;
     setCreationMode(false);
     setPickingLocation(false);
     setCreationLocation(null);
@@ -208,11 +234,22 @@ function SessionMap() {
   };
 
   return (
-    <div className="map-layout" dir="rtl">
+    <div className="map-layout" dir="rtl" onKeyDownCapture={event => {
+      // Native form/details dialogs own their Escape handling. Capture picker
+      // Escape before Leaflet's keyboard listener can consume it.
+      if (event.key === "Escape" && creationMode && pickingLocation && !selectedStation) {
+        event.preventDefault();
+        event.stopPropagation();
+        cancelCreation();
+      }
+    }}>
       <header className="map-shell-header">
         <div className="map-heading-row">
           <h1>{t("map.title")}</h1>
-          <a className="btn map-list-link" href="#map-results">{t("map.listAlternative")}</a>
+          <div className="map-navigation-links">
+            <a className="btn" href="#map-support">{t("map.filtersAndLegend")}</a>
+            <a className="btn map-list-link" href="#map-results">{t("map.listAlternative")}</a>
+          </div>
         </div>
         <div className="map-domain-controls" role="group" aria-label={t("map.scopeLabel")}>
           <button type="button" aria-pressed={scope === "all"} onClick={() => setScope("all")}>{t("map.scopeAll")}</button>
@@ -221,52 +258,16 @@ function SessionMap() {
         </div>
         <div className="map-care-actions">
           <Link className="btn btn-brand" to="/">{t("shell.newReport")}</Link>
-          {token ? <button className="btn btn-brand" type="button" disabled={creationMode} onClick={() => {
+          {token ? <button className="btn btn-brand" type="button" disabled={creationMode} onClick={event => {
+            if (creationActive.current || !mounted.current || !isSessionCurrent(store.getState(), instanceSession.current)) return;
+            creationOpener.current = event.currentTarget;
+            returnCreationFocus.current = false;
+            creationActive.current = true;
             dispatch(clearStationCreateError());
             setCreatedStation(null);
             setCreationMode(true);
             setPickingLocation(true);
           }}>{t("map.addStation")}</button> : <Link className="btn btn-brand" to="/login">{t("map.stationCareSignIn")}</Link>}
-        </div>
-        <details className="map-filter-panel">
-          <summary>{t("map.filtersAndLegend")}</summary>
-          <div className="map-filter-groups">
-            <fieldset>
-              <legend>{t("map.reportFilters")}</legend>
-              <div className="map-filter-options">
-                {ALL_TYPES.map(type => <label key={type}><input type="checkbox" checked={activeTypes.has(type)} onChange={onTypeChange(type)} />{reportTypeLabel(type)}</label>)}
-              </div>
-            </fieldset>
-            <fieldset>
-              <legend>{t("map.status")}</legend>
-              <div className="map-filter-options">
-                {ALL_STATUSES.map(status => <label key={status}><input type="checkbox" checked={activeStatuses.has(status)} onChange={onStatusChange(status)} />{statusLabel(status)}</label>)}
-              </div>
-            </fieldset>
-            <fieldset disabled={!token}>
-              <legend>{t("map.stationActivity")}</legend>
-              <div className="map-filter-options">
-                <label><input type="checkbox" checked={stationActivity.active} onChange={event => setStationActivity(previous => ({ ...previous, active: event.target.checked }))} />{t("map.activeStations")}</label>
-                <label><input type="checkbox" checked={stationActivity.inactive} onChange={event => setStationActivity(previous => ({ ...previous, inactive: event.target.checked }))} />{t("map.inactiveStations")}</label>
-              </div>
-            </fieldset>
-          </div>
-          <Legend counts={counts} compact />
-        </details>
-        <p className="map-result-status" role="status" aria-atomic="true">
-          {t("map.visibleReports", { count: visibleReports.length })}
-          {token && <>, {t("map.visibleStations", { count: visibleStations.length })}</>}
-        </p>
-        {!token && scope !== "reports" && <div className="map-access-notice">
-          <p>{t("map.stationSignInRequired")}</p>
-          <div className="station-auth-links"><Link to="/login">{t("map.login")}</Link><Link to="/register">{t("map.register")}</Link></div>
-        </div>}
-        <div className="map-data-status">
-          {scope !== "stations" && reportsLoading && <p role="status">{t("map.loadingReports")}</p>}
-          {scope !== "stations" && reportsError && <div role="alert"><p>{reportsError}</p><button className="btn" type="button" onClick={() => void loadReports()}>{t("map.retry")}</button></div>}
-          {token && scope !== "reports" && stationsLoading && <p role="status">{t("map.loadingStations")}</p>}
-          {token && scope !== "reports" && stationsError && <div role="alert"><p>{localizeError(stationsError, "station")}</p><button className="btn" type="button" disabled={retryBlocked} onClick={() => dispatch(fetchFeedingStations())}>{t("map.retry")}</button></div>}
-          {actionError && <p role="alert">{actionError}</p>}
         </div>
       </header>
 
@@ -290,7 +291,8 @@ function SessionMap() {
           />
           <StationViewport stations={visibleStations} />
           <LocalizedMapControls />
-          {creationMode && token && <StationLocationPicker enabled={pickingLocation} location={creationLocation} onSelect={(location) => {
+          {creationMode && token && <StationLocationPicker enabled={pickingLocation} location={creationLocation} selectionButtonRef={pickerControl} onSelect={(location) => {
+            if (!creationActive.current || !mounted.current || !isSessionCurrent(store.getState(), instanceSession.current)) return;
             setCreationLocation(location);
             setPickingLocation(false);
           }} />}
@@ -299,35 +301,81 @@ function SessionMap() {
         </MapContainer>
       </section>
 
-      <section className="map-results" id="map-results" aria-labelledby="map-results-title" tabIndex={-1}>
-        <div className="map-heading-row">
-          <h2 id="map-results-title">{t("map.listTitle")}</h2>
-          <a className="btn" href="#community-map-title">{t("map.returnToMap")}</a>
+      <aside className="map-sidebar">
+        <div className="map-support" id="map-support" tabIndex={-1}>
+          <details className="map-filter-panel">
+            <summary>{t("map.filtersAndLegend")}</summary>
+            <div className="map-filter-groups">
+              <fieldset>
+                <legend>{t("map.reportFilters")}</legend>
+                <div className="map-filter-options">
+                  {ALL_TYPES.map(type => <label key={type}><input type="checkbox" checked={activeTypes.has(type)} onChange={onTypeChange(type)} />{reportTypeLabel(type)}</label>)}
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend>{t("map.status")}</legend>
+                <div className="map-filter-options">
+                  {ALL_STATUSES.map(status => <label key={status}><input type="checkbox" checked={activeStatuses.has(status)} onChange={onStatusChange(status)} />{statusLabel(status)}</label>)}
+                </div>
+              </fieldset>
+              <fieldset disabled={!token}>
+                <legend>{t("map.stationActivity")}</legend>
+                <div className="map-filter-options">
+                  <label><input type="checkbox" checked={stationActivity.active} onChange={event => setStationActivity(previous => ({ ...previous, active: event.target.checked }))} />{t("map.activeStations")}</label>
+                  <label><input type="checkbox" checked={stationActivity.inactive} onChange={event => setStationActivity(previous => ({ ...previous, inactive: event.target.checked }))} />{t("map.inactiveStations")}</label>
+                </div>
+              </fieldset>
+            </div>
+            <Legend counts={counts} compact />
+          </details>
+          <p className="map-result-status" role="status" aria-atomic="true">
+            {t("map.visibleReports", { count: visibleReports.length })}
+            {token && <>, {t("map.visibleStations", { count: visibleStations.length })}</>}
+          </p>
+          {!token && scope !== "reports" && <div className="map-access-notice">
+            <p>{t("map.stationSignInRequired")}</p>
+            <div className="station-auth-links"><Link to="/login">{t("map.login")}</Link><Link to="/register">{t("map.register")}</Link></div>
+          </div>}
+          <div className="map-data-status">
+            {scope !== "stations" && reportsLoading && <p role="status">{t("map.loadingReports")}</p>}
+            {scope !== "stations" && reportsError && <div role="alert"><p>{reportsError}</p><button className="btn" type="button" onClick={() => void loadReports()}>{t("map.retry")}</button></div>}
+            {token && scope !== "reports" && stationsLoading && <p role="status">{t("map.loadingStations")}</p>}
+            {token && scope !== "reports" && stationsError && <div role="alert"><p>{localizeError(stationsError, "station")}</p><button className="btn" type="button" disabled={retryBlocked} onClick={() => dispatch(fetchFeedingStations())}>{t("map.retry")}</button></div>}
+            {actionError && <p role="alert">{actionError}</p>}
+          </div>
         </div>
-        {!results.length && !visibleLoading && !visibleError && (token || scope !== "stations") && <p>{t("map.noResults")}</p>}
-        <ul className="map-result-list" aria-label={t("map.listTitle")}>
-          {results.map(result => result.kind === "report" ? <li key={`report:${result.report._id}`} data-report-id={result.report._id}>
-            <span className="map-result-kind">{t("map.scopeReports")}</span>
-            <ReportCard report={result.report} onPrimary={onPrimary} />
-          </li> : <li key={`station:${result.station._id}`} data-station-id={result.station._id}>
-            <span className="map-result-kind">{t("map.scopeStations")}</span>
-            <article className="map-station-card">
-              <h3 dir="auto">{result.station.name}</h3>
-              <p className="map-station-activity">{t(result.station.active ? "map.activeStation" : "map.inactiveStation")}</p>
-              <p>{t("stations.catsCount", { number: formatNumber(result.station.estimatedCats) })}<br />{t("stations.kittensCount", { number: formatNumber(result.station.estimatedKittens) })}</p>
-              <button className="btn" type="button" aria-label={t("map.stationDetails", { name: result.station.name })} onClick={event => {
-                event.currentTarget.focus({ preventScroll: true });
-                setSelectedStation(result.station);
-              }}>{t("stations.details")}</button>
-            </article>
-          </li>)}
-        </ul>
-      </section>
+        <section className="map-results" id="map-results" aria-labelledby="map-results-title" tabIndex={-1}>
+          <div className="map-heading-row">
+            <h2 id="map-results-title">{t("map.listTitle")}</h2>
+            <a className="btn" href="#community-map-title">{t("map.returnToMap")}</a>
+          </div>
+          {!results.length && !visibleLoading && !visibleError && (token || scope !== "stations") && <p>{t("map.noResults")}</p>}
+          <ul className="map-result-list" aria-label={t("map.listTitle")}>
+            {results.map(result => result.kind === "report" ? <li key={`report:${result.report._id}`} data-report-id={result.report._id}>
+              <span className="map-result-kind">{t("map.scopeReports")}</span>
+              <ReportCard report={result.report} onPrimary={onPrimary} />
+            </li> : <li key={`station:${result.station._id}`} data-station-id={result.station._id}>
+              <span className="map-result-kind">{t("map.scopeStations")}</span>
+              <article className="map-station-card">
+                <h3 dir="auto">{result.station.name}</h3>
+                <p className="map-station-activity">{t(result.station.active ? "map.activeStation" : "map.inactiveStation")}</p>
+                <p>{t("stations.catsCount", { number: formatNumber(result.station.estimatedCats) })}<br />{t("stations.kittensCount", { number: formatNumber(result.station.estimatedKittens) })}</p>
+                <button className="btn" type="button" aria-label={t("map.stationDetails", { name: result.station.name })} onClick={event => {
+                  event.currentTarget.focus({ preventScroll: true });
+                  setSelectedStation(result.station);
+                }}>{t("stations.details")}</button>
+              </article>
+            </li>)}
+          </ul>
+        </section>
+      </aside>
       {token && selectedStation && (
         <FeedingStationDetails key={selectedStation._id} station={selectedStation} onClose={() => setSelectedStation(null)} />
       )}
       {creationMode && token && <CreateFeedingStation open={!pickingLocation} location={creationLocation}
-        onCancel={cancelCreation} onChangeLocation={() => setPickingLocation(true)} onCreated={(station) => {
+        onCancel={cancelCreation} onChangeLocation={() => {
+          if (creationActive.current && mounted.current && isSessionCurrent(store.getState(), instanceSession.current)) setPickingLocation(true);
+        }} onCreated={(station) => {
           cancelCreation();
           setCreatedStation(station);
         }} />}

@@ -56,6 +56,7 @@ function fixture(context, Component = CreateStation, props = {}, actor = 'synthe
   });
   context.mock.method(React, 'useRef', initial => { const index = cursor++; return cells[index] ??= { current: initial }; });
   context.mock.method(React, 'useEffect', () => {});
+  context.mock.method(React, 'useLayoutEffect', () => {});
   context.mock.method(React, 'useMemo', calculate => calculate());
   context.mock.method(React, 'useCallback', callback => callback);
   context.mock.method(hooks, 'useAppDispatch', () => activeStore.dispatch);

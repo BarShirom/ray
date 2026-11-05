@@ -53,9 +53,19 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
   const pending = busy || creating;
 
   useEffect(() => {
-    if (open && dialog.current && !dialog.current.open) dialog.current.showModal();
-    if (!open) dialog.current?.close();
+    const element = dialog.current;
+    if (open && element && !element.open) element.showModal();
+    if (!open) element?.close();
+    return () => { element?.close(); };
   }, [open]);
+
+  const leaveForm = (next: () => void) => {
+    if (!open || !mounted.current || pending || locked.current || selectStationCreating(store.getState())
+      || !isSessionCurrent(store.getState(), instanceSession.current)) return;
+    // Complete native modal cleanup before the parent replaces this step.
+    dialog.current?.close();
+    next();
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -84,7 +94,10 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
       }
       if (!current()) return;
       const result = await dispatch(createFeedingStation({ ...data, imageAssetId }));
-      if (current() && createFeedingStation.fulfilled.match(result)) onCreated(result.payload);
+      if (current() && createFeedingStation.fulfilled.match(result)) {
+        dialog.current?.close();
+        onCreated(result.payload);
+      }
     } catch (err) {
       if (current()) {
         const failure = toApiFailure(err, { context: "upload", sessionId: session.id, requestId: "station-upload" });
@@ -100,9 +113,9 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
 
   return (
     <dialog ref={dialog} className="create-station-dialog" aria-labelledby="create-station-title"
-      onCancel={(event) => { event.preventDefault(); if (!pending) onCancel(); }}>
+      onCancel={(event) => { event.preventDefault(); leaveForm(onCancel); }}>
       <header><h2 id="create-station-title">{t("stations.add")}</h2>
-        <button className="btn" type="button" disabled={pending} onClick={onCancel}>{t("stations.cancel")}</button>
+        <button className="btn" type="button" disabled={pending} onClick={() => leaveForm(onCancel)}>{t("stations.cancel")}</button>
       </header>
       <form onSubmit={submit} noValidate>
         <fieldset disabled={pending || !authenticated || retryBlocked}>
@@ -110,7 +123,7 @@ export default function CreateFeedingStation({ open, location, onCancel, onChang
           <p className="create-station-location">{location
             ? <>{t("stations.selectedLocation")} <bdi dir="ltr">{location.lat.toFixed(5)}, {location.lng.toFixed(5)}</bdi></>
             : t("stations.selectLocation")}</p>
-          <button className="btn" type="button" onClick={onChangeLocation}>{t("stations.changeLocation")}</button>
+          <button className="btn" type="button" onClick={() => leaveForm(onChangeLocation)}>{t("stations.changeLocation")}</button>
           <label htmlFor="station-name">{t("stations.name")}</label>
           <input id="station-name" dir="auto" value={name} onChange={(event) => setName(event.target.value)} required />
           <div className="create-station-counts">

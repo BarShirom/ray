@@ -15,6 +15,7 @@ class Node {
     this.childNodes = [];
     this.style = {};
     this.className = '';
+    this.disabled = false;
     this.attributes = {};
     this.listeners = new Map();
     this.clientWidth = this.offsetWidth = 800;
@@ -40,9 +41,9 @@ class Node {
     return node;
   }
   removeChild(node) { this.childNodes.splice(this.childNodes.indexOf(node), 1); node.parentNode = null; return node; }
-  setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'class') this.className = String(value); }
+  setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'class') this.className = String(value); if (name === 'disabled') this.disabled = true; }
   getAttribute(name) { return this.attributes[name] ?? null; }
-  removeAttribute(name) { delete this.attributes[name]; }
+  removeAttribute(name) { delete this.attributes[name]; if (name === 'disabled') this.disabled = false; }
   setAttributeNS(_namespace, name, value) { this.setAttribute(name, value); }
   addEventListener(name, callback) { if (!this.listeners.has(name)) this.listeners.set(name, new Set()); this.listeners.get(name).add(callback); }
   removeEventListener(name, callback) { this.listeners.get(name)?.delete(callback); }
@@ -50,9 +51,18 @@ class Node {
   hasChildNodes() { return this.childNodes.length > 0; }
   querySelector(selector) { return findNode(this, node => selector.startsWith('.') ? node.className.split(' ').includes(selector.slice(1)) : node.nodeName.toLowerCase() === selector); }
   getBoundingClientRect() { return { x: 0, y: 0, top: 0, left: 0, width: 800, height: 600, right: 800, bottom: 600 }; }
-  focus() { this.ownerDocument.activeElement = this; }
-  showModal() { this.open = true; this.focus(); }
-  close() { this.open = false; }
+  // Match the bounded focus-order model in stationDialogLifecycle.test.cjs:
+  // native close can return to a connected enabled opener. Creation removes its
+  // picker opener, so the parent must supply a surviving return target. Native
+  // tab order, pixels and assistive-technology behavior remain browser checks.
+  focus() { if (this.isConnected && !this.disabled) this.ownerDocument.activeElement = this; }
+  showModal() { this.previousFocus = this.ownerDocument.activeElement; this.open = true; this.focus(); }
+  close() {
+    if (!this.open) return;
+    this.open = false;
+    if (this.previousFocus?.isConnected && !this.previousFocus.disabled) this.previousFocus.focus();
+    else if (this.contains(this.ownerDocument.activeElement)) this.ownerDocument.activeElement = this.ownerDocument.body;
+  }
 }
 const document = new Node('#document', null, 9);
 document.ownerDocument = document;
@@ -404,8 +414,32 @@ test('mobile map shell exposes public reports and a list link without fetching o
   const shell = findNode(ui.container, node => node.className === 'map-layout');
   assert.equal(shell.getAttribute('dir'), 'rtl');
   const mapIndex = shell.children.findIndex(node => node.className === 'map-center');
-  const listIndex = shell.children.findIndex(node => node.getAttribute('id') === 'map-results');
-  assert.ok(mapIndex >= 0 && listIndex > mapIndex, 'mobile reading order puts the real map before its list alternative');
+  const sidebarIndex = shell.children.findIndex(node => node.className === 'map-sidebar');
+  const sidebar = shell.children[sidebarIndex];
+  const supportIndex = sidebar?.children.findIndex(node => node.className === 'map-support');
+  const listIndex = sidebar?.children.findIndex(node => node.getAttribute('id') === 'map-results');
+  assert.ok(mapIndex >= 0 && sidebarIndex > mapIndex,
+    'mobile DOM order puts the real map before filters, full notices, counts and list');
+  assert.ok(supportIndex >= 0 && listIndex > supportIndex,
+    'supporting controls remain available beside the list after the map');
+  const header = findNode(shell, node => node.className === 'map-shell-header');
+  assert.equal(findNode(header, node => node.className === 'map-filter-panel'), undefined);
+  assert.equal(findNode(header, node => node.className === 'map-result-status'), undefined);
+  assert.equal(findNode(header, node => node.className === 'map-access-notice'), undefined);
+  assert.ok(findNode(header, node => node.nodeName === 'A' && node.getAttribute('href') === '#map-support'),
+    'moving filters after the map preserves a named filter bypass link');
+  assert.ok(findNode(sidebar, node => node.className === 'map-filter-panel'));
+  assert.ok(findNode(sidebar, node => node.className === 'map-result-status'));
+  const notice = findNode(sidebar, node => node.className === 'map-access-notice');
+  assert.ok(notice?.textContent.includes(t('map.stationSignInRequired')));
+  assert.ok(findNode(notice, node => node.nodeName === 'A' && node.getAttribute('href') === '/login'));
+  assert.ok(findNode(notice, node => node.nodeName === 'A' && node.getAttribute('href') === '/register'));
+  const actions = findNode(header, node => node.className === 'map-care-actions');
+  assert.equal(actions.children.length, 2, 'reports and station sign-in retain equal creation entry points');
+  assert.ok(actions.children.every(node => node.className === 'btn btn-brand'));
+  assert.equal(actions.children[0].getAttribute('href'), '/');
+  assert.equal(actions.children[1].getAttribute('href'), '/login');
+  assert.equal(actions.children[1].textContent, t('map.stationCareSignIn'));
   assert.ok(ui.calls.some(config => config.url === '/api/reports'));
   assert.ok(ui.calls.every(config => !config.url.startsWith('/api/feeding-stations')));
   const listLink = findNode(ui.container, node => node.nodeName === 'A' && node.getAttribute('href') === '#map-results');
@@ -631,4 +665,204 @@ test('another production store logout and manually delivered storage event safel
   assert.equal(ui.store.getState().auth.user, null);
   assertRemoved(map);
   assert.notEqual(ui.map(), map);
+});
+
+function escapeAt(node) {
+  const result = { prevented: false, stopped: false };
+  const event = { key: 'Escape', target: node, currentTarget: node,
+    preventDefault() { result.prevented = true; }, stopPropagation() { result.stopped = true; } };
+  reactProps(node).onKeyDownCapture(event);
+  return result;
+}
+
+for (const strict of [false, true]) {
+  test(`station picker and form cancellation restore the creation trigger without camera changes (StrictMode=${strict})`, async context => {
+    const ui = await pageFixture(context, { actor: 'synthetic-a', strict, stations: true, reports: true });
+    const { t } = require('../src/i18n/index.ts');
+    const opener = ui.buttonNode(t('map.addStation'));
+    const map = ui.map();
+    map.setView([32.2, 34.9], 15, { animate: false });
+    const actions = findNode(ui.container, node => node.className === 'map-care-actions');
+    assert.equal(actions.children.length, 2);
+    assert.equal(actions.children[0].getAttribute('href'), '/');
+    assert.ok(actions.children[1] === opener, 'authenticated station creation retains equal entry prominence');
+    for (const phase of ['picker', 'form']) {
+      for (const method of ['explicit', 'Escape']) {
+        opener.focus();
+        await ui.button(t('map.addStation'));
+        assert.ok(opener.disabled, 'the active creation trigger is disabled while its picker/form exists');
+        const select = ui.buttonNode(t('stations.selectMapCenter'));
+        assert.ok(select?.isConnected);
+        assert.ok(document.activeElement === select, 'opening creation provides an immediately usable keyboard location control');
+        const shell = findNode(ui.container, node => node.className === 'map-layout');
+        let dialog;
+        if (phase === 'form') {
+          await ui.button(t('stations.selectMapCenter'));
+          dialog = findNode(ui.container, node => node.className === 'create-station-dialog');
+          assert.equal(dialog?.open, true);
+          assert.ok(dialog.textContent.includes('32.20000, 34.90000'));
+          // The shell must leave Escape to the native dialog cancel path.
+          await React.act(async () => { assert.deepEqual(escapeAt(shell), { prevented: false, stopped: false }); });
+          assert.equal(dialog.open, true);
+        }
+        if (method === 'explicit') await ui.button(t(phase === 'picker' ? 'map.cancelCreation' : 'stations.cancel'));
+        else await React.act(async () => {
+          if (phase === 'picker') assert.deepEqual(escapeAt(shell), { prevented: true, stopped: true });
+          else {
+            let prevented = false;
+            reactProps(dialog).onCancel({ preventDefault() { prevented = true; } });
+            assert.ok(prevented, 'the form closes explicitly before its parent removes it');
+          }
+        });
+        if (dialog) { assert.equal(dialog.open, false); assert.equal(dialog.isConnected, false); }
+        assert.equal(findNode(ui.container, node => node.className === 'station-location-keyboard'), undefined);
+        assert.equal(findNode(ui.container, node => node.className === 'create-station-dialog'), undefined);
+        assert.ok(document.activeElement === opener, `${phase} ${method} restores the surviving original creation trigger`);
+        assert.equal(opener.disabled, false, 'focus returns only after the opener is enabled again');
+        assert.equal(ui.map(), map);
+        assert.ok(map.getCenter().equals([32.2, 34.9]));
+        assert.equal(map.getZoom(), 15);
+      }
+    }
+    assert.ok(ui.calls.every(config => config.method === 'get'), 'picker and cancellation paths perform no write');
+  });
+
+  test(`station change-location preserves the draft and refocuses the picker before reopening (StrictMode=${strict})`, async context => {
+    const ui = await pageFixture(context, { actor: 'synthetic-a', strict, stations: true });
+    const { t } = require('../src/i18n/index.ts');
+    const opener = ui.buttonNode(t('map.addStation'));
+    const map = ui.map();
+    await ui.button(t('map.addStation'));
+    map.setView([32.2, 34.9], 15, { animate: false });
+    await ui.button(t('stations.selectMapCenter'));
+    const dialog = findNode(ui.container, node => node.className === 'create-station-dialog');
+    const name = findNode(dialog, node => node.getAttribute('id') === 'station-name');
+    await React.act(async () => { reactProps(name).onChange({ target: { value: 'Synthetic preserved draft' } }); });
+    await ui.button(t('stations.changeLocation'));
+    assert.equal(dialog.open, false);
+    assert.equal(dialog.isConnected, true, 'the closed form remains mounted to preserve its draft');
+    const select = ui.buttonNode(t('stations.selectMapCenter'));
+    assert.ok(document.activeElement === select, 'changing location focuses the new surviving picker control after modal cleanup');
+    map.setView([32.3, 35], 15, { animate: false });
+    await ui.button(t('stations.selectMapCenter'));
+    assert.equal(dialog.open, true);
+    assert.ok(dialog.textContent.includes('32.30000, 35.00000'));
+    assert.equal(reactProps(name).value, 'Synthetic preserved draft');
+    await ui.button(t('stations.cancel'));
+    assert.ok(document.activeElement === opener);
+    assert.equal(ui.map(), map);
+    assert.ok(map.getCenter().equals([32.3, 35]));
+    assert.ok(ui.calls.every(config => config.method === 'get'));
+  });
+}
+
+for (const phase of ['picker', 'form']) {
+  for (const transition of ['logout', 'account change']) {
+    test(`obsolete ${phase} cancel and Escape cannot restore focus after ${transition}`, async context => {
+      const ui = await pageFixture(context, { actor: 'synthetic-a', strict: true, stations: true });
+      const { t } = require('../src/i18n/index.ts');
+      const oldOpener = ui.buttonNode(t('map.addStation'));
+      await ui.button(t('map.addStation'));
+      const oldShell = findNode(ui.container, node => node.className === 'map-layout');
+      const oldPicker = findNode(ui.container, node => node.className === 'station-location-keyboard');
+      const oldMap = ui.map();
+      let oldDialog;
+      let oldCancel;
+      if (phase === 'form') {
+        await ui.button(t('stations.selectMapCenter'));
+        oldDialog = findNode(ui.container, node => node.className === 'create-station-dialog');
+        oldCancel = reactProps(ui.buttonNode(t('stations.cancel'))).onClick;
+      } else oldCancel = reactProps(ui.buttonNode(t('map.cancelCreation'))).onClick;
+      const oldEscape = phase === 'form' ? reactProps(oldDialog).onCancel : reactProps(oldShell).onKeyDownCapture;
+      if (transition === 'logout') await ui.logout();
+      else await ui.authenticate('synthetic-b');
+      assertRemoved(oldMap);
+      assert.equal(oldOpener.isConnected, false);
+      assert.equal(oldPicker.isConnected, false);
+      if (oldDialog) { assert.equal(oldDialog.open, false); assert.equal(oldDialog.isConnected, false); }
+      const replacementMap = ui.map();
+      replacementMap.setView([30, 34], 14, { animate: false });
+      let currentFocus = ui.buttonNode(t('map.scopeReports'));
+      let replacementPicker;
+      let replacementDialog;
+      if (transition === 'account change') {
+        await ui.button(t('map.addStation'));
+        if (phase === 'form') await ui.button(t('stations.selectMapCenter'));
+        replacementPicker = findNode(ui.container, node => node.className === 'station-location-keyboard');
+        replacementDialog = findNode(ui.container, node => node.className === 'create-station-dialog');
+        currentFocus = phase === 'form' ? replacementDialog : ui.buttonNode(t('stations.selectMapCenter'));
+      }
+      currentFocus.focus();
+      context.mock.method(oldOpener, 'focus', () => assert.fail('obsolete opener must never receive focus'));
+      const replacementOpener = ui.buttonNode(t('map.addStation'));
+      if (replacementOpener) context.mock.method(replacementOpener, 'focus', () => assert.fail('old callbacks must not focus the replacement account opener'));
+      await React.act(async () => {
+        oldCancel();
+        oldEscape({ key: 'Escape', preventDefault() {}, stopPropagation() {} });
+      });
+      assert.ok(document.activeElement === currentFocus, 'obsolete callbacks leave replacement-session focus unchanged');
+      assert.ok(findNode(ui.container, node => node.className === 'station-location-keyboard') === replacementPicker);
+      assert.ok(findNode(ui.container, node => node.className === 'create-station-dialog') === replacementDialog);
+      if (phase === 'form' && replacementDialog) assert.equal(replacementDialog.open, true,
+        'old callbacks cannot dismiss the replacement account form');
+      if (phase === 'picker' && replacementPicker) assert.equal(replacementPicker.isConnected, true);
+      assert.equal(ui.map(), replacementMap);
+      assert.ok(replacementMap.getCenter().equals([30, 34]));
+      assert.equal(replacementMap.getZoom(), 14);
+      if (transition === 'logout') assert.equal(ui.buttonNode(t('map.addStation')), undefined);
+      assert.ok(ui.calls.every(config => config.method === 'get'));
+    });
+  }
+}
+
+test('station-details Escape retains its existing focus return with the creation Escape boundary', async context => {
+  const ui = await pageFixture(context, { actor: 'synthetic-a', stations: true });
+  const item = findNode(ui.container, node => node.getAttribute('data-station-id') === ui.station._id);
+  const opener = findNode(item, node => node.nodeName === 'BUTTON');
+  await React.act(async () => { reactProps(opener).onClick({ currentTarget: opener }); });
+  const dialog = findNode(ui.container, node => node.className === 'station-details');
+  assert.equal(dialog?.open, true);
+  const shell = findNode(ui.container, node => node.className === 'map-layout');
+  await React.act(async () => {
+    assert.deepEqual(escapeAt(shell), { prevented: false, stopped: false });
+    reactProps(dialog).onCancel({ preventDefault() {} });
+  });
+  assert.equal(dialog.open, false);
+  assert.equal(dialog.isConnected, false);
+  assert.ok(document.activeElement === opener);
+});
+
+
+test('station-details Escape leaves an active creation picker intact and preserves both focus targets', async context => {
+  const ui = await pageFixture(context, { actor: 'synthetic-a', strict: true, stations: true });
+  const { t } = require('../src/i18n/index.ts');
+  const creationOpener = ui.buttonNode(t('map.addStation'));
+  const map = ui.map();
+  map.setView([32.2, 34.9], 15, { animate: false });
+  await ui.button(t('map.addStation'));
+  const picker = findNode(ui.container, node => node.className === 'station-location-keyboard');
+  const item = findNode(ui.container, node => node.getAttribute('data-station-id') === ui.station._id);
+  const detailsOpener = findNode(item, node => node.nodeName === 'BUTTON');
+  await React.act(async () => { reactProps(detailsOpener).onClick({ currentTarget: detailsOpener }); });
+  const dialog = findNode(ui.container, node => node.className === 'station-details');
+  assert.equal(dialog?.open, true);
+  const shell = findNode(ui.container, node => node.className === 'map-layout');
+  await React.act(async () => {
+    assert.deepEqual(escapeAt(shell), { prevented: false, stopped: false },
+      'a selected station dialog owns Escape even while creation is picking');
+    reactProps(dialog).onCancel({ preventDefault() {} });
+  });
+  assert.equal(dialog.open, false);
+  assert.equal(dialog.isConnected, false);
+  assert.ok(document.activeElement === detailsOpener);
+  assert.equal(picker.isConnected, true);
+  assert.ok(findNode(ui.container, node => node.className === 'station-location-keyboard') === picker,
+    'closing details does not cancel the existing creation picker');
+  await ui.button(t('map.cancelCreation'));
+  assert.equal(picker.isConnected, false);
+  assert.ok(document.activeElement === creationOpener);
+  assert.equal(ui.map(), map);
+  assert.ok(map.getCenter().equals([32.2, 34.9]));
+  assert.equal(map.getZoom(), 15);
+  assert.ok(ui.calls.every(config => config.method === 'get'));
 });

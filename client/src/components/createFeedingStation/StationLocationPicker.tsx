@@ -1,13 +1,14 @@
 import { CircleMarker, useMapEvents } from "react-leaflet";
 import { DomEvent } from "leaflet";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type Ref } from "react";
 import type { FeedingStation } from "../../features/feedingStations/types";
 import { t } from "../../i18n";
 
-export default function StationLocationPicker({ enabled, location, onSelect }: {
+export default function StationLocationPicker({ enabled, location, onSelect, selectionButtonRef }: {
   enabled: boolean;
   location: FeedingStation["location"] | null;
   onSelect: (location: FeedingStation["location"]) => void;
+  selectionButtonRef?: Ref<HTMLButtonElement>;
 }) {
   const controls = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -21,7 +22,7 @@ export default function StationLocationPicker({ enabled, location, onSelect }: {
   return <>
     {enabled && <div className="station-location-keyboard" ref={controls}>
       <p>{t("stations.mapLocationKeyboard")}</p>
-      <button className="btn" type="button" onClick={(event) => {
+      <button ref={selectionButtonRef} className="btn" type="button" onClick={(event) => {
         event.stopPropagation();
         const center = map.getCenter();
         onSelect({ lat: center.lat, lng: center.lng });
