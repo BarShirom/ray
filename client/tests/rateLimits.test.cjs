@@ -67,7 +67,25 @@ const denied = (config, seconds = "60") => new AxiosError("Synthetic rejected re
 const expectedWait = seconds => t("errors.rateLimitedWait", { count: seconds });
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
-function callbackFixture(context, store, Component, props = {}) {
+// Response ordering is explicit; ERR_NETWORK is an injected adapter failure,
+// not a native offline event or an actual disconnected request.
+function controlledResponses() {
+  const requests = [], waiting = [];
+  return {
+    requests,
+    waitFor: count => requests.length >= count ? Promise.resolve() : new Promise(resolve => waiting.push({ count, resolve })),
+    respond: config => new Promise((resolve, reject) => {
+      requests.push({
+        config,
+        failNetwork: () => reject(new AxiosError("Synthetic connection unavailable", "ERR_NETWORK", config)),
+        succeed: data => resolve({ config, data, headers: new AxiosHeaders(), status: 200, statusText: "Synthetic" }),
+      });
+      for (const waiter of waiting) if (requests.length >= waiter.count) waiter.resolve();
+    }),
+  };
+}
+
+function callbackFixture(context, store, Component, props = {}, respond = config => { throw denied(config); }) {
   const cells = [];
   let cursor = 0;
   const cell = init => {
@@ -88,7 +106,7 @@ function callbackFixture(context, store, Component, props = {}) {
   context.mock.method(global, "fetch", () => assert.fail("No external requests in callback fixture"));
   const previousAdapter = http.defaults.adapter;
   const calls = [];
-  http.defaults.adapter = async config => { calls.push(config); throw denied(config); };
+  http.defaults.adapter = async config => { calls.push(config); return respond(config); };
   context.after(() => { http.defaults.adapter = previousAdapter; });
   const navigations = [];
   navigate = path => navigations.push(path);
@@ -119,7 +137,7 @@ const input = (tree, id) => {
 const form = tree => find(tree, element => element.type === "form");
 const change = (fixture, id, value) => input(fixture.render(), id).props.onChange({ target: { value, name: id } });
 function assertAlert(tree, text) {
-  assert.ok(find(tree, element => element.props?.role === "alert" && element.props.children === text), "Expected an accessible Hebrew rate-limit alert");
+  assert.ok(find(tree, element => element.props?.role === "alert" && element.props.children === text), "Expected Hebrew feedback with alert semantics");
 }
 
 test("Retry-After accepts bounded integer seconds across fetch/Axios headers and ignores unsafe metadata", () => {
@@ -254,6 +272,167 @@ test("real feeding-log callback retains open draft and food/water choices after 
   assert.equal(fixture.calls.length, 1);
   await settle();
   assert.equal(fixture.calls.length, 1);
+});
+
+test("mock UI callbacks: login retains a network-failed draft and succeeds only after explicit retry", async context => {
+  const store = makeStore(false), responses = controlledResponses();
+  const fixture = callbackFixture(context, store, Login, {}, responses.respond);
+  const draft = { email: "network-recovery@example.invalid", password: "סיסמה Cat Кот 42" };
+  for (const [id, value] of Object.entries(draft)) change(fixture, id, value);
+  const failed = form(fixture.render()).props.onSubmit({ preventDefault() {} });
+  await responses.waitFor(1);
+  responses.requests[0].failNetwork();
+  await failed;
+  const retained = fixture.render();
+  for (const [id, value] of Object.entries(draft)) assert.equal(input(retained, id).props.value, value);
+  assertAlert(retained, t("errors.network"));
+  assert.equal(store.getState().auth.user, null);
+  assert.equal(store.getState().auth.loading, false);
+  assert.deepEqual(fixture.navigations, []);
+  fixture.render();
+  await settle();
+  assert.equal(fixture.calls.length, 1, "rendering and settling cannot retry the rejected login");
+
+  const retried = form(fixture.render()).props.onSubmit({ preventDefault() {} });
+  await responses.waitFor(2);
+  assert.equal(fixture.calls.length, 2, "one failed login plus one explicit retry");
+  for (const config of fixture.calls) {
+    assert.equal(config.method, "post");
+    assert.equal(config.url, "/api/auth/login");
+    assert.equal(config.headers.get("Authorization"), undefined);
+    assert.deepEqual(JSON.parse(config.data), draft);
+  }
+  const { token, ...profile } = user;
+  responses.requests[1].succeed({ token, user: profile });
+  await retried;
+  assert.equal(store.getState().auth.user.id, user.id);
+  assert.equal(store.getState().auth.error, null);
+  assert.deepEqual(fixture.navigations, ["/map-page"]);
+  assert.equal(find(fixture.render(), element => element.props?.role === "alert"), undefined);
+  await settle();
+  assert.equal(fixture.calls.length, 2);
+});
+
+test("mock UI callbacks: report preserves mixed-language fields after network failure and explicitly retries once", async context => {
+  const store = makeStore(), responses = controlledResponses();
+  const fixture = callbackFixture(context, store, Report, {}, responses.respond);
+  const reportForm = () => find(fixture.render(), element => typeof element.props?.setDescription === "function");
+  const description = "חתול זקוק לעזרה — Cat Кот 42";
+  reportForm().props.setDescription(description);
+  reportForm().props.setLocation(location);
+  reportForm().props.setType("emergency");
+  reportForm().props.handleSubmit({ preventDefault() {} });
+  await responses.waitFor(1);
+  responses.requests[0].failNetwork();
+  // Report's native callback intentionally returns void; drain its thunk/unwrap
+  // completion, without timers, after explicitly releasing the response.
+  await settle();
+  const retained = reportForm().props;
+  assert.equal(retained.description, description);
+  assert.deepEqual(retained.location, location);
+  assert.equal(retained.type, "emergency");
+  assert.deepEqual(retained.mediaFiles, []);
+  assert.equal(retained.pending, false);
+  assertAlert(fixture.render(), t("errors.network"));
+  assert.deepEqual(store.getState().reports.items, []);
+  assert.deepEqual(fixture.navigations, []);
+  fixture.render();
+  await settle();
+  assert.equal(fixture.calls.length, 1, "rendering and settling cannot resubmit the retained Report");
+
+  reportForm().props.handleSubmit({ preventDefault() {} });
+  await responses.waitFor(2);
+  assert.equal(fixture.calls.length, 2, "one failed Report POST plus one explicit retry");
+  for (const config of fixture.calls) {
+    assert.equal(config.method, "post");
+    assert.equal(config.url, "/api/reports");
+    assert.equal(config.headers.get("Authorization") === `Bearer ${user.token}`, true);
+    assert.deepEqual(JSON.parse(config.data), { description, location, type: "emergency", mediaAssetIds: [] });
+  }
+  const report = { _id: "network-recovered-report", description, location, type: "emergency", status: "new",
+    createdAt: "2026-11-05T10:00:00.000Z", updatedAt: "2026-11-05T10:00:00.000Z", media: [] };
+  responses.requests[1].succeed(report);
+  await settle();
+  assert.deepEqual(store.getState().reports.items, [report]);
+  assert.deepEqual(fixture.navigations, ["/map-page"]);
+  assert.equal(reportForm().props.pending, false);
+  assert.equal(find(fixture.render(), element => element.props?.role === "alert"), undefined);
+  await settle();
+  assert.equal(fixture.calls.length, 2);
+});
+
+test("mock UI callbacks: feeding preserves its network-failed choices and retries one write before bounded refreshes", async context => {
+  const store = makeStore(), responses = controlledResponses();
+  const station = { _id: "111111111111111111111111", name: "תחנת Cat Кот", active: true,
+    permissions: { canManage: true, canFeed: true }, estimatedCats: 1, estimatedKittens: 0, location };
+  const fixture = callbackFixture(context, store, StationDetails,
+    { station, onClose() { assert.fail("Saving a feeding must not close station details"); } }, responses.respond);
+  find(fixture.render(), element => element.type === "button" && element.props.children === t("feeding.fedHere")).props.onClick();
+  const note = "רק מים — water only Кот 42";
+  change(fixture, "feeding-note", note);
+  change(fixture, "feeding-period", "evening");
+  const choices = tree => {
+    const values = [];
+    find(tree, element => { if (element.type === "input" && element.props.type === "checkbox") values.push(element); return false; });
+    return values;
+  };
+  const checkboxes = choices(fixture.render());
+  checkboxes[0].props.onChange({ target: { checked: false } });
+  checkboxes[1].props.onChange({ target: { checked: true } });
+  const failed = form(fixture.render()).props.onSubmit({ preventDefault() {} });
+  await responses.waitFor(1);
+  responses.requests[0].failNetwork();
+  await failed;
+  const retained = fixture.render();
+  assert.ok(form(retained), "failed save keeps the draft open");
+  assert.equal(input(retained, "feeding-note").props.value, note);
+  assert.equal(input(retained, "feeding-period").props.value, "evening");
+  assert.deepEqual(choices(retained).map(element => element.props.checked), [false, true]);
+  assertAlert(retained, t("errors.network"));
+  assert.equal(store.getState().feedingLogs.byStationId[station._id].submitError.kind, "network");
+  assert.deepEqual(store.getState().feedingLogs.byStationId[station._id].data, []);
+  fixture.render();
+  await settle();
+  assert.equal(fixture.calls.length, 1, "failed write does not retry or refresh history/summary");
+
+  const retried = form(fixture.render()).props.onSubmit({ preventDefault() {} });
+  await responses.waitFor(2);
+  assert.equal(fixture.calls.length, 2, "one failed feeding POST plus one explicit retry");
+  const payload = { period: "evening", food: false, water: true, note };
+  for (const config of fixture.calls) {
+    assert.equal(config.method, "post");
+    assert.equal(config.url, `/api/feeding-stations/${station._id}/feedings`);
+    assert.equal(config.headers.get("Authorization") === `Bearer ${user.token}`, true);
+    assert.deepEqual(JSON.parse(config.data), payload);
+  }
+  const instant = "2026-11-05T10:00:00.000Z";
+  const receipt = { _id: "222222222222222222222222", stationId: station._id, ...payload,
+    fedAt: instant, createdAt: instant, updatedAt: instant };
+  responses.requests[1].succeed(receipt);
+  await responses.waitFor(4);
+  assert.deepEqual(responses.requests.slice(2).map(request => request.config.url).sort(),
+    [`/api/feeding-stations/${station._id}/feeding-summary`, `/api/feeding-stations/${station._id}/feedings`].sort());
+  for (const request of responses.requests.slice(2)) {
+    assert.equal(request.config.method, "get");
+    assert.equal(request.config.headers.get("Authorization") === `Bearer ${user.token}`, true);
+    request.succeed(request.config.url.endsWith("/feeding-summary")
+      ? { food: { recency: "no-record" }, water: { recency: "under-2h" } } : [receipt]);
+  }
+  await retried;
+  await settle();
+  const recovered = fixture.render(), logs = store.getState().feedingLogs.byStationId[station._id];
+  assert.equal(form(recovered), undefined, "successful receipt closes the draft form");
+  assert.ok(find(recovered, element => element.props?.role === "status" && element.props.children === t("feeding.recorded")));
+  assert.deepEqual(logs.data, [receipt]);
+  assert.equal(logs.submitError, null);
+  assert.equal(logs.submitting, false);
+  assert.equal(logs.loading, false);
+  assert.equal(logs.summaryLoading, false);
+  assert.equal(find(recovered, element => element.props?.role === "alert"), undefined);
+  fixture.render();
+  await settle();
+  assert.equal(fixture.calls.filter(config => config.method === "post").length, 2);
+  assert.equal(fixture.calls.length, 4, "only the two expected successful-write refreshes follow the manual retry");
 });
 
 test("throttled claim/resolve do not mutate report status, clear auth or retry automatically", async context => {
