@@ -33,13 +33,15 @@ test("ordinary mixed Hebrew/English inputs preserve existing transformations and
   assert.equal(createFeedingStationSchema.parse(station).name, station.name.trim());
   assert.equal(createFeedingLogSchema.parse({ note: "  מים ומזון — water and food  " }).note, "מים ומזון — water and food");
   assert.equal(createFeedingLogSchema.parse({ fedAt: "2026-10-26T09:00:00+02:00", food: true }).fedAt.toISOString(), "2026-10-26T07:00:00.000Z");
-  for (const password of ["🐈".repeat(8), "א".repeat(8), " " + "א".repeat(6) + " ", "x".repeat(256)]) {
+  for (const password of ["🐈".repeat(8), "א".repeat(8), " " + "א".repeat(6) + " ", "x".repeat(72)]) {
     assert.equal(registerSchema.parse({ ...registration, password }).password === password, true);
   }
   for (const password of ["🐈".repeat(7), "א".repeat(7)]) {
     assert.equal(registerSchema.safeParse({ ...registration, password }).success, false);
   }
   assert.equal(loginSchema.parse({ email: registration.email, password: "short" }).password, "short");
+  assert.equal(loginSchema.parse({ email: registration.email, password: "x".repeat(256) }).password.length, 256);
+  assert.equal(registerSchema.safeParse({ ...registration, password: "x".repeat(256) }).success, false);
   assert.equal(mediaStationSchema.safeParse({ ...station, imageAssetId: assetIds[0] }).success, true);
   assert.equal(mediaReportSchema.safeParse({ ...report, mediaAssetIds: assetIds }).success, true);
 });

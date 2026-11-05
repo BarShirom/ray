@@ -40,6 +40,8 @@ export const he = {
     email: "יש להזין כתובת דוא״ל תקינה.",
     passwordRequired: "יש להזין סיסמה.",
     passwordLength: "הסיסמה חייבת להכיל לפחות 8 תווים.",
+    passwordBytes: shellHe.auth.passwordTooLong,
+    passwordUnicode: shellHe.auth.passwordInvalidUnicode,
     firstName: "יש להזין שם פרטי.",
     lastName: "יש להזין שם משפחה.",
     invalidLogin: "כתובת הדוא״ל או הסיסמה שגויות.",

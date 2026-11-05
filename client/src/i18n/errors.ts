@@ -12,6 +12,8 @@ const known: Record<string, ErrorKey> = {
   "First name is required": "firstName", "Last name is required": "lastName",
   "Invalid email": "email", "Password is required": "passwordRequired",
   "Password must be at least 8 characters": "passwordLength",
+  "Password must be at most 72 UTF-8 bytes": "passwordBytes",
+  "Password contains invalid Unicode": "passwordUnicode",
   "Text exceeds allowed length": "textLength",
   "Too many items": "collectionLength",
   "Request structure exceeds allowed limits": "requestStructure",

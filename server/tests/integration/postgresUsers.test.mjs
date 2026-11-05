@@ -210,6 +210,42 @@ test("real PostgreSQL UserStore and production auth HTTP flow", async (t) => {
     assert.equal((await pool.query("SELECT count(*)::integer AS n FROM users")).rows[0].n, before);
   });
 
+  await t.test("72-byte Unicode registration stores the raw cost-10 hash; 73 bytes fail before creating a user", async () => {
+    const password = "א".repeat(34) + "🐈";
+    assert.equal(Buffer.byteLength(password, "utf8"), 72);
+    const email = `${publicId()}@example.invalid`;
+    const accepted = await request("POST", "/api/auth/register", { ...registration, email, password });
+    assert.equal(accepted.status, 201);
+    const row = await byEmail(email);
+    assert.equal(bcrypt.getRounds(row.passwordHash), 10);
+    assert.equal(await bcrypt.compare(password, row.passwordHash), true);
+    const login = await request("POST", "/api/auth/login", { email, password });
+    assert.equal(login.status, 200);
+    assert.deepEqual(login.body.user, accepted.body.user);
+
+    const rejectedEmail = `${publicId()}@example.invalid`;
+    const before = (await pool.query("SELECT count(*)::integer AS n FROM users")).rows[0].n;
+    assert.deepEqual(await request("POST", "/api/auth/register", { ...registration, email: rejectedEmail, password: password + "a" }), {
+      status: 400, body: { message: "Validation failed", errors: [{ field: "password", message: "Password must be at most 72 UTF-8 bytes" }] },
+    });
+    assert.equal(await byEmail(rejectedEmail), undefined);
+    assert.equal((await pool.query("SELECT count(*)::integer AS n FROM users")).rows[0].n, before);
+  });
+
+  await t.test("historical overlong PostgreSQL bcrypt hashes retain raw login and prefix equivalence without rewrite", async () => {
+    const original = "a".repeat(69) + "🐈";
+    const equivalent = "a".repeat(69) + "🐕";
+    assert.equal(Buffer.byteLength(original, "utf8"), 73);
+    const passwordHash = await bcrypt.hash(original, 4);
+    const profile = await store.create(values({ passwordHash }));
+    for (const password of [original, equivalent]) {
+      const response = await request("POST", "/api/auth/login", { email: profile.email, password });
+      assert.equal(response.status, 200);
+      assert.equal(response.body.user.id, profile.publicId);
+    }
+    assert.equal((await byEmail(profile.email)).passwordHash === passwordHash, true);
+  });
+
   for (const company of ["", "Cat Helpers"]) {
     await t.test(`HTTP registration encodes present company ${JSON.stringify(company)}`, async () => {
       const email = `${publicId()}@example.invalid`;

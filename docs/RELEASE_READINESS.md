@@ -1,7 +1,46 @@
 # Ray release readiness
 
-Current assessment: **2026-11-05, Asia/Jerusalem**, SEC.1B-3C.4 targeted acceptance
-evidence/local fault harness, uncommitted. Verified branch `ray-2-postgres`, HEAD
+Current assessment: **2026-11-05, Asia/Jerusalem**, SEC.2A.1 password safety,
+uncommitted on `ray-2-postgres`, verified clean preflight at HEAD
+`767015dd8cc15882dcd13aff57d182fa9b76ee36`; local upstream **0 ahead / 0 behind**,
+without fetch. Reviewed SEC.1B-3C checkpoints, including 3C.4, are committed.
+
+The [password safety report](security/sec-2a-1-password-safety.md) records actual
+bcryptjs **3.0.2** / Zod **4.6.6** behavior. New registration now requires eight
+Unicode code points, at most **72 UTF-8 bytes** and well-formed Unicode, with raw
+password contents preserved and matching Hebrew client validation. The existing
+minimum already matched between client and server; the missing byte limit was
+the remaining new-registration gap. No composition rule, invitation-only enrollment,
+email verification or dependency change is introduced.
+
+Login remains compatible with stored short/overlong/malformed passwords. Actual
+bcrypt verification confirms prefix equivalence still exists for historical
+overlong hashes and appended login suffixes against new exact-72-byte hashes.
+Strict login rejection and compatible recovery/reset require a separate product/
+security decision. Existing hashes/cost, JWT lifetime/revocation, user serialization,
+rate limits and client account/session/logout guards are unchanged. New registration
+limits do **not** close the whole SEC-006 or session-policy release gate.
+
+Current integrated local checks pass backend **260/260**, guarded disposable
+PostgreSQL **174/174**, frontend **233/233**,
+both frontend builds and both no-emit TypeScript checks; focused backend **43/43**,
+client password/i18n/shell **27/27** and auth/rate **56/56**, targeted lint/syntax
+also pass. PostgreSQL proves 72-byte Unicode registration/login, 73-byte no-insert
+rejection and historical overlong hash compatibility without rewriting. The
+task-started disposable test service was stopped; the pre-existing preview stayed
+running/healthy. The existing bundle-size warning remains. Separate independent
+critical read-only review returned **APPROVE** for scoped Level A SEC.2A.1 with
+no required corrections; its independent backend/client password runs passed
+**8/8** and **13/13**, plus 10,000 deterministic Unicode parity samples.
+The reviewer did not rerun the full suites/builds/PG; approval grants no Git or
+real-user release authorization.
+Native browser/reader/mobile verification of the new password feedback is
+**NOT_TESTED**; captured callbacks and SSR establish local semantics only.
+Persistent preview credentials/records are not queried or changed. Real-user
+pilot readiness remains blocked by the separate gates below.
+
+Historical SEC.1B-3C.4 assessment, **2026-11-05**, targeted acceptance
+evidence/local fault harness, then-uncommitted. Its verified branch was `ray-2-postgres`, HEAD
 `6063cf2cf9ca76980f7701b507f6c2a0b26f87e0`; clean preflight/index and local tracking
 **0 ahead / 0 behind**, without fetch. The 3C.3B browser fixes are committed at
 this baseline. The [3C.4 evidence ledger](security/sec-1b-3c-4-browser-acceptance.md)
@@ -259,7 +298,7 @@ Status describes the evidence for the **actual result**, not an overall pass: `V
 | Scoped local API rejection and recoverable Hebrew feedback | Controlled-clock core/HTTP and frontend callback/store tests; [SEC.1B-2](security/sec-1b-2-abuse-protection.md) | VERIFIED | Separate ingress/auth/registration/guest/account/read limits, bounded maps, socket-only attribution and positive Retry-After; forms retain drafts and do not retry automatically. General counters are local to each app instance and reset on restart. | — for verified local scope | Preserve regressions; review shared-IP thresholds against intended deployment; Engineering, Product. |
 | Durable per-owner media issuance reservations | Independent-pool/lock-wait/rolling-window tests on disposable PG; [SEC.1B-2 media budgets](security/sec-1b-2-abuse-protection.md#durable-media-issuance-reservations) | VERIFIED | Existing six outstanding/ten per minute plus 120 intents and 256 MiB declared source bytes per rolling 24 hours, all states counted under the existing owner lock. No insert/sign after rejection; no schema change. Not actual retained/output/global storage accounting. | — for verified reservation scope | Preserve SQL admission/ownership/transaction tests; size historical aggregate queries for production; Engineering. |
 | Distributed abuse/resource bounds before exposed pilot APIs | [SEC-003/007](security/pre-pilot-security-audit.md#findings--missing-protections-with-demonstrated-risk) and [SEC.1B-2 limitations](security/sec-1b-2-abuse-protection.md#remaining-release-gates-and-follow-up) | VERIFIED | Local API limits and durable owner issuance controls improve the system, but shared API enforcement, reviewed proxy attribution, pagination, global/cross-account retained-byte budgets and distributed completion capacity remain open. | BLOCKER for intended exposed APIs/paid media | Define enrollment/moderation, shared atomic quotas/edge enforcement, retention/output/global budgets and production identity; enforce and verify across processes; Product, Engineering, Operations. |
-| Password, session and remaining error boundaries before real accounts | [SEC-006/011/013](security/pre-pilot-security-audit.md), SEC.1B-1 remaining scope | VERIFIED | Bcrypt truncates beyond 72 UTF-8 bytes; copied seven-day bearer tokens survive local logout. Controller-specific errors/logs still need review. | BLOCKER for real-account policy and safe handling | Decide compatible enrollment/session/recovery policies; fix/test remaining unsafe paths; Product, Security, Engineering. |
+| Password, session and remaining error boundaries before real accounts | [SEC.2A.1](security/sec-2a-1-password-safety.md), [SEC-006/011/013](security/pre-pilot-security-audit.md), SEC.1B-1 remaining scope | VERIFIED new-registration limits and retained login compatibility/risk | New registration is raw, well-formed Unicode, at least 8 code points and at most 72 UTF-8 bytes. Login prefix equivalence remains for historical overlong and new exact-72-byte hashes with appended suffixes. Copied seven-day bearer tokens survive local logout; controller-specific errors/logs still need review. | BLOCKER for remaining real-account compatibility/session policy and safe handling | Decide strict-login/recovery/reset compatibility and session/revocation policy; fix/test remaining unsafe paths. Open registration remains approved; Product, Security, Engineering. |
 | Legacy claim integrity if Mongo remains exposed | Adapter probe and PG comparison; [SEC-005](security/pre-pilot-security-audit.md#sec-005--legacy-claim-race-can-overwrite-the-winning-assignee) | VERIFIED | Legacy claim race remains; PG locking tests passed. | BLOCKER if legacy serves pilot reports | Exclude legacy from pilot routing or fix and verify race; Engineering, Operations. |
 | Explicit identity/location/routine/image audience before real data | [SEC.1B-3C.2 client evidence](security/sec-1b-3c-2-client-integration.md), [3C.1 backend](security/sec-1b-3c-1-beta-access.md), [3C.4 scope/evidence](security/sec-1b-3c-4-browser-acceptance.md); [approved beta plan](security/station-visibility-design.md#17-sec1b-3c0-approved-first-beta-policy-and-implementation-plan); [SEC-008/009](security/pre-pilot-security-audit.md#findings--privacy-and-product-decisions) | VERIFIED backend/automated logic and supplied selected browser paths; remaining native acceptance incomplete | All-current-account audience, minimized summaries, author-only history and parent-media checks retained. Work reports basic account-history isolation and two-tab logout cleanup; delayed-response/native-media/BFCache boundaries remain untested. Malicious enrollment, public Report data, copies and notice/operating risks remain. | BLOCKER for real data | Complete remaining targeted native checks and establish enrollment/abuse/notices/operating readiness; Product/privacy, Engineering, Security, Operations. |
 | Retention, deletion/takedown and external-media policy | Lifecycle/source review; [SEC-010/012](security/pre-pilot-security-audit.md); [station external-image suppression](security/sec-1b-3b-2-endpoint-privacy.md#json-projections-and-compatibility) | VERIFIED for recorded scope | Attached originals/outputs retained without app removal. PG station external URLs are rejected on new writes and suppressed on protected reads without rewriting old strings; Report external-image policy remains separate and open. | BLOCKER before real images/data under the chosen mode | Decide original necessity, periods, removal/request handling and Report/host policy; implement retry-safe lifecycle; Product/privacy, Engineering, Operations. |
@@ -284,7 +323,7 @@ Closing a finding requires evidence for the intended mode/environment, not a cha
 - The audit's follow-up and SEC.1B-1 report describe an uncommitted review tree at `44839a29...`; that implementation is now committed at `ffb020fc...`. Their test evidence remains attributed to that stage.
 - The S3 runbook's old HEAD/uncommitted/staging statements and early blocked-browser result are historical. S3.1 is committed in ancestor `a0dccb8733229fbca47c700bdacb67657ce6c9f2`; its September 24 closeout supersedes the earlier functional blocker, while named acceptance gaps remain open. Historical dependency counts are superseded by SEC.1B-1, not silently rewritten.
 - The original preview runbook's preserved legacy-upload behavior, six-migration description and separate-future-S3 wording describe its original milestone. Current legacy uploads are retired; migration 0006 and opt-in media are documented by S3.1. No historical import/Cloudinary transfer is required for Ray's fresh stores.
-- Localization's remaining direct-refresh/password-gate defects were fixed by UX.2. UX.2's statement that passwords had no maximum predates SEC.1B-1's generic transport bound; the eight-code-point minimum/raw hashing behavior and unresolved bcrypt byte-truncation issue remain distinct.
+- Localization's remaining direct-refresh/password-gate defects were fixed by UX.2. UX.2's statement that passwords had no maximum predates SEC.1B-1's generic transport bound. SEC.2A.1 now adds a registration-only 72-UTF-8-byte maximum and malformed-Unicode rejection, retaining eight code points and raw values. Historical permissive-registration tests remain evidence for their dates; login prefix equivalence and recovery/session decisions remain unresolved.
 
 Historical QG.1 documentation validation on 2026-10-26: **VERIFIED / PASS** for 41 repository link/anchor references, six package-script references plus the existing frontend test glob, sensitive-pattern screening, independent source/evidence review, `git diff --check` and explicit whitespace/final-newline checks on its three new files. That milestone changed only `AGENTS.md` and the two release documents. It ran no application, accessibility, audit or provider verification. Current SEC.1B-2 evidence and scope are recorded in its linked report.
 
