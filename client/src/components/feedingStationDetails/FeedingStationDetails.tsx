@@ -57,7 +57,7 @@ export default function FeedingStationDetails({ station, onClose }: {
   }, []);
 
   const closeDetails = () => {
-    if (!mounted.current || closing.current) return;
+    if (!mounted.current || closing.current || !isSessionCurrent(store.getState(), instanceSession.current)) return;
     closing.current = true;
     // Close before React removes the element so native modal/focus cleanup runs.
     dialog.current?.close();
@@ -66,11 +66,15 @@ export default function FeedingStationDetails({ station, onClose }: {
   };
 
   useEffect(() => {
-    if (!isLoggedIn) return;
-    dispatch(fetchFeedingStationDetail(station._id));
-    dispatch(fetchFeedingSummaryForStation(station._id));
-    dispatch(fetchFeedingLogsForStation(station._id));
-  }, [dispatch, station._id, isLoggedIn]);
+    if (!mounted.current || !isLoggedIn || !isSessionCurrent(store.getState(), instanceSession.current)) return;
+    const latestDetail = selectFeedingStationDetailState(store.getState(), station._id);
+    const feeding = selectFeedingLogsForStation(store.getState(), station._id);
+    // Reopening full details must not bypass pending reads or explicit
+    // retry/rate-limit states. Each existing retry control remains available.
+    if (!latestDetail.loading && !latestDetail.error) dispatch(fetchFeedingStationDetail(station._id));
+    if (!feeding.summaryLoading && !feeding.summaryError) dispatch(fetchFeedingSummaryForStation(station._id));
+    if (!feeding.loading && !feeding.loadError) dispatch(fetchFeedingLogsForStation(station._id));
+  }, [dispatch, station._id, isLoggedIn, store]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -92,7 +96,7 @@ export default function FeedingStationDetails({ station, onClose }: {
     }
   };
 
-  if (!isLoggedIn) return null;
+  if (!isLoggedIn || !isSessionCurrent(store.getState(), instanceSession.current)) return null;
   return (
     <dialog
       ref={dialog}

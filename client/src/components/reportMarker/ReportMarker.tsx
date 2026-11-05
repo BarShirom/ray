@@ -1,72 +1,16 @@
-import { MediaImage } from "../media/Media";
-import { Marker, Popup } from "react-leaflet";
+import { Marker } from "react-leaflet";
 import L from "leaflet";
-import { useMemo, useState } from "react";
-import { useSelector, useStore } from "react-redux";
-import type { RootState } from "../../app/store";
-import { captureSession, isSessionCurrent } from "../../features/auth/session";
-import { useAppDispatch } from "../../app/hooks";
+import { useMemo } from "react";
 import type { Report } from "../../features/reports/reportsSlice";
-import {
-  claimReport,
-  resolveReport,
-} from "../../features/reports/reportsThunks";
-import { selectToken, selectUserId, selectSessionId } from "../../features/auth/authSelectors";
-import { getReporterName } from "../../features/reports/getReporterName";
-import { getAssigneeName } from "../../features/reports/getAssigneeName";
 import { t } from "../../i18n";
-import { formatDateTime, formatNumber, reportTypeLabel, statusLabel } from "../../i18n/formatters";
-import { localizeError } from "../../i18n/errors";
-import { localizePopupClose } from "../mapPreview/mapAccessibility";
+import { reportTypeLabel } from "../../i18n/formatters";
 import "./ReportMarker.css";
-
-const emojiForType = (type: Report["type"]) =>
-  type === "emergency"
-    ? "🚨"
-    : type === "food"
-    ? "🥫"
-    : type === "general"
-    ? "🐱"
-    : "📍";
-
-type Assigned = string | { _id?: string; id?: string } | null | undefined;
-const assignedToId = (assigned: Assigned) => {
-  if (!assigned) return null;
-  if (typeof assigned === "string") return assigned;
-  return assigned._id ?? assigned.id ?? null;
-};
-
-type MediaLike = string | { url: string; type?: "image" | "video" };
-const isImageUrl = (u: string) => {
-  if (u.startsWith("http://127.0.0.1:4001/api/media/") && u.endsWith("/content")) return true;
-  if (u.startsWith("data:image")) return true;
-  if (u.startsWith("data:video")) return false;
-  const clean = u.split("?")[0].toLowerCase();
-  return /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif)$/.test(clean);
-};
-const toMedia = (item: MediaLike) => {
-  const url = typeof item === "string" ? item : item.url;
-  const kind =
-    typeof item === "object" && item.type
-      ? item.type
-      : isImageUrl(url)
-      ? "image"
-      : "video";
-  return { url, kind: kind as "image" | "video" };
-};
-
 
 const buildIcon = (type: Report["type"], status: Report["status"]) => {
   let iconFile = "marker-icon.png";
   if (status === "resolved") iconFile = "marker-icon-grey.png";
   else if (status === "in-progress") iconFile = "marker-icon-blue.png";
-  else
-    iconFile =
-      type === "emergency"
-        ? "marker-icon-red.png"
-        : type === "food"
-        ? "marker-icon-green.png"
-        : "marker-icon-yellow.png";
+  else iconFile = type === "emergency" ? "marker-icon-red.png" : type === "food" ? "marker-icon-green.png" : "marker-icon-yellow.png";
 
   return new L.Icon({
     iconUrl: `/icons/${iconFile}`,
@@ -78,145 +22,26 @@ const buildIcon = (type: Report["type"], status: Report["status"]) => {
   });
 };
 
-export default function ReportMarker({ report }: { report: Report }) {
-  const dispatch = useAppDispatch();
-  const store = useStore<RootState>();
-  const sessionId = useSelector(selectSessionId);
-  const token = useSelector(selectToken);
-  const userId = useSelector(selectUserId);
-  const isLoggedIn = !!token;
-  const [actionError, setActionError] = useState<{ sessionId: string; message: string } | null>(null);
-
-  const icon = useMemo(
-    () => buildIcon(report.type, report.status),
-    [report.type, report.status]
-  );
-
-  const canResolve =
-    isLoggedIn &&
-    report.status === "in-progress" &&
-    assignedToId(report.assignedTo) === userId;
-
-  const handleClaim = async () => {
-    const session = captureSession(store.getState());
-    if (session.id !== sessionId || !isSessionCurrent(store.getState(), session)) return;
-    setActionError(null);
-    if (isLoggedIn) {
-      try { await dispatch(claimReport({ reportId: report._id })).unwrap(); }
-      catch (error) { if (isSessionCurrent(store.getState(), session)) setActionError({ sessionId, message: localizeError(error, "report") }); }
-    }
-  };
-
-  const handleResolve = async () => {
-    const session = captureSession(store.getState());
-    if (session.id !== sessionId || !isSessionCurrent(store.getState(), session)) return;
-    setActionError(null);
-    if (isLoggedIn) {
-      try { await dispatch(resolveReport({ reportId: report._id })).unwrap(); }
-      catch (error) { if (isSessionCurrent(store.getState(), session)) setActionError({ sessionId, message: localizeError(error, "report") }); }
-    }
-  };
-
-  const showClaim = isLoggedIn && report.status === "new";
-  const showResolve = canResolve;
-
-  const reporterName = getReporterName(report);
-  const assigneeName = getAssigneeName(report);
-
+export default function ReportMarker({ report, onSelect }: {
+  report: Report;
+  onSelect: (reportId: string, opener: HTMLElement | null) => void;
+}) {
+  const icon = useMemo(() => buildIcon(report.type, report.status), [report.type, report.status]);
   return (
-    <Marker position={[report.location.lat, report.location.lng]} icon={icon}
+    <Marker
+      position={[report.location.lat, report.location.lng]}
+      icon={icon}
+      keyboard
+      autoPanOnFocus={false}
       title={t("map.reportMarker", { type: reportTypeLabel(report.type) })}
       alt={t("map.reportMarker", { type: reportTypeLabel(report.type) })}
-      eventHandlers={{ popupopen: (event) => localizePopupClose(event.popup) }}>
-      <Popup>
-        <div
-          className="popup-content"
-          role="dialog"
-          aria-label={t("reports.details")}
-        >
-          <div className="popup-header">
-            <span className="popup-emoji">{emojiForType(report.type)}</span>
-            <strong className="popup-title">{reportTypeLabel(report.type)}</strong>
-          </div>
-
-          <p className="popup-description" dir="auto">{report.description}</p>
-
-          <div className="popup-links">
-            <a
-              href={`https://waze.com/ul?ll=${report.location.lat},${report.location.lng}&navigate=yes`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="chip-link"
-            >
-              📍 {t("reports.waze")}
-            </a>
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${report.location.lat},${report.location.lng}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="chip-link"
-            >
-              🗺️ {t("reports.googleMaps")}
-            </a>
-          </div>
-
-          <div className="popup-meta">
-            <div>
-              <strong>{t("reports.status")}</strong> {statusLabel(report.status)}
-            </div>
-            <div>
-              <strong>{t("reports.time")}</strong>{" "}
-              <time dateTime={Number.isNaN(Date.parse(report.createdAt)) ? undefined : report.createdAt}>{formatDateTime(report.createdAt)}</time>
-            </div>
-            <div>
-              <strong>{t("reports.reporter")}</strong> <bdi>{reporterName}</bdi>
-            </div>
-            {(report.status === "in-progress" ||
-              report.status === "resolved") && (
-              <div>
-                <strong>{t("reports.assignee")}</strong> <bdi>{assigneeName}</bdi>
-              </div>
-            )}
-          </div>
-
-          {Array.isArray(report.media) && report.media.length > 0 && (
-            <div className="popup-media">
-              {report.media.map((item, idx) => {
-                const { url, kind } = toMedia(item as MediaLike);
-                return kind === "image" ? (
-                  <MediaImage
-                    key={idx}
-                    src={url}
-                    alt={t("reports.mediaAlt", { number: formatNumber(idx + 1) })}
-                    className="popup-image"
-                  />
-                ) : (
-                  <video key={idx} controls playsInline className="popup-video">
-                    <source src={url} />
-                    {t("reports.videoUnsupported")}
-                  </video>
-                );
-              })}
-            </div>
-          )}
-
-          {(showClaim || showResolve) && (
-            <div className="popup-actions">
-              {showClaim && (
-                <button className="btn btn-brand" onClick={handleClaim}>
-                  {t("reports.claim")}
-                </button>
-              )}
-              {showResolve && (
-                <button className="btn btn-brand" onClick={handleResolve}>
-                  {t("reports.resolve")}
-                </button>
-              )}
-            </div>
-          )}
-          {actionError?.sessionId === sessionId && <p role="alert">{actionError.message}</p>}
-        </div>
-      </Popup>
-    </Marker>
+      eventHandlers={{ click: (event) => {
+        const opener = (event.target as L.Marker).getElement() ?? null;
+        // Pointer selection captures the same control as Leaflet's built-in
+        // Enter activation. The parent owns selection and focus return.
+        opener?.focus({ preventScroll: true });
+        onSelect(report._id, opener);
+      } }}
+    />
   );
 }

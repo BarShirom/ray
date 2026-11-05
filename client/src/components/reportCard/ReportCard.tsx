@@ -7,21 +7,20 @@ import { getReporterName } from "../../features/reports/getReporterName";
 import { getAssigneeName } from "../../features/reports/getAssigneeName";
 import { t } from "../../i18n";
 import { formatDateTime, formatNumber, reportTypeLabel, statusLabel } from "../../i18n/formatters";
-
-const assignedToId = (
-  assigned: { _id?: string; id?: string } | string | null | undefined
-) => {
-  if (!assigned) return null;
-  if (typeof assigned === "string") return assigned;
-  return assigned._id ?? assigned.id ?? null;
-};
+import { reportActionFor } from "./reportAction";
 
 export default function ReportCard({
   report,
   onPrimary,
+  onOpenDetails,
+  actionPending = false,
+  actionDisabled = false,
 }: {
   report: Report;
   onPrimary: (id: string, status: Report["status"]) => void;
+  onOpenDetails?: (opener: HTMLButtonElement) => void;
+  actionPending?: boolean;
+  actionDisabled?: boolean;
 }) {
   const token = useSelector(selectToken);
   const userId = useSelector(selectUserId);
@@ -41,22 +40,7 @@ export default function ReportCard({
       ? "pill pill--status-inprogress"
       : "pill pill--status-resolved";
 
-  const primaryLabel =
-    report.status === "new"
-      ? t("reports.claim")
-      : report.status === "in-progress"
-      ? t("reports.resolve")
-      : t("reports.view");
-
-  const showClaim = isLoggedIn && report.status === "new";
-  const showResolve =
-    isLoggedIn &&
-    report.status === "in-progress" &&
-    assignedToId(report.assignedTo) === userId;
-
-  const showButton = showClaim || showResolve;
-
-  
+  const action = reportActionFor(report, isLoggedIn, userId);
   const reporterName = getReporterName(report);
   const assigneeName = getAssigneeName(report);
 
@@ -90,14 +74,10 @@ export default function ReportCard({
           )}
         </div>
 
-        {showButton && (
-          <button
-            className="btn"
-            onClick={() => onPrimary(report._id, report.status)}
-          >
-            {primaryLabel}
-          </button>
-        )}
+        {(onOpenDetails || action) && <div className="card__actions">
+          {onOpenDetails && <button type="button" className="btn" onClick={(event) => onOpenDetails(event.currentTarget)}>{t("reports.details")}</button>}
+          {action && <button type="button" className="btn" disabled={actionPending || actionDisabled} onClick={() => { if (!actionPending && !actionDisabled) onPrimary(report._id, report.status); }}>{t(action === "claim" ? "reports.claim" : "reports.resolve")}</button>}
+        </div>}
       </div>
     </div>
   );

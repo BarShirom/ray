@@ -182,7 +182,7 @@ test('StrictMode replays the live viewport effect and fences obsolete fit work',
   }
 });
 
-async function pageFixture(context, { actor, strict = false, stations = false, inactiveStations = false, reports = false, reportCount = 3, stationUnavailable = false, stationCollectionGate = null } = {}) {
+async function pageFixture(context, { actor, strict = false, stations = false, inactiveStations = false, reports = false, reportCount = 3, stationUnavailable = false, stationCollectionGate = null, responseHook = null } = {}) {
   const { Provider } = require('react-redux');
   const { MemoryRouter, Routes, Route, useNavigate } = require('react-router-dom');
   const { createRayStore } = require('../src/app/store.ts');
@@ -209,22 +209,31 @@ async function pageFixture(context, { actor, strict = false, stations = false, i
   ].slice(0, reportCount).map(([type, status], index) => ({ _id: `00000000000000000000010${index}`, description: `Synthetic report ${index}`,
     type, status, location: { lat: 32 + index / 10, lng: 34 + index / 10 },
     createdAt: '2026-11-05T08:00:00.000Z', updatedAt: '2026-11-05T08:00:00.000Z',
-    assignedTo: 'synthetic-a', distanceKm: null, media: [] })) : [];
+    assignedTo: 'synthetic-a', createdBy: { _id: 'synthetic-reporter', name: 'Synthetic public reporter' }, distanceKm: null, media: [] })) : [];
+  let reportResponse = reportItems;
+  let stationResponse = stationItems;
   const calls = [];
   let stationFailure = stationUnavailable;
   http.defaults.adapter = async config => {
     calls.push(config);
+    const custom = await responseHook?.(config, { station, inactiveStation, reportItems });
+    if (custom) return { config, headers: {}, status: 200, statusText: 'OK', ...custom };
     if (stationCollectionGate && config.url === '/api/feeding-stations') await stationCollectionGate;
     if (stationFailure && config.url === '/api/feeding-stations') {
       throw new AxiosError('Synthetic offline station request', 'ERR_NETWORK', config);
     }
     let data = [];
-    if (config.url === '/api/reports') data = reportItems;
-    else if (config.url === '/api/feeding-stations') data = stationItems;
+    if (config.url === '/api/reports') data = reportResponse;
+    else if (config.url === '/api/feeding-stations') data = stationResponse;
+    else if (config.method === 'patch' && /\/api\/reports\/[^/]+\/(claim|resolve)$/.test(config.url)) {
+      const report = reportItems.find(item => config.url.includes(`/${item._id}/`));
+      data = { ...report, status: config.url.endsWith('/claim') ? 'in-progress' : 'resolved', assignedTo: actor,
+        updatedAt: '2026-11-05T10:00:00.000Z' };
+    }
     else if (stationItems.some(item => config.url === `/api/feeding-stations/${item._id}`)) {
       data = stationItems.find(item => config.url === `/api/feeding-stations/${item._id}`);
     }
-    else if (config.url?.endsWith('/summary')) data = { food: { recency: 'no-record' }, water: { recency: 'no-record' } };
+    else if (config.url?.endsWith('/feeding-summary')) data = { food: { recency: 'under-2h' }, water: { recency: 'older' } };
     return { config, data, headers: {}, status: 200, statusText: 'OK' };
   };
   let navigate;
@@ -255,6 +264,14 @@ async function pageFixture(context, { actor, strict = false, stations = false, i
     navigate: path => React.act(async () => { navigate(path); }),
     authenticate: id => React.act(async () => { app.store.dispatch(auth.setAuth(user(id))); }),
     logout: () => React.act(async () => { app.store.dispatch(auth.logout()); }),
+    replaceReports: items => React.act(async () => {
+      reportResponse = items;
+      await app.store.dispatch(require('../src/features/reports/reportsThunks.ts').fetchReports());
+    }),
+    replaceStations: items => React.act(async () => {
+      stationResponse = items;
+      await app.store.dispatch(require('../src/features/feedingStations/feedingStationsThunks.ts').fetchFeedingStations());
+    }),
     button(label) {
       const button = buttonNode(label);
       assert.ok(button, `Missing button: ${label}`);
@@ -273,6 +290,42 @@ function assertRemoved(map) {
   const layers = [];
   map.eachLayer(layer => layers.push(layer));
   assert.deepEqual(layers, []);
+}
+
+const compactCard = ui => findNode(ui.container, node => node.className === 'map-selection-card');
+const compactControl = (ui, action) => {
+  const card = compactCard(ui);
+  return card && findNode(card, node => node.getAttribute(`data-selection-${action}`) === 'true');
+};
+const clickNode = node => React.act(async () => {
+  assert.ok(node?.isConnected, 'the requested control must be mounted');
+  reactProps(node).onClick({ currentTarget: node, stopPropagation() {} });
+});
+
+function listOpener(ui, kind, item) {
+  const { t } = require('../src/i18n/index.ts');
+  const li = findNode(ui.container, node => node.nodeName === 'LI' && node.getAttribute(`data-${kind}-id`) === item._id);
+  return li && findNode(li, node => node.nodeName === 'BUTTON' && (kind === 'station'
+    ? node.getAttribute('aria-label') === t('map.stationDetails', { name: item.name })
+    : node.textContent === t('reports.details')));
+}
+
+function markerFor(ui, item) {
+  let marker;
+  ui.map().eachLayer(layer => {
+    if (layer instanceof L.Marker && layer.getLatLng().equals(item.location)) marker = layer;
+  });
+  assert.ok(marker, `Missing marker: ${item._id}`);
+  return marker;
+}
+
+function assertSelected(ui, kind, item) {
+  const card = compactCard(ui);
+  assert.ok(card, 'selection exposes one compact card');
+  assert.equal(card.getAttribute('data-selection-kind'), kind);
+  assert.equal(card.getAttribute('data-selection-id'), item._id);
+  assert.equal(findNodes(ui.container, node => node.className === 'map-selection-card').length, 1);
+  return card;
 }
 
 function assertCollections(ui, stations, reports) {
@@ -545,8 +598,10 @@ test('station list details and session changes reset scope, filters, selection a
   assert.ok(detailsButton.getAttribute('aria-label')?.includes(ui.inactiveStation.name));
   assert.ok(detailsButton.getAttribute('aria-label')?.includes(t('stations.details')));
   await React.act(async () => { reactProps(detailsButton).onClick({ currentTarget: detailsButton }); });
+  assertSelected(ui, 'station', ui.inactiveStation);
+  await clickNode(compactControl(ui, 'expand'));
   const dialog = findNode(ui.container, node => node.className === 'station-details');
-  assert.equal(dialog?.open, true, 'the list opens the existing station dialog');
+  assert.equal(dialog?.open, true, 'the list and compact expand open the existing station dialog');
   const map = ui.map();
   map.setView([29, 33], 16, { animate: false });
   await ui.authenticate('synthetic-b');
@@ -637,6 +692,8 @@ test('actual MapPage A to B to A transitions discard previous dialog and camera 
     map.eachLayer(layer => { if (layer instanceof L.Marker) marker = layer; });
     assert.ok(marker);
     await React.act(async () => { marker.fire('click'); });
+    assertSelected(ui, 'station', ui.station);
+    await clickNode(compactControl(ui, 'expand'));
     const dialog = findNode(ui.container, node => node.className === 'station-details');
     assert.equal(dialog?.open, true);
     map.setView([29, 33], 16, { animate: false });
@@ -820,6 +877,8 @@ test('station-details Escape retains its existing focus return with the creation
   const item = findNode(ui.container, node => node.getAttribute('data-station-id') === ui.station._id);
   const opener = findNode(item, node => node.nodeName === 'BUTTON');
   await React.act(async () => { reactProps(opener).onClick({ currentTarget: opener }); });
+  const expand = compactControl(ui, 'expand');
+  await clickNode(expand);
   const dialog = findNode(ui.container, node => node.className === 'station-details');
   assert.equal(dialog?.open, true);
   const shell = findNode(ui.container, node => node.className === 'map-layout');
@@ -829,6 +888,8 @@ test('station-details Escape retains its existing focus return with the creation
   });
   assert.equal(dialog.open, false);
   assert.equal(dialog.isConnected, false);
+  assert.ok(document.activeElement === expand, 'full details return to compact expand');
+  await clickNode(compactControl(ui, 'close'));
   assert.ok(document.activeElement === opener);
 });
 
@@ -844,6 +905,8 @@ test('station-details Escape leaves an active creation picker intact and preserv
   const item = findNode(ui.container, node => node.getAttribute('data-station-id') === ui.station._id);
   const detailsOpener = findNode(item, node => node.nodeName === 'BUTTON');
   await React.act(async () => { reactProps(detailsOpener).onClick({ currentTarget: detailsOpener }); });
+  const expand = compactControl(ui, 'expand');
+  await clickNode(expand);
   const dialog = findNode(ui.container, node => node.className === 'station-details');
   assert.equal(dialog?.open, true);
   const shell = findNode(ui.container, node => node.className === 'map-layout');
@@ -854,6 +917,8 @@ test('station-details Escape leaves an active creation picker intact and preserv
   });
   assert.equal(dialog.open, false);
   assert.equal(dialog.isConnected, false);
+  assert.ok(document.activeElement === expand);
+  await clickNode(compactControl(ui, 'close'));
   assert.ok(document.activeElement === detailsOpener);
   assert.equal(picker.isConnected, true);
   assert.ok(findNode(ui.container, node => node.className === 'station-location-keyboard') === picker,
@@ -865,4 +930,395 @@ test('station-details Escape leaves an active creation picker intact and preserv
   assert.ok(map.getCenter().equals([32.2, 34.9]));
   assert.equal(map.getZoom(), 15);
   assert.ok(ui.calls.every(config => config.method === 'get'));
+});
+
+for (const kind of ['report', 'station']) {
+  for (const strict of [false, true]) {
+    test(`${kind} marker and list open the same nonmodal compact/full experience (StrictMode=${strict})`, async context => {
+      const ui = await pageFixture(context, { actor: 'synthetic-a', stations: true, reports: true, strict });
+      const item = kind === 'report' ? ui.reportItems[0] : ui.station;
+      const map = ui.map();
+      map.setView([30, 34], 15, { animate: false });
+      const opener = listOpener(ui, kind, item);
+      assert.ok(opener, 'every visible domain item has an independent accessible details opener');
+      await clickNode(opener);
+      const first = assertSelected(ui, kind, item);
+      const firstText = first.textContent;
+      assert.equal(first.nodeName, 'SECTION');
+      assert.equal(first.getAttribute('role'), 'region');
+      assert.equal(first.getAttribute('aria-modal'), null, 'compact selection never promises or traps modal interaction');
+      const heading = findNode(first, node => node.getAttribute('id') === first.getAttribute('aria-labelledby'));
+      assert.ok(heading?.textContent.trim(), 'the compact region has a real accessible heading');
+      assert.ok(compactControl(ui, 'close'));
+      const expand = compactControl(ui, 'expand');
+      assert.ok(expand);
+      assert.ok(findNode(ui.container, node => node.nodeName === 'DIALOG') === undefined, 'compact selection alone does not create a modal');
+      assert.ok(document.activeElement === heading, 'selection announces its named heading without creating a modal');
+      ui.buttonNode(require('../src/i18n/index.ts').t('map.scopeAll')).focus();
+      assert.ok(document.activeElement !== heading, 'ordinary page controls remain focusable while compact selection is present');
+      await clickNode(expand);
+      const dialog = findNode(ui.container, node => node.className === (kind === 'report' ? 'report-details' : 'station-details'));
+      assert.equal(dialog?.open, true);
+      assert.ok(document.activeElement === dialog, 'the bounded native modal model receives focus');
+      assert.ok(compactCard(ui)?.isConnected, 'expansion retains the compact return target');
+      await React.act(async () => { reactProps(dialog).onCancel({ preventDefault() {} }); });
+      assert.equal(dialog.open, false);
+      assert.equal(dialog.isConnected, false);
+      assert.ok(document.activeElement === expand, 'Escape returns from full details to the compact expand control');
+      await clickNode(compactControl(ui, 'close'));
+      assert.ok(compactCard(ui) === undefined);
+      assert.ok(document.activeElement === opener, 'explicit compact close restores the list opener');
+      const marker = markerFor(ui, item);
+      assert.equal(marker.options.autoPanOnFocus, false, 'keyboard/focus restoration cannot trigger Leaflet camera panning');
+      const markerElement = marker.getElement();
+      assert.ok(markerElement?.isConnected);
+      await React.act(async () => { marker.fire('click'); });
+      const fromMarker = assertSelected(ui, kind, item);
+      assert.equal(fromMarker.textContent, firstText, 'marker/list parity includes exactly the same selected contextual content');
+      assert.ok(marker.getPopup() === undefined, 'neither domain retains a conflicting Leaflet popup selection path');
+      await React.act(async () => {
+        assert.deepEqual(escapeAt(findNode(ui.container, node => node.className === 'map-layout')), { prevented: true, stopped: true });
+      });
+      assert.ok(compactCard(ui) === undefined);
+      assert.ok(document.activeElement === markerElement, 'compact Escape returns to the actual keyboard marker');
+      assert.ok(ui.map() === map, 'selection never remounts the same-session map');
+      assert.ok(map.getCenter().equals([30, 34]));
+      assert.equal(map.getZoom(), 15);
+      assert.ok(ui.calls.every(config => config.method === 'get'), 'opening details performs no write');
+    });
+  }
+}
+
+for (const kind of ['report', 'station']) {
+  test(`old ${kind} compact/full callbacks cannot dismiss the same item after collapse and re-expansion`, async context => {
+    const ui = await pageFixture(context, { actor: 'synthetic-a', stations: true, reports: true, strict: true });
+    const item = kind === 'report' ? ui.reportItems[0] : ui.station;
+    await clickNode(listOpener(ui, kind, item));
+    const oldCompactClose = reactProps(compactControl(ui, 'close')).onClick;
+    await clickNode(compactControl(ui, 'expand'));
+    const oldDialog = findNode(ui.container, node => node.className === `${kind === 'report' ? 'report' : 'station'}-details`);
+    const oldCancel = reactProps(oldDialog).onCancel;
+    const oldNativeClose = reactProps(oldDialog).onClose;
+    await React.act(async () => { oldCancel({ preventDefault() {} }); });
+    assert.equal(oldDialog.open, false);
+    assert.ok(assertSelected(ui, kind, item));
+    await React.act(async () => { oldCompactClose(); });
+    assertSelected(ui, kind, item);
+    await clickNode(compactControl(ui, 'expand'));
+    const newDialog = findNode(ui.container, node => node.className === `${kind === 'report' ? 'report' : 'station'}-details`);
+    assert.ok(newDialog !== oldDialog && newDialog.open, 're-expansion creates a new guarded modal instance');
+    await React.act(async () => {
+      oldCancel({ preventDefault() {} });
+      oldNativeClose?.({ currentTarget: oldDialog });
+      oldCompactClose();
+    });
+    assert.equal(newDialog.open, true, 'obsolete close events must not dismiss a newer modal for the same ID');
+    assert.ok(findNode(ui.container, node => node.nodeName === 'DIALOG') === newDialog);
+    assert.ok(document.activeElement === newDialog);
+  });
+}
+
+test('shared selection replaces domains, resolves fresh ID data and fences obsolete close callbacks', async context => {
+  const ui = await pageFixture(context, { actor: 'synthetic-a', stations: true, reports: true, strict: true });
+  const report = ui.reportItems[0];
+  await clickNode(listOpener(ui, 'report', report));
+  const oldClose = reactProps(compactControl(ui, 'close')).onClick;
+  await clickNode(listOpener(ui, 'station', ui.station));
+  assertSelected(ui, 'station', ui.station);
+  await React.act(async () => { oldClose(); });
+  assertSelected(ui, 'station', ui.station);
+  await clickNode(listOpener(ui, 'report', report));
+  assertSelected(ui, 'report', report);
+  const updated = { ...report, description: 'Updated current public report', updatedAt: '2026-11-05T11:00:00.000Z' };
+  await ui.replaceReports([updated, ...ui.reportItems.slice(1)]);
+  assert.ok(assertSelected(ui, 'report', report).textContent.includes(updated.description), 'selection resolves the current item rather than a copied object');
+  assert.ok(!compactCard(ui).textContent.includes(report.description));
+  await clickNode(listOpener(ui, 'station', ui.station));
+  const changedStation = { ...ui.station, name: 'Updated current station' };
+  await ui.replaceStations([changedStation]);
+  assert.ok(assertSelected(ui, 'station', ui.station).textContent.includes(changedStation.name));
+  assert.ok(!compactCard(ui).textContent.includes(ui.station.name));
+});
+
+test('filtering or removing selected reports/stations closes compact/full presentation with a surviving fallback', async context => {
+  const ui = await pageFixture(context, { actor: 'synthetic-a', stations: true, reports: true, strict: true });
+  const { t } = require('../src/i18n/index.ts');
+  const { reportTypeLabel } = require('../src/i18n/formatters.ts');
+  const report = ui.reportItems[0];
+  await clickNode(listOpener(ui, 'report', report));
+  await clickNode(compactControl(ui, 'expand'));
+  const reportDialog = findNode(ui.container, node => node.className === 'report-details');
+  const oldReportOpener = listOpener(ui, 'report', report);
+  await ui.checkbox(reportTypeLabel(report.type), false);
+  assert.ok(compactCard(ui) === undefined);
+  assert.equal(reportDialog.open, false);
+  assert.equal(reportDialog.isConnected, false);
+  assert.equal(oldReportOpener.isConnected, false);
+  const fallback = findNode(ui.container, node => node.getAttribute('id') === 'community-map-title');
+  assert.ok(document.activeElement === fallback, 'removing the original opener restores a safe current map heading');
+  await clickNode(listOpener(ui, 'station', ui.station));
+  await ui.button(t('map.scopeReports'));
+  assert.ok(compactCard(ui) === undefined, 'domain filtering removes a station selection');
+  await ui.button(t('map.scopeAll'));
+  await clickNode(listOpener(ui, 'station', ui.station));
+  await clickNode(compactControl(ui, 'expand'));
+  const stationDialog = findNode(ui.container, node => node.className === 'station-details');
+  await ui.replaceStations([]);
+  assert.ok(compactCard(ui) === undefined);
+  assert.equal(stationDialog.open, false);
+  assert.equal(stationDialog.isConnected, false);
+  assert.ok(document.activeElement === fallback);
+  await ui.checkbox(reportTypeLabel(report.type), true);
+  await clickNode(listOpener(ui, 'report', report));
+  await ui.replaceReports(ui.reportItems.slice(1));
+  assert.ok(compactCard(ui) === undefined, 'a new collection cannot leave an absent report selected');
+  assert.ok(document.activeElement === fallback);
+});
+
+test('guests open complete public report details and validated navigation from the list without station data', async context => {
+  const ui = await pageFixture(context, { stations: true, inactiveStations: true, reports: true });
+  const { t } = require('../src/i18n/index.ts');
+  const { statusLabel } = require('../src/i18n/formatters.ts');
+  const report = ui.reportItems[0];
+  await clickNode(listOpener(ui, 'report', report));
+  assertSelected(ui, 'report', report);
+  await clickNode(compactControl(ui, 'expand'));
+  const dialog = findNode(ui.container, node => node.className === 'report-details');
+  assert.equal(dialog?.open, true);
+  assert.ok(dialog.textContent.includes(report.description));
+  assert.ok(dialog.textContent.includes('Synthetic public reporter'));
+  assert.ok(dialog.textContent.includes(statusLabel(report.status)));
+  const links = findNodes(dialog, node => node.nodeName === 'A');
+  assert.deepEqual(links.map(node => node.getAttribute('href')), [
+    'https://waze.com/ul?ll=32,34&navigate=yes',
+    'https://www.google.com/maps/search/?api=1&query=32,34',
+  ]);
+  for (const link of links) {
+    assert.equal(link.getAttribute('target'), '_blank');
+    assert.equal(link.getAttribute('rel'), 'noopener noreferrer');
+    assert.ok(link.textContent.trim());
+  }
+  assert.equal(findNode(dialog, node => node.nodeName === 'BUTTON' && [t('reports.claim'), t('reports.resolve')].includes(node.textContent)), undefined);
+  assert.ok(ui.calls.every(config => !config.url.startsWith('/api/feeding-stations')));
+  assert.ok(!ui.container.textContent.includes(ui.station.name));
+  assert.equal(listOpener(ui, 'station', ui.station), undefined);
+  assert.equal(markerFor(ui, report).getPopup(), undefined, 'public report marker has no legacy popup');
+  assert.equal(findNode(ui.container, node => node.className === 'popup-content'), undefined);
+});
+
+test('selected-only station summaries keep food/water separate and defer author history until full details', async context => {
+  const ownNote = 'Synthetic author-only note';
+  const ownAt = '2026-11-05T07:14:31.000Z';
+  const ui = await pageFixture(context, { actor: 'synthetic-a', stations: true, inactiveStations: true, strict: true,
+    responseHook: config => config.url.endsWith('/feedings') ? { data: [{ _id: '000000000000000000000201', stationId: '000000000000000000000001',
+      food: false, water: true, note: ownNote, fedAt: ownAt, createdAt: ownAt, updatedAt: ownAt }] } : undefined });
+  const { t } = require('../src/i18n/index.ts');
+  assert.ok(ui.calls.every(config => !config.url.endsWith('/feeding-summary') && !config.url.endsWith('/feedings')),
+    'station collection rendering prefetches neither summaries nor personal histories');
+  await clickNode(listOpener(ui, 'station', ui.station));
+  const card = assertSelected(ui, 'station', ui.station);
+  const summary = findNode(card, node => node.className === 'station-feeding-summary');
+  assert.ok(summary);
+  assert.deepEqual(findNodes(summary, node => node.nodeName === 'DT').map(node => node.textContent), [t('feeding.food'), t('feeding.water')]);
+  assert.deepEqual(findNodes(summary, node => node.nodeName === 'DD').map(node => node.textContent), [t('feeding.recency.under-2h'), t('feeding.recency.older')]);
+  assert.ok(card.textContent.includes(t('map.activeStation')));
+  assert.ok(card.textContent.includes(t('feeding.summaryMeaning')));
+  assert.ok(ui.calls.filter(config => config.url.endsWith('/feeding-summary')).every(config => config.url.includes(ui.station._id)));
+  assert.ok(ui.calls.every(config => !config.url.endsWith('/feedings') && config.url !== `/api/feeding-stations/${ui.station._id}`),
+    'compact selection needs only the approved coarse summary DTO');
+  assert.ok(!card.textContent.includes(ownNote) && !card.textContent.includes(ownAt) && !card.textContent.includes('synthetic-a'));
+  await clickNode(compactControl(ui, 'expand'));
+  const dialog = findNode(ui.container, node => node.className === 'station-details');
+  assert.ok(dialog.textContent.includes(ownNote), 'only full authorized station details display the actor-only history fixture');
+  assert.ok(ui.calls.some(config => config.url === `/api/feeding-stations/${ui.station._id}/feedings`));
+  await React.act(async () => { reactProps(dialog).onCancel({ preventDefault() {} }); });
+  await clickNode(compactControl(ui, 'close'));
+  await clickNode(listOpener(ui, 'station', ui.inactiveStation));
+  assert.ok(assertSelected(ui, 'station', ui.inactiveStation).textContent.includes(t('map.inactiveStation')));
+  await clickNode(compactControl(ui, 'expand'));
+  const inactiveDialog = findNode(ui.container, node => node.className === 'station-details');
+  assert.ok(inactiveDialog.textContent.includes(t('feeding.inactive')));
+  assert.equal(findNode(inactiveDialog, node => node.nodeName === 'BUTTON' && node.textContent === t('feeding.fedHere')), undefined);
+  await ui.logout();
+  assert.ok(compactCard(ui) === undefined);
+  assert.equal(inactiveDialog.open, false);
+  assert.ok(!ui.container.textContent.includes(ownNote));
+  assert.deepEqual(ui.store.getState().feedingLogs.byStationId, {});
+});
+
+test('report list actions remain independent and shared full details reflect claim/resolve transitions', async context => {
+  const ui = await pageFixture(context, { actor: 'synthetic-a', reports: true });
+  const { t } = require('../src/i18n/index.ts');
+  const { statusLabel } = require('../src/i18n/formatters.ts');
+  const report = ui.reportItems[0];
+  const item = findNode(ui.container, node => node.nodeName === 'LI' && node.getAttribute('data-report-id') === report._id);
+  const claim = findNode(item, node => node.nodeName === 'BUTTON' && node.textContent === t('reports.claim'));
+  assert.ok(claim, 'claim is a sibling action, not nested in a details trigger');
+  assert.equal(findNode(listOpener(ui, 'report', report), node => node !== listOpener(ui, 'report', report) && node.nodeName === 'BUTTON'), undefined);
+  await clickNode(claim);
+  assert.ok(compactCard(ui) === undefined, 'claim never accidentally opens the contextual card');
+  assert.equal(ui.calls.filter(config => config.method === 'patch' && config.url.endsWith('/claim')).length, 1);
+  await clickNode(listOpener(ui, 'report', report));
+  await clickNode(compactControl(ui, 'expand'));
+  const dialog = findNode(ui.container, node => node.className === 'report-details');
+  assert.ok(dialog.textContent.includes(statusLabel('in-progress')));
+  const resolve = findNode(dialog, node => node.nodeName === 'BUTTON' && node.textContent === t('reports.resolve'));
+  assert.ok(resolve, 'only the assigned actor receives resolve');
+  await clickNode(resolve);
+  assert.ok(dialog.textContent.includes(statusLabel('resolved')));
+  assert.equal(ui.calls.filter(config => config.method === 'patch' && config.url.endsWith('/resolve')).length, 1);
+  assert.equal(findNode(dialog, node => node.nodeName === 'BUTTON' && [t('reports.claim'), t('reports.resolve')].includes(node.textContent)), undefined);
+});
+
+test('report list and full details share a pending guard without duplicate claim requests', async context => {
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const ui = await pageFixture(context, { actor: 'synthetic-a', reports: true,
+    responseHook: async (config, { reportItems }) => {
+      if (config.method !== 'patch' || !config.url.endsWith('/claim')) return;
+      await pending;
+      return { data: { ...reportItems[0], status: 'in-progress', assignedTo: 'synthetic-a', updatedAt: '2026-11-05T10:00:00.000Z' } };
+    } });
+  const { t } = require('../src/i18n/index.ts');
+  const report = ui.reportItems[0];
+  const item = findNode(ui.container, node => node.nodeName === 'LI' && node.getAttribute('data-report-id') === report._id);
+  const claim = findNode(item, node => node.nodeName === 'BUTTON' && node.textContent === t('reports.claim'));
+  const retainedListClaim = reactProps(claim).onClick;
+  await clickNode(claim);
+  assert.equal(claim.disabled, true, 'pending state disables the list action');
+  await clickNode(listOpener(ui, 'report', report));
+  await clickNode(compactControl(ui, 'expand'));
+  const dialog = findNode(ui.container, node => node.className === 'report-details');
+  const fullClaim = findNode(dialog, node => node.nodeName === 'BUTTON' && node.textContent === t('reports.claim'));
+  assert.equal(fullClaim?.disabled, true, 'the same in-flight action disables full details');
+  await React.act(async () => { retainedListClaim(); reactProps(fullClaim).onClick(); });
+  assert.equal(ui.calls.filter(config => config.method === 'patch').length, 1, 'retained and alternate-entry callbacks cannot duplicate the request');
+  await React.act(async () => { release(); await new Promise(resolve => setImmediate(resolve)); });
+  const resolve = findNode(dialog, node => node.nodeName === 'BUTTON' && node.textContent === t('reports.resolve'));
+  assert.equal(resolve?.disabled, false, 'settlement clears pending state and presents the permitted next transition');
+});
+
+test('an account report cooldown survives another report error and expires only for explicit manual retry', async context => {
+  let releaseClaim, releaseResolve;
+  const claimGate = new Promise(resolve => { releaseClaim = resolve; });
+  const resolveGate = new Promise(resolve => { releaseResolve = resolve; });
+  let claimAttempts = 0;
+  let resolveAttempts = 0;
+  const ui = await pageFixture(context, { actor: 'synthetic-a', reports: true,
+    responseHook: async config => {
+      if (config.method !== 'patch') return;
+      const isClaim = config.url.endsWith('/claim');
+      const attempt = isClaim ? ++claimAttempts : ++resolveAttempts;
+      if (attempt > 1) return;
+      await (isClaim ? claimGate : resolveGate);
+      const { AxiosError } = require('axios');
+      throw new AxiosError('Synthetic rate limit', 'ERR_BAD_REQUEST', config, null, {
+        config, data: {}, status: 429, statusText: 'Too Many Requests', headers: { 'retry-after': isClaim ? '4' : '1' },
+      });
+    } });
+  context.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: Date.now() });
+  const { t } = require('../src/i18n/index.ts');
+  const first = findNode(ui.container, node => node.nodeName === 'LI' && node.getAttribute('data-report-id') === ui.reportItems[0]._id);
+  const second = findNode(ui.container, node => node.nodeName === 'LI' && node.getAttribute('data-report-id') === ui.reportItems[1]._id);
+  const claim = findNode(first, node => node.nodeName === 'BUTTON' && node.textContent === t('reports.claim'));
+  const resolve = findNode(second, node => node.nodeName === 'BUTTON' && node.textContent === t('reports.resolve'));
+  const retainedClaim = reactProps(claim).onClick;
+  const retainedResolve = reactProps(resolve).onClick;
+  await React.act(async () => { retainedClaim(); retainedResolve(); });
+  assert.equal(ui.calls.filter(config => config.method === 'patch').length, 2, 'two different reports may already be in flight before a 429 arrives');
+  await React.act(async () => { releaseClaim(); await new Promise(resolve => setImmediate(resolve)); });
+  assert.equal(claim.disabled, true);
+  await React.act(async () => { context.mock.timers.tick(1000); releaseResolve(); await new Promise(resolve => setImmediate(resolve)); });
+  assert.equal(resolve.disabled, true);
+  await React.act(async () => { retainedClaim(); retainedResolve(); });
+  assert.equal(ui.calls.filter(config => config.method === 'patch').length, 2, 'retained pre-429 callbacks cannot bypass the account deadline');
+  await clickNode(listOpener(ui, 'report', ui.reportItems[0]));
+  await clickNode(compactControl(ui, 'expand'));
+  const dialog = findNode(ui.container, node => node.className === 'report-details');
+  const fullClaim = findNode(dialog, node => node.nodeName === 'BUTTON' && node.textContent === t('reports.claim'));
+  assert.equal(fullClaim?.disabled, true, 'full details honor the same account cooldown after another report changed the visible error');
+  await React.act(async () => { context.mock.timers.tick(2999); retainedClaim(); retainedResolve(); });
+  assert.equal(claim.disabled, true, 'a shorter later 429 cannot shorten the existing maximum wait');
+  assert.equal(ui.calls.filter(config => config.method === 'patch').length, 2);
+  await React.act(async () => { context.mock.timers.tick(1); });
+  assert.equal(fullClaim.disabled, false);
+  assert.equal(ui.calls.filter(config => config.method === 'patch').length, 2, 'timer expiry never automatically writes');
+  await clickNode(fullClaim);
+  assert.equal(ui.calls.filter(config => config.method === 'patch').length, 3, 'only an explicit post-wait retry sends another request');
+});
+
+test('another account can view public assigned report details without acquiring resolve permission', async context => {
+  const ui = await pageFixture(context, { actor: 'synthetic-b', reports: true });
+  const { t } = require('../src/i18n/index.ts');
+  await clickNode(listOpener(ui, 'report', ui.reportItems[1]));
+  await clickNode(compactControl(ui, 'expand'));
+  const dialog = findNode(ui.container, node => node.className === 'report-details');
+  assert.equal(dialog?.open, true);
+  assert.equal(findNode(dialog, node => node.nodeName === 'BUTTON' && node.textContent === t('reports.resolve')), undefined);
+  assert.ok(ui.calls.every(config => config.method === 'get'));
+});
+
+for (const transition of ['logout', 'account change']) {
+  test(`obsolete compact/full close handlers cannot alter replacement selection after ${transition}`, async context => {
+    const ui = await pageFixture(context, { actor: 'synthetic-a', stations: true, reports: true, strict: true });
+    const oldOpener = listOpener(ui, 'station', ui.station);
+    await clickNode(oldOpener);
+    const oldCompactClose = reactProps(compactControl(ui, 'close')).onClick;
+    const oldExpand = reactProps(compactControl(ui, 'expand')).onClick;
+    await clickNode(compactControl(ui, 'expand'));
+    const oldDialog = findNode(ui.container, node => node.className === 'station-details');
+    const oldCancel = reactProps(oldDialog).onCancel;
+    const oldMap = ui.map();
+    if (transition === 'logout') await ui.logout();
+    else await ui.authenticate('synthetic-b');
+    assertRemoved(oldMap);
+    assert.equal(oldOpener.isConnected, false);
+    assert.equal(oldDialog.open, false);
+    assert.equal(oldDialog.isConnected, false);
+    assert.ok(compactCard(ui) === undefined);
+    await clickNode(listOpener(ui, 'report', ui.reportItems[0]));
+    const replacement = assertSelected(ui, 'report', ui.reportItems[0]);
+    const currentFocus = listOpener(ui, 'report', ui.reportItems[0]);
+    currentFocus.focus();
+    context.mock.method(oldOpener, 'focus', () => assert.fail('old-session content must never receive restored focus'));
+    await React.act(async () => {
+      oldCompactClose(); oldExpand(); oldCancel({ preventDefault() {} });
+    });
+    assert.ok(compactCard(ui) === replacement, 'stale close/expand/cancel callbacks cannot replace or dismiss the current card');
+    assert.ok(findNode(ui.container, node => node.nodeName === 'DIALOG') === undefined);
+    assert.ok(document.activeElement === currentFocus);
+    assert.notEqual(ui.map(), oldMap);
+  });
+}
+
+test('late selected-station summary cannot overwrite a replacement account compact card', async context => {
+  let release;
+  const late = new Promise(resolve => { release = resolve; });
+  let oldRequests = 0;
+  const ui = await pageFixture(context, { actor: 'synthetic-a', stations: true, strict: true,
+    responseHook: async config => {
+      if (!config.url.endsWith('/feeding-summary')) return;
+      if (config.headers.Authorization.endsWith('synthetic-a')) { oldRequests++; return late; }
+      return { data: { food: { recency: '12-to-24h' }, water: { recency: 'no-record' } } };
+    } });
+  const { t } = require('../src/i18n/index.ts');
+  await clickNode(listOpener(ui, 'station', ui.station));
+  assertSelected(ui, 'station', ui.station);
+  assert.equal(oldRequests, 1, 'StrictMode does not duplicate the pending selected summary');
+  await ui.authenticate('synthetic-b');
+  await clickNode(listOpener(ui, 'station', ui.station));
+  const card = assertSelected(ui, 'station', ui.station);
+  assert.ok(card.textContent.includes(t('feeding.recency.12-to-24h')));
+  assert.ok(card.textContent.includes(t('feeding.recency.no-record')));
+  await React.act(async () => {
+    release({ data: { food: { recency: 'under-2h' }, water: { recency: 'older' } } });
+    await new Promise(resolve => setImmediate(resolve));
+  });
+  assert.ok(compactCard(ui) === card);
+  assert.ok(card.textContent.includes(t('feeding.recency.12-to-24h')));
+  assert.ok(card.textContent.includes(t('feeding.recency.no-record')));
+  assert.ok(!card.textContent.includes(t('feeding.recency.under-2h')));
+  assert.deepEqual(ui.store.getState().feedingLogs.byStationId[ui.station._id].summary,
+    { food: { recency: '12-to-24h' }, water: { recency: 'no-record' } });
+  assert.ok(ui.calls.every(config => !config.url.endsWith('/feedings')), 'late summary never requests personal histories');
 });

@@ -9,20 +9,3 @@
   box-shadow: 0 2px 6px #0005;
   font-size: 21px;
 }
-
-.feeding-station-popup {
-  color: #1f2937;
-  min-width: 160px;
-  text-align: start;
-  overflow-wrap: anywhere;
-}
-
-.feeding-station-popup small,
-.feeding-station-popup strong {
-  display: block;
-}
-
-.feeding-station-popup strong {
-  margin-block-start: 4px;
-  font-size: 16px;
-}

@@ -8,6 +8,8 @@
 .card__row{ display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px; }
 .card__row > div{ min-width:0; flex:1 1 220px; }
 .card__row > .btn{ flex-shrink:0; }
+.card__row > .card__actions{ display:flex; flex-wrap:wrap; gap:8px; flex:0 1 auto; }
+.card__actions .btn{ min-height:44px; }
 .card__title{ font-weight:600; line-height:1.5; overflow-wrap:anywhere; text-align:start; }
 .card__sub{ color:var(--muted); font-size:12px; margin-top:6px; }
 
